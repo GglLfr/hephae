@@ -1,0 +1,16 @@
+[package]
+name = "hephae_render"
+authors.workspace = true
+edition.workspace = true
+keywords.workspace = true
+rust-version.workspace = true
+categories.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+bevy.workspace = true
+bytemuck.workspace = true
+dashmap.workspace = true
+fixedbitset.workspace = true

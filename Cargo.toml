@@ -1,0 +1,50 @@
+[package]
+name = "hephae"
+authors.workspace = true
+edition.workspace = true
+keywords.workspace = true
+rust-version.workspace = true
+categories.workspace = true
+exclude = [
+    "assets",
+    "examples",
+]
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/render",
+]
+
+[workspace.package]
+authors = ["GlFolker"]
+edition = "2021"
+keywords = ["bevy", "graphics", "render", "vertex", "batch"]
+rust-version = "1.83"
+categories = ["graphics", "rendering"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/GlennFolker/hephae"
+version = "0.2.0"
+
+[workspace.dependencies]
+bevy = { version = "0.15", default-features = false, features = ["bevy_asset", "bevy_core_pipeline", "bevy_render"] }
+bytemuck = { version = "1", features = ["derive"] }
+dashmap = { version = "6", features = ["inline"] }
+fixedbitset = "0.5"
+
+hephae_render = { path = "crates/render" }
+
+[dependencies]
+hephae_render.workspace = true
+
+bevy.workspace = true
+
+[dev-dependencies]
+bevy = { version = "0.15", default-features = false, features = ["bevy_winit", "bevy_window", "multi_threaded", "x11"] }
+bytemuck.workspace = true
+
+[[example]]
+name = "quad"
