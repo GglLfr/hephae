@@ -1,5 +1,6 @@
 [package]
 name = "hephae_render"
+description = "Hephae's core rendering module."
 authors.workspace = true
 edition.workspace = true
 keywords.workspace = true

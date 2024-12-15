@@ -1,5 +1,6 @@
 [package]
 name = "hephae"
+description = "A personalized, opinionated Bevy plugin that adds support for drawing and batching arbitrary vertices and indices."
 authors.workspace = true
 edition.workspace = true
 keywords.workspace = true
@@ -35,7 +36,7 @@ bytemuck = { version = "1", features = ["derive"] }
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 
-hephae_render = { path = "crates/render" }
+hephae_render = { version = "0.2.0", path = "crates/render" }
 
 [dependencies]
 hephae_render.workspace = true
