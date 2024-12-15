@@ -5,6 +5,7 @@
 
 pub use hephae_render as render;
 
+/// Common imports for [`hephae`](crate).
 pub mod prelude {
     pub use crate::render::prelude::*;
 }

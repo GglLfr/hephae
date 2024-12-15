@@ -51,9 +51,10 @@ pub trait Vertex: Send + Sync + NoUninit {
 
     /// System parameter to fetch when [creating the batch](Vertex::create_batch).
     type BatchParam: SystemParam;
-    /// Additional property that is embedded into [`HephaeBatch`](crate::pipeline::HephaeBatch)
-    /// components for use in [`RenderCommand`](Vertex::RenderCommand). For example, this may be an
-    /// [`AssetId<Image>`] from [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
+    /// Additional property that is embedded into
+    /// [`HephaeBatch`](crate::pipeline::HephaeBatchSection) components for use in
+    /// [`RenderCommand`](Vertex::RenderCommand). For example, this may be an [`AssetId<Image>`]
+    /// from [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
     /// group for texture-sampling.
     type BatchProp: Send + Sync;
 
