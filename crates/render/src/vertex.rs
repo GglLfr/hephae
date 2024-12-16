@@ -17,7 +17,7 @@ use bevy_render::{
     prelude::*,
     primitives::{Aabb, Frustum, Sphere},
     render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, RenderCommand, SortedPhaseItem},
-    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute},
+    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat, VertexAttribute},
     sync_world::MainEntity,
     view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
 };
@@ -45,6 +45,10 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) used to reference a
     /// [`GpuImage`](bevy_render::texture::GpuImage) for texture-sampling.
     type PipelineKey: Send + Sync + Clone + Eq + PartialEq + Hash;
+    /// Format of the depth-stencil pass supplied to the rendering pipeline creation parameters.
+    /// Defaults to [`Some(TextureFormat::Depth32Float)`], which is the default for 2D core pipeline
+    /// depth-stencil format. [`None`] means the pipeline will not have a depth-stencil state.
+    const DEPTH_FORMAT: Option<TextureFormat> = Some(TextureFormat::Depth32Float);
 
     /// The vertex command that [`Drawer<Vertex = Self>`] may output. These commands will be sorted
     /// according to their Z-layers and then [extracted out](VertexCommand::draw) into the batches.

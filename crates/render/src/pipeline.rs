@@ -18,9 +18,8 @@
 use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
 use bevy_asset::prelude::*;
-use bevy_core_pipeline::{
-    core_2d::CORE_2D_DEPTH_FORMAT,
-    tonemapping::{get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts},
+use bevy_core_pipeline::tonemapping::{
+    get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts,
 };
 use bevy_ecs::{
     prelude::*,
@@ -193,8 +192,8 @@ impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
                 polygon_mode: PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: Some(DepthStencilState {
-                format: CORE_2D_DEPTH_FORMAT,
+            depth_stencil: T::DEPTH_FORMAT.map(|format| DepthStencilState {
+                format,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::GreaterEqual,
                 stencil: StencilState {
