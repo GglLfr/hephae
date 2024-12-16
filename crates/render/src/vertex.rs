@@ -5,7 +5,6 @@
 use std::{any::TypeId, hash::Hash, marker::PhantomData, sync::RwLock};
 
 use bevy_app::prelude::*;
-use bevy_core_pipeline::core_2d::Transparent2d;
 use bevy_ecs::{
     component::ComponentId,
     entity::{EntityHash, EntityHashMap},
@@ -17,8 +16,8 @@ use bevy_ecs::{
 use bevy_render::{
     prelude::*,
     primitives::{Aabb, Frustum, Sphere},
-    render_phase::RenderCommand,
-    render_resource::{RenderPipelineDescriptor, VertexAttribute},
+    render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, RenderCommand, SortedPhaseItem},
+    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute},
     sync_world::MainEntity,
     view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
 };
@@ -61,10 +60,12 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// group for texture-sampling.
     type BatchProp: Send + Sync;
 
+    /// The [`PhaseItem`](bevy_render::render_phase::PhaseItem) that this vertex works with.
+    type Item: CachedRenderPipelinePhaseItem + SortedPhaseItem;
     /// Additional GPU render commands to invoke before actually drawing the vertex and index
     /// buffers. For example, this may be used to set the texture-sampling bind group provided by
     /// [`BatchProp`](Vertex::BatchProp).
-    type RenderCommand: RenderCommand<Transparent2d> + Send + Sync;
+    type RenderCommand: RenderCommand<Self::Item> + Send + Sync;
 
     /// Path to the shader rendering vertex attributes of this type. Entry points should be
     /// `vertex(...)` and `fragment(...)`.
@@ -86,6 +87,16 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// Specializes the render pipeline descriptor based off of the [key](Vertex::PipelineKey) and
     /// [prop](Vertex::PipelineProp) of the common render pipeline descriptor.
     fn specialize_pipeline(key: Self::PipelineKey, prop: &Self::PipelineProp, desc: &mut RenderPipelineDescriptor);
+
+    /// Creates the phase item associated with a [`VertexCommand`] based on its layer, render and
+    /// main entity, rendering pipeline ID, draw function ID, and command index.
+    fn create_item(
+        layer: f32,
+        entity: (Entity, MainEntity),
+        pipeline: CachedRenderPipelineId,
+        draw_function: DrawFunctionId,
+        command: usize,
+    ) -> Self::Item;
 
     /// Creates additional batch property for use in rendering.
     fn create_batch(param: &mut SystemParamItem<Self::BatchParam>, key: Self::PipelineKey) -> Self::BatchProp;

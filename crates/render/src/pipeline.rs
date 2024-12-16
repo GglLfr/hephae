@@ -19,7 +19,7 @@ use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
 use bevy_asset::prelude::*;
 use bevy_core_pipeline::{
-    core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
+    core_2d::CORE_2D_DEPTH_FORMAT,
     tonemapping::{get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts},
 };
 use bevy_ecs::{
@@ -28,7 +28,6 @@ use bevy_ecs::{
     system::{lifetimeless::Read, ReadOnlySystemParam, SystemParamItem, SystemState},
 };
 use bevy_image::BevyDefault;
-use bevy_math::FloatOrd;
 use bevy_render::{
     prelude::*,
     render_asset::RenderAssets,
@@ -282,15 +281,15 @@ pub fn clear_batches<T: Vertex>(
 /// Collects each [`VertexCommand`]s from [`VertexQueues`] into intersecting views for sorting.
 pub fn queue_vertices<T: Vertex>(
     mut queues: ResMut<VertexQueues<T>>,
-    draw_functions: Res<DrawFunctions<Transparent2d>>,
+    draw_functions: Res<DrawFunctions<T::Item>>,
     pipeline: Res<HephaePipeline<T>>,
     shader: Res<PipelineShader<T>>,
     mut pipelines: ResMut<SpecializedRenderPipelines<HephaePipeline<T>>>,
     pipeline_cache: Res<PipelineCache>,
-    mut transparent_phases: ResMut<ViewSortedRenderPhases<Transparent2d>>,
+    mut transparent_phases: ResMut<ViewSortedRenderPhases<T::Item>>,
     views: Query<(Entity, &ExtractedView, &Msaa, Option<&Tonemapping>, Option<&DebandDither>)>,
 ) where
-    <T::RenderCommand as RenderCommand<Transparent2d>>::Param: ReadOnlySystemParam,
+    <T::RenderCommand as RenderCommand<T::Item>>::Param: ReadOnlySystemParam,
 {
     let queues = &mut *queues;
     let draw_function = draw_functions.read().id::<DrawRequests<T>>();
@@ -315,14 +314,13 @@ pub fn queue_vertices<T: Vertex>(
         for (e, main_e) in entities.drain() {
             let Some(commands) = queues.commands.get(&e) else { continue };
             for (i, &(layer, ref key, ..)) in commands.iter().enumerate() {
-                transparent_phase.add(Transparent2d {
-                    sort_key: FloatOrd(layer),
-                    entity: (e, main_e),
-                    pipeline: pipelines.specialize(&pipeline_cache, &pipeline, (view_key, key.clone())),
+                transparent_phase.add(T::create_item(
+                    layer,
+                    (e, main_e),
+                    pipelines.specialize(&pipeline_cache, &pipeline, (view_key, key.clone())),
                     draw_function,
-                    batch_range: 0..0,
-                    extra_index: PhaseItemExtraIndex(i as u32),
-                });
+                    i,
+                ));
             }
         }
     }
@@ -341,7 +339,7 @@ pub fn prepare_batch<T: Vertex>(
             Res<VertexQueues<T>>,
             Res<RenderDevice>,
             Res<RenderQueue>,
-            ResMut<ViewSortedRenderPhases<Transparent2d>>,
+            ResMut<ViewSortedRenderPhases<T::Item>>,
             Query<(Entity, &mut HephaeBatch<T>), With<ExtractedView>>,
         ),
         T::BatchParam,
@@ -389,13 +387,13 @@ pub fn prepare_batch<T: Vertex>(
 
         for item_index in 0..transparent_phase.items.len() {
             let item = &mut transparent_phase.items[item_index];
-            let Some(commands) = queues.commands.get(&item.entity.0) else {
+            let Some(commands) = queues.commands.get(&item.entity()) else {
                 batch_key = None;
                 continue;
             };
 
-            let Some((.., key, command)) =
-                commands.get(std::mem::replace(&mut item.extra_index, PhaseItemExtraIndex::NONE).0 as usize)
+            let Some((.., key, command)) = commands
+                .get(std::mem::replace(item.batch_range_and_extra_index_mut().1, PhaseItemExtraIndex::NONE).0 as usize)
             else {
                 continue;
             };
@@ -408,11 +406,11 @@ pub fn prepare_batch<T: Vertex>(
                 Some(ref batch_key) => batch_key != key,
             } {
                 batch_item_index = item_index;
-                batched_entities.push((item.entity.0, key.clone(), batch_index_range..batch_index_range));
+                batched_entities.push((item.entity(), key.clone(), batch_index_range..batch_index_range));
             }
 
             batch_index_range = queuer.indices.len() as u32;
-            transparent_phase.items[batch_item_index].batch_range.end += 1;
+            transparent_phase.items[batch_item_index].batch_range_mut().end += 1;
             batched_entities.last_mut().unwrap().2.end = batch_index_range;
 
             batch_key = Some(key.clone());

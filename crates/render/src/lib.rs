@@ -11,7 +11,6 @@ use std::marker::PhantomData;
 
 use bevy_app::prelude::*;
 use bevy_asset::prelude::*;
-use bevy_core_pipeline::core_2d::Transparent2d;
 use bevy_ecs::{prelude::*, system::ReadOnlySystemParam};
 use bevy_render::{
     prelude::*,
@@ -82,7 +81,7 @@ impl<T: Vertex> HephaeRenderPlugin<T> {
 
 impl<T: Vertex> Plugin for HephaeRenderPlugin<T>
 where
-    <T::RenderCommand as RenderCommand<Transparent2d>>::Param: ReadOnlySystemParam,
+    <T::RenderCommand as RenderCommand<T::Item>>::Param: ReadOnlySystemParam,
 {
     fn build(&self, app: &mut App) {
         struct Common;
@@ -123,7 +122,7 @@ where
             render_app
                 .init_resource::<SpecializedRenderPipelines<HephaePipeline<T>>>()
                 .init_resource::<VertexQueues<T>>()
-                .add_render_command::<Transparent2d, DrawRequests<T>>()
+                .add_render_command::<T::Item, DrawRequests<T>>()
                 .add_systems(ExtractSchedule, extract_shader::<T>)
                 .add_systems(
                     Render,

@@ -1,13 +1,18 @@
 use std::mem::offset_of;
 
 use bevy::{
-    core_pipeline::bloom::Bloom,
+    core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
     ecs::{
         query::QueryItem,
         system::{lifetimeless::SRes, SystemParamItem},
     },
+    math::FloatOrd,
     prelude::*,
-    render::render_resource::{BufferAddress, RenderPipelineDescriptor, VertexAttribute, VertexFormat},
+    render::{
+        render_phase::{DrawFunctionId, PhaseItemExtraIndex},
+        render_resource::{BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute, VertexFormat},
+        sync_world::MainEntity,
+    },
 };
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
@@ -39,6 +44,7 @@ impl Vertex for Vert {
     type BatchParam = ();
     type BatchProp = ();
 
+    type Item = Transparent2d;
     type RenderCommand = ();
 
     const SHADER: &'static str = "quad.wgsl";
@@ -60,6 +66,23 @@ impl Vertex for Vert {
 
     #[inline]
     fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
+
+    fn create_item(
+        layer: f32,
+        entity: (Entity, MainEntity),
+        pipeline: CachedRenderPipelineId,
+        draw_function: DrawFunctionId,
+        command: usize,
+    ) -> Self::Item {
+        Transparent2d {
+            sort_key: FloatOrd(layer),
+            entity,
+            pipeline,
+            draw_function,
+            batch_range: 0..0,
+            extra_index: PhaseItemExtraIndex(command as u32),
+        }
+    }
 
     #[inline]
     fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}

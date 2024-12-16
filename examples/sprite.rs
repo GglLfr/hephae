@@ -1,7 +1,7 @@
 use std::mem::offset_of;
 
 use bevy::{
-    core_pipeline::bloom::Bloom,
+    core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
     ecs::{
         query::{QueryItem, ROQueryItem},
         system::{
@@ -9,16 +9,20 @@ use bevy::{
             SystemParamItem,
         },
     },
+    math::FloatOrd,
     prelude::*,
     render::{
         render_asset::RenderAssets,
-        render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
+        render_phase::{
+            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
+        },
         render_resource::{
             binding_types::{sampler, texture_2d},
-            BindGroup, BindGroupEntry, BindGroupLayout, BufferAddress, IntoBinding, RenderPipelineDescriptor,
-            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
+            BindGroup, BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding,
+            RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
         },
         renderer::RenderDevice,
+        sync_world::MainEntity,
         texture::GpuImage,
         Extract, Render, RenderApp,
     },
@@ -78,6 +82,7 @@ impl Vertex for SpriteVertex {
     );
     type BatchProp = AssetId<Image>;
 
+    type Item = Transparent2d;
     type RenderCommand = SetSpriteBindGroup<1>;
 
     const SHADER: &'static str = "sprite.wgsl";
@@ -123,6 +128,23 @@ impl Vertex for SpriteVertex {
         desc: &mut RenderPipelineDescriptor,
     ) {
         desc.layout.push(material_bind_group.clone());
+    }
+
+    fn create_item(
+        layer: f32,
+        entity: (Entity, MainEntity),
+        pipeline: CachedRenderPipelineId,
+        draw_function: DrawFunctionId,
+        command: usize,
+    ) -> Self::Item {
+        Transparent2d {
+            sort_key: FloatOrd(layer),
+            entity,
+            pipeline,
+            draw_function,
+            batch_range: 0..0,
+            extra_index: PhaseItemExtraIndex(command as u32),
+        }
     }
 
     #[inline]
