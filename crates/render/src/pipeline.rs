@@ -122,10 +122,16 @@ pub fn extract_shader<T: Vertex>(mut commands: Commands, shader: Extract<Option<
 /// [multisampling](Msaa), [tonemapping](Tonemapping), and [deband-dithering](DebandDither).
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub struct ViewKey {
+    /// Whether HDR is turned on.
     pub hdr: bool,
+    /// MSAA samples, represented as its trailing zeroes.
     pub msaa: u8,
+    /// Whether tonemapping is enabled, and what method is used.
     pub tonemapping: Option<Tonemapping>,
+    /// Whether deband-dithering is enabled.
     pub dither: bool,
+    /// The asset ID of the [shader](Vertex::SHADER). May be turned into a [`Handle`] by using
+    /// [`Handle::Weak`].
     pub shader: AssetId<Shader>,
 }
 
