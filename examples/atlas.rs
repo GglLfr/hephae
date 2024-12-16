@@ -333,7 +333,6 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                 scale: Vec3::splat(10.0),
                 ..default()
             },
-            Visibility::Inherited,
             AtlasEntry {
                 atlas: server.load::<TextureAtlas>("sprites/sprites.atlas"),
                 key: "cix".into(),

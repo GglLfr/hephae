@@ -8,6 +8,7 @@ use bevy_ecs::{
     query::{QueryFilter, QueryItem, ReadOnlyQueryData},
     system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
 };
+use bevy_reflect::prelude::*;
 use bevy_render::{
     prelude::*,
     sync_component::SyncComponentPlugin,
@@ -84,8 +85,11 @@ pub trait Drawer: Component + Sized {
 /// Marker component for entities that may extract out [`Drawer`]s to the render world. This *must*
 /// be added to those entities so they'll be calculated in
 /// [`check_visibilities`](crate::vertex::check_visibilities).
-#[derive(Component, Copy, Clone)]
+#[derive(Reflect, Component, Copy, Clone)]
+#[reflect(Component)]
+#[require(Visibility)]
 pub struct HasDrawer<T: Drawer>(pub PhantomData<fn() -> T>);
+
 impl<T: Drawer> Default for HasDrawer<T> {
     #[inline]
     fn default() -> Self {

@@ -13,7 +13,7 @@
 //! [`update_atlas_index`] system listens to changes/additions to texture atlas assets and updates
 //! the `AtlasIndex` of entities accordingly.
 //!
-//! See the `examples/sprite.rs` for a full example.
+//! See the `examples/atlas` for a full example.
 
 use std::borrow::Cow;
 
@@ -53,7 +53,8 @@ pub struct AtlasPage {
 /// Component denoting a texture atlas sprite lookup key. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Component, Debug, Clone)]
+#[derive(Reflect, Component, Debug, Clone)]
+#[reflect(Component)]
 #[require(AtlasIndex)]
 pub struct AtlasEntry {
     /// The handle to the texture atlas.

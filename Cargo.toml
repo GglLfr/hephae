@@ -71,5 +71,5 @@ atlas = ["dep:hephae-atlas"]
 name = "quad"
 
 [[example]]
-name = "sprite"
+name = "atlas"
 required-features = ["atlas"]

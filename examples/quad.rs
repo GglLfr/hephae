@@ -150,5 +150,5 @@ fn startup(mut commands: Commands) {
         Bloom::NATURAL,
     ));
 
-    commands.spawn((Transform::IDENTITY, Visibility::Inherited, HasDrawer::<Draw>::new()));
+    commands.spawn((Transform::IDENTITY, HasDrawer::<Draw>::new()));
 }
