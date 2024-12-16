@@ -17,6 +17,7 @@ version.workspace = true
 [workspace]
 resolver = "2"
 members = [
+    "crates/atlas",
     "crates/render",
 ]
 
@@ -31,21 +32,44 @@ repository = "https://github.com/GlennFolker/hephae"
 version = "0.2.0"
 
 [workspace.dependencies]
-bevy = { version = "0.15", default-features = false, features = ["bevy_asset", "bevy_core_pipeline", "bevy_render"] }
+bevy_app = "0.15"
+bevy_asset = "0.15"
+bevy_core_pipeline = "0.15"
+bevy_ecs = "0.15"
+bevy_image = "0.15"
+bevy_math = "0.15"
+bevy_reflect = "0.15"
+bevy_render = "0.15"
+bevy_transform = "0.15"
+bevy_utils = "0.15"
+
 bytemuck = { version = "1", features = ["derive"] }
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
+guillotiere = "0.6"
+nonmax = "0.5"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
 
-hephae_render = { version = "0.2.0", path = "crates/render" }
+hephae-atlas = { version = "0.2.0", path = "crates/atlas" }
+hephae-render = { version = "0.2.0", path = "crates/render" }
 
 [dependencies]
-hephae_render.workspace = true
-
-bevy.workspace = true
+hephae-atlas = { optional = true, workspace = true }
+hephae-render.workspace = true
 
 [dev-dependencies]
-bevy = { version = "0.15", default-features = false, features = ["bevy_winit", "bevy_window", "multi_threaded", "x11"] }
+bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "multi_threaded", "png"] }
+
 bytemuck.workspace = true
+
+[features]
+default = ["atlas"]
+atlas = ["dep:hephae-atlas"]
 
 [[example]]
 name = "quad"
+
+[[example]]
+name = "sprite"
+required-features = ["atlas"]

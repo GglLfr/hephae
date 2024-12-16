@@ -2,18 +2,18 @@
 
 use std::{marker::PhantomData, sync::PoisonError};
 
-use bevy::{
-    ecs::{
-        query::{QueryFilter, QueryItem, ReadOnlyQueryData},
-        system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
-    },
+use bevy_app::prelude::*;
+use bevy_ecs::{
     prelude::*,
-    render::{
-        sync_component::SyncComponentPlugin,
-        sync_world::RenderEntity,
-        view::{ExtractedView, RenderVisibleEntities},
-        Extract, Render, RenderApp,
-    },
+    query::{QueryFilter, QueryItem, ReadOnlyQueryData},
+    system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
+};
+use bevy_render::{
+    prelude::*,
+    sync_component::SyncComponentPlugin,
+    sync_world::RenderEntity,
+    view::{ExtractedView, RenderVisibleEntities},
+    Extract, Render, RenderApp,
 };
 use fixedbitset::FixedBitSet;
 

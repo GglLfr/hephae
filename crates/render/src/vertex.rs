@@ -4,25 +4,26 @@
 
 use std::{any::TypeId, hash::Hash, marker::PhantomData, sync::RwLock};
 
-use bevy::{
-    core_pipeline::core_2d::Transparent2d,
-    ecs::{
-        component::ComponentId,
-        entity::{EntityHash, EntityHashMap},
-        storage::SparseSet,
-        system::{lifetimeless::Read, SystemParam, SystemParamItem, SystemState},
-        world::FilteredEntityRef,
-    },
+use bevy_app::prelude::*;
+use bevy_core_pipeline::core_2d::Transparent2d;
+use bevy_ecs::{
+    component::ComponentId,
+    entity::{EntityHash, EntityHashMap},
     prelude::*,
-    render::{
-        primitives::{Aabb, Frustum, Sphere},
-        render_phase::RenderCommand,
-        render_resource::{RenderPipelineDescriptor, VertexAttribute},
-        sync_world::MainEntity,
-        view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
-    },
-    utils::{HashSet, Parallel, TypeIdMap},
+    storage::SparseSet,
+    system::{lifetimeless::Read, SystemParam, SystemParamItem, SystemState},
+    world::FilteredEntityRef,
 };
+use bevy_render::{
+    prelude::*,
+    primitives::{Aabb, Frustum, Sphere},
+    render_phase::RenderCommand,
+    render_resource::{RenderPipelineDescriptor, VertexAttribute},
+    sync_world::MainEntity,
+    view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
+};
+use bevy_transform::prelude::*;
+use bevy_utils::{prelude::*, HashSet, Parallel, TypeIdMap};
 use bytemuck::NoUninit;
 use dashmap::DashMap;
 use fixedbitset::FixedBitSet;
@@ -39,10 +40,11 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// The additional property of the [common pipeline definition](crate::pipeline::HephaePipeline)
     /// that may used when specializing based on [`PipelineKey`](Vertex::PipelineKey). For example,
     /// this may be used to create a
-    /// [`BindGroupLayout`](bevy::render::render_resource::BindGroupLayout) for texture-sampling.
+    /// [`BindGroupLayout`](bevy_render::render_resource::BindGroupLayout) for texture-sampling.
     type PipelineProp: Send + Sync;
-    /// Key used to specialize the render pipeline. For example, this may be an [`AssetId<Image>`]
-    /// used to reference a [`GpuImage`](bevy::render::texture::GpuImage) for texture-sampling.
+    /// Key used to specialize the render pipeline. For example, this may be an
+    /// [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) used to reference a
+    /// [`GpuImage`](bevy_render::texture::GpuImage) for texture-sampling.
     type PipelineKey: Send + Sync + Clone + Eq + PartialEq + Hash;
 
     /// The vertex command that [`Drawer<Vertex = Self>`] may output. These commands will be sorted
@@ -53,8 +55,9 @@ pub trait Vertex: Send + Sync + NoUninit {
     type BatchParam: SystemParam;
     /// Additional property that is embedded into
     /// [`HephaeBatch`](crate::pipeline::HephaeBatchSection) components for use in
-    /// [`RenderCommand`](Vertex::RenderCommand). For example, this may be an [`AssetId<Image>`]
-    /// from [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
+    /// [`RenderCommand`](Vertex::RenderCommand). For example, this may be an
+    /// [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) from
+    /// [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
     /// group for texture-sampling.
     type BatchProp: Send + Sync;
 
@@ -155,7 +158,7 @@ impl<T: Vertex> Default for VertexQueues<T> {
 
 /// Calculates [`ViewVisibility`] of [drawable](Drawer) entities.
 ///
-/// Similar to [`check_visibility`](bevy::render::view::check_visibility) that is generic over
+/// Similar to [`check_visibility`](bevy_render::view::check_visibility) that is generic over
 /// [`HasDrawer`], except the filters are configured dynamically by
 /// [`DrawerPlugin`](crate::drawer::DrawerPlugin). This makes it so that all drawers that share the
 /// same [`Vertex`] type also share the same visibility system.

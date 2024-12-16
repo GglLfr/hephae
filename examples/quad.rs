@@ -121,7 +121,7 @@ fn startup(mut commands: Commands) {
         Camera2d,
         Camera { hdr: true, ..default() },
         OrthographicProjection {
-            far: 100.0,
+            far: 1000.0,
             ..OrthographicProjection::default_2d()
         },
         Bloom::NATURAL,

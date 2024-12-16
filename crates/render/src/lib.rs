@@ -9,16 +9,16 @@ pub mod vertex;
 
 use std::marker::PhantomData;
 
-use bevy::{
-    core_pipeline::core_2d::Transparent2d,
-    ecs::system::ReadOnlySystemParam,
+use bevy_app::prelude::*;
+use bevy_asset::prelude::*;
+use bevy_core_pipeline::core_2d::Transparent2d;
+use bevy_ecs::{prelude::*, system::ReadOnlySystemParam};
+use bevy_render::{
     prelude::*,
-    render::{
-        render_phase::{AddRenderCommand, RenderCommand},
-        render_resource::SpecializedRenderPipelines,
-        view::VisibilitySystems,
-        Render, RenderApp, RenderSet,
-    },
+    render_phase::{AddRenderCommand, RenderCommand},
+    render_resource::SpecializedRenderPipelines,
+    view::VisibilitySystems,
+    Render, RenderApp, RenderSet,
 };
 
 use crate::{

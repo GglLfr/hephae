@@ -5,48 +5,49 @@
 //! The procedures are as following:
 //! - During [extraction](ExtractSchedule), the [pipeline shader](Vertex::SHADER) [id](AssetId) is
 //!   synchronized from the main world to the render world.
-//! - During [phase item queueing](bevy::render::RenderSet::Queue), vertex and index buffers for use
+//! - During [phase item queueing](bevy_render::RenderSet::Queue), vertex and index buffers for use
 //!   in batches are inserted (or cleared if exists already) to each [view](ExtractedView) entities.
 //!   Each visible [drawers](crate::drawer::Drawer) also queue [`VertexCommand`]s as [phase
 //!   items](PhaseItem), ready to be sorted.
-//! - During [GPU resource preparation](bevy::render::RenderSet::PrepareBindGroups), camera view
-//!   bind groups are created, and for each camera view, overlapping vertex commands are invoked to
-//!   draw into the GPU buffers. Compatible vertex commands are batched, that is, they share a
-//!   section in the vertex and index buffers and share GPU render calls.
+//! - During [GPU resource preparation](bevy_render::RenderSet::PrepareBindGroups), camera view bind
+//!   groups are created, and for each camera view, overlapping vertex commands are invoked to draw
+//!   into the GPU buffers. Compatible vertex commands are batched, that is, they share a section in
+//!   the vertex and index buffers and share GPU render calls.
 //! - [`DrawRequests`] renders each batch.
 
 use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
-use bevy::{
-    core_pipeline::{
-        core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
-        tonemapping::{get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts},
-    },
-    ecs::{
-        query::ROQueryItem,
-        system::{lifetimeless::Read, ReadOnlySystemParam, SystemParamItem, SystemState},
-    },
-    math::FloatOrd,
+use bevy_asset::prelude::*;
+use bevy_core_pipeline::{
+    core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
+    tonemapping::{get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts},
+};
+use bevy_ecs::{
     prelude::*,
-    render::{
-        render_asset::RenderAssets,
-        render_phase::{
-            DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, SetItemPipeline,
-            TrackedRenderPass, ViewSortedRenderPhases,
-        },
-        render_resource::{
-            binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState,
-            BufferAddress, BufferUsages, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
-            FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache, PolygonMode, PrimitiveState,
-            PrimitiveTopology, RawBufferVec, RenderPipelineDescriptor, ShaderDefVal, ShaderStages,
-            SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat,
-            VertexBufferLayout, VertexState, VertexStepMode,
-        },
-        renderer::{RenderDevice, RenderQueue},
-        texture::{FallbackImage, GpuImage},
-        view::{ExtractedView, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
-        Extract,
+    query::ROQueryItem,
+    system::{lifetimeless::Read, ReadOnlySystemParam, SystemParamItem, SystemState},
+};
+use bevy_image::BevyDefault;
+use bevy_math::FloatOrd;
+use bevy_render::{
+    prelude::*,
+    render_asset::RenderAssets,
+    render_phase::{
+        DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, SetItemPipeline,
+        TrackedRenderPass, ViewSortedRenderPhases,
     },
+    render_resource::{
+        binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState,
+        BufferAddress, BufferUsages, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
+        FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache, PolygonMode, PrimitiveState,
+        PrimitiveTopology, RawBufferVec, RenderPipelineDescriptor, ShaderDefVal, ShaderStages, SpecializedRenderPipeline,
+        SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat, VertexBufferLayout, VertexState,
+        VertexStepMode,
+    },
+    renderer::{RenderDevice, RenderQueue},
+    texture::{FallbackImage, GpuImage},
+    view::{ExtractedView, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
+    Extract,
 };
 
 use crate::vertex::{Vertex, VertexCommand, VertexQueuer, VertexQueues};
@@ -101,7 +102,7 @@ impl<T: Vertex> PipelineShader<T> {
     }
 }
 
-/// [`Startup`] system that loads the [`PipelineShader`].
+/// [`Startup`](bevy_app::Startup) system that loads the [`PipelineShader`].
 pub fn load_shader<T: Vertex>(mut commands: Commands, server: Res<AssetServer>) {
     commands.insert_resource(PipelineShader::<T>(server.load(T::SHADER), PhantomData));
 }
@@ -160,7 +161,7 @@ impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
 
         let format = match view_key.hdr {
             true => ViewTarget::TEXTURE_FORMAT_HDR,
-            false => TextureFormat::Rgba8UnormSrgb,
+            false => TextureFormat::bevy_default(),
         };
 
         let mut desc = RenderPipelineDescriptor {
