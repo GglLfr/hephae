@@ -119,14 +119,14 @@ pub fn extract_shader<T: Vertex>(mut commands: Commands, shader: Extract<Option<
 /// Common pipeline specialization key.
 ///
 /// Factors components from [views](ExtractedView) such as [HDR](ExtractedView::hdr),
-/// [multisampling](Msaa), and [tonemapping](Tonemapping), [deband-dithering](DebandDither).
+/// [multisampling](Msaa), [tonemapping](Tonemapping), and [deband-dithering](DebandDither).
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub struct ViewKey {
-    hdr: bool,
-    msaa: u8,
-    tonemapping: Option<Tonemapping>,
-    dither: bool,
-    shader: AssetId<Shader>,
+    pub hdr: bool,
+    pub msaa: u8,
+    pub tonemapping: Option<Tonemapping>,
+    pub dither: bool,
+    pub shader: AssetId<Shader>,
 }
 
 impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
