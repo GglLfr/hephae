@@ -385,7 +385,7 @@ pub fn prepare_batch<T: Vertex>(
         indices: &'a mut Vec<u32>,
     }
 
-    impl<'a, T: Vertex> VertexQueuer for Queuer<'a, T> {
+    impl<T: Vertex> VertexQueuer for Queuer<'_, T> {
         type Vertex = T;
 
         #[inline]
