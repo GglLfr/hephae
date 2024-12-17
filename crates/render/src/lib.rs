@@ -23,7 +23,7 @@ use bevy_render::{
 use crate::{
     pipeline::{
         clear_batches, extract_shader, load_shader, prepare_batch, prepare_view_bind_groups, queue_vertices, DrawRequests,
-        HephaePipeline,
+        HephaeBatchEntities, HephaePipeline,
     },
     vertex::{check_visibilities, Vertex, VertexDrawers, VertexQueues},
 };
@@ -122,6 +122,7 @@ where
             render_app
                 .init_resource::<SpecializedRenderPipelines<HephaePipeline<T>>>()
                 .init_resource::<VertexQueues<T>>()
+                .init_resource::<HephaeBatchEntities<T>>()
                 .add_render_command::<T::Item, DrawRequests<T>>()
                 .add_systems(ExtractSchedule, extract_shader::<T>)
                 .add_systems(

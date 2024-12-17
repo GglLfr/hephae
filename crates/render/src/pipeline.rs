@@ -232,7 +232,7 @@ impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
     }
 }
 
-/// View bind group associated with each views.
+/// Bind group associated with each views.
 #[derive(Component)]
 pub struct HephaeViewBindGroup<T: Vertex>(BindGroup, PhantomData<fn() -> T>);
 
@@ -245,6 +245,7 @@ pub struct HephaeBatch<T: Vertex> {
 
 /// Sprite batch rendering section and [additional property](Vertex::BatchProp) for rendering.
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct HephaeBatchSection<T: Vertex> {
     prop: T::BatchProp,
     range: Range<u32>,
@@ -265,10 +266,29 @@ impl<T: Vertex> HephaeBatchSection<T> {
     }
 }
 
+/// Keeps track of entities containing [`HephaeBatchSection`]. This is used instead of a [`Query`]
+/// to avoid iteration on sparse set containers.
+#[derive(Resource)]
+pub struct HephaeBatchEntities<T: Vertex> {
+    entities: Vec<Entity>,
+    _marker: PhantomData<fn() -> T>,
+}
+
+impl<T: Vertex> Default for HephaeBatchEntities<T> {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            entities: Vec::new(),
+            _marker: PhantomData,
+        }
+    }
+}
+
 /// Inserts or clears vertex and index buffers associated with views.
 pub fn clear_batches<T: Vertex>(
     mut commands: Commands,
     mut views: Query<(Entity, Option<&mut HephaeBatch<T>>), With<ExtractedView>>,
+    mut old_batches: ResMut<HephaeBatchEntities<T>>,
 ) {
     for (view, batch) in &mut views {
         if let Some(mut batch) = batch {
@@ -279,6 +299,12 @@ pub fn clear_batches<T: Vertex>(
                 vertices: RawBufferVec::new(BufferUsages::VERTEX),
                 indices: RawBufferVec::new(BufferUsages::INDEX),
             });
+        }
+    }
+
+    for e in old_batches.entities.drain(..) {
+        if let Some(mut e) = commands.get_entity(e) {
+            e.remove::<HephaeBatchSection<T>>();
         }
     }
 }
@@ -348,7 +374,7 @@ pub fn prepare_batch<T: Vertex>(
             Query<(Entity, &mut HephaeBatch<T>), With<ExtractedView>>,
         ),
         T::BatchParam,
-        Commands,
+        (Commands, ResMut<HephaeBatchEntities<T>>),
     )>,
     mut batched_entities: Local<Vec<(Entity, T::PipelineKey, Range<u32>)>>,
     mut batched_results: Local<Vec<(Entity, HephaeBatchSection<T>)>>,
@@ -438,11 +464,11 @@ pub fn prepare_batch<T: Vertex>(
 
     drop(param);
 
-    let mut commands = param_set.p2();
+    let (mut commands, mut batches) = param_set.p2();
     for (batch_entity, batch) in batched_results.drain(..) {
-        if let Some(mut e) = commands.get_entity(batch_entity) {
-            e.insert(batch);
-        }
+        // The batch section components are then removed in the next frame by `clear_batches`.
+        commands.entity(batch_entity).insert(batch);
+        batches.entities.push(batch_entity);
     }
 }
 
