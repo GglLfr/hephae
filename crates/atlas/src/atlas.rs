@@ -66,20 +66,10 @@ pub struct AtlasEntry {
 /// Component denoting a texture atlas cached sprite index. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Component, Copy, Clone, Debug)]
+#[derive(Component, Default, Copy, Clone, Debug)]
 pub struct AtlasIndex {
     page_index: Option<NonMaxUsize>,
     sprite_index: Option<NonMaxUsize>,
-}
-
-impl Default for AtlasIndex {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            page_index: None,
-            sprite_index: None,
-        }
-    }
 }
 
 impl AtlasIndex {

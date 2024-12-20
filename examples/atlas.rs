@@ -28,30 +28,11 @@ use bevy::{
     },
     utils::HashMap,
 };
-use hephae::prelude::*;
-use hephae_render::pipeline::{HephaeBatchSection, HephaePipeline};
-
-#[derive(Resource, Default)]
-struct ImageAssetEvents(Vec<AssetEvent<Image>>);
-
-#[derive(Resource, Default)]
-struct ImageBindGroups(HashMap<AssetId<Image>, BindGroup>);
-
-fn extract_image_events(mut events: ResMut<ImageAssetEvents>, mut image_events: Extract<EventReader<AssetEvent<Image>>>) {
-    let images = &mut events.0;
-    images.extend(image_events.read());
-}
-
-fn validate_image_bind_groups(mut image_bind_groups: ResMut<ImageBindGroups>, mut events: ResMut<ImageAssetEvents>) {
-    for event in events.0.drain(..) {
-        match event {
-            AssetEvent::Added { .. } | AssetEvent::LoadedWithDependencies { .. } => {}
-            AssetEvent::Modified { id } | AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
-                image_bind_groups.0.remove(&id);
-            }
-        }
-    }
-}
+use hephae::{
+    atlas::bind_group::ImageBindGroups,
+    prelude::*,
+    render::pipeline::{HephaeBatchSection, HephaePipeline},
+};
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -100,20 +81,6 @@ impl Vertex for SpriteVertex {
     ];
 
     #[inline]
-    fn setup(app: &mut App) {
-        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
-            render_app
-                .init_resource::<ImageAssetEvents>()
-                .init_resource::<ImageBindGroups>()
-                .add_systems(ExtractSchedule, extract_image_events)
-                .add_systems(
-                    Render,
-                    validate_image_bind_groups.before_ignore_deferred(HephaeSystems::PrepareBindGroups),
-                );
-        }
-    }
-
-    #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {
         render_device.create_bind_group_layout("sprite_material_layout", &[
             texture_2d(TextureSampleType::Float { filterable: true }).build(0, ShaderStages::FRAGMENT),
@@ -153,18 +120,16 @@ impl Vertex for SpriteVertex {
         key: Self::PipelineKey,
     ) -> Self::BatchProp {
         let Some(gpu_image) = gpu_images.get(key) else { return key };
-        image_bind_groups.0.entry(key).or_insert_with(|| {
-            render_device.create_bind_group("sprite_material", pipeline.vertex_prop(), &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: gpu_image.texture_view.into_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: gpu_image.sampler.into_binding(),
-                },
-            ])
-        });
+        image_bind_groups.create(key, render_device, pipeline.vertex_prop(), &[
+            BindGroupEntry {
+                binding: 0,
+                resource: gpu_image.texture_view.into_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: gpu_image.sampler.into_binding(),
+            },
+        ]);
 
         key
     }
@@ -186,15 +151,19 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     ) -> RenderCommandResult {
         let image_bind_groups = image_bind_groups.into_inner();
         let Some(batch) = batch else {
-            return RenderCommandResult::Skip;
+            return RenderCommandResult::Skip
         };
 
-        pass.set_bind_group(I, &image_bind_groups.0[batch.prop()], &[]);
+        let Some(bind_group) = image_bind_groups.get(*batch.prop()) else {
+            return RenderCommandResult::Skip
+        };
+
+        pass.set_bind_group(I, bind_group, &[]);
         RenderCommandResult::Success
     }
 }
 
-#[derive(Component, Copy, Clone)]
+#[derive(TypePath, Component, Copy, Clone)]
 struct DrawSprite {
     pos: Vec2,
     scl: Vec2,
@@ -311,15 +280,7 @@ fn main() {
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
-    commands.spawn((
-        Camera2d,
-        Camera { hdr: true, ..default() },
-        OrthographicProjection {
-            far: 1000.0,
-            ..OrthographicProjection::default_2d()
-        },
-        Bloom::NATURAL,
-    ));
+    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
 
     for translation in [
         Vec3::new(-200.0, -200.0, 0.0),

@@ -88,7 +88,7 @@ impl Vertex for Vert {
     fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}
 }
 
-#[derive(Component, Copy, Clone)]
+#[derive(TypePath, Component, Copy, Clone)]
 struct Draw;
 impl Drawer for Draw {
     type Vertex = Vert;
@@ -140,15 +140,6 @@ fn main() {
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn((
-        Camera2d,
-        Camera { hdr: true, ..default() },
-        OrthographicProjection {
-            far: 1000.0,
-            ..OrthographicProjection::default_2d()
-        },
-        Bloom::NATURAL,
-    ));
-
+    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
     commands.spawn((Transform::IDENTITY, HasDrawer::<Draw>::new()));
 }

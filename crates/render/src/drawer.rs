@@ -8,7 +8,7 @@ use bevy_ecs::{
     query::{QueryFilter, QueryItem, ReadOnlyQueryData},
     system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
 };
-use bevy_reflect::prelude::*;
+use bevy_reflect::{prelude::*, TypeInfo, Typed};
 use bevy_render::{
     prelude::*,
     sync_component::SyncComponentPlugin,
@@ -20,7 +20,7 @@ use fixedbitset::FixedBitSet;
 
 use crate::{
     vertex::{Vertex, VertexDrawers, VertexQueues},
-    HephaeSystems,
+    HephaeRenderSystems,
 };
 
 /// Integrates [`Drawer`] into your application for entities to render into the Hephae rendering
@@ -40,23 +40,24 @@ impl<D: Drawer> DrawerPlugin<D> {
     }
 }
 
-impl<D: Drawer> Plugin for DrawerPlugin<D> {
+impl<T: Drawer> Plugin for DrawerPlugin<T> {
     fn build(&self, app: &mut App) {
-        app.add_plugins(SyncComponentPlugin::<HasDrawer<D>>::default());
-        app.world_mut()
-            .resource_scope::<VertexDrawers<D::Vertex>, ()>(|world, mut drawers| drawers.add::<D>(world));
+        app.add_plugins(SyncComponentPlugin::<HasDrawer<T>>::default())
+            .register_type::<HasDrawer<T>>()
+            .world_mut()
+            .resource_scope::<VertexDrawers<T::Vertex>, ()>(|world, mut drawers| drawers.add::<T>(world));
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
-                .add_systems(ExtractSchedule, extract_drawers::<D>)
-                .add_systems(Render, queue_drawers::<D>.in_set(HephaeSystems::QueueDrawers));
+                .add_systems(ExtractSchedule, extract_drawers::<T>)
+                .add_systems(Render, queue_drawers::<T>.in_set(HephaeRenderSystems::QueueDrawers));
         }
     }
 }
 
 /// A render world [`Component`] extracted from the main world that will be used to issue
 /// [`VertexCommand`](crate::vertex::VertexCommand)s.
-pub trait Drawer: Component + Sized {
+pub trait Drawer: TypePath + Component + Sized {
     /// The type of vertex this drawer works with.
     type Vertex: Vertex;
 
@@ -86,9 +87,8 @@ pub trait Drawer: Component + Sized {
 /// be added to those entities so they'll be calculated in
 /// [`check_visibilities`](crate::vertex::check_visibilities).
 #[derive(Reflect, Component, Copy, Clone)]
-#[reflect(Component)]
 #[require(Visibility)]
-pub struct HasDrawer<T: Drawer>(pub PhantomData<fn() -> T>);
+pub struct HasDrawer<T: Drawer>(#[reflect(ignore)] pub PhantomData<fn() -> T>);
 
 impl<T: Drawer> Default for HasDrawer<T> {
     #[inline]

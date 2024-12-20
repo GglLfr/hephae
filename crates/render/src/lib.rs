@@ -1,7 +1,5 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
-#![allow(clippy::type_complexity)]
-#![allow(clippy::too_many_arguments)]
 
 pub mod drawer;
 pub mod pipeline;
@@ -35,7 +33,7 @@ pub mod prelude {
     pub use crate::{
         drawer::{Drawer, DrawerPlugin, HasDrawer},
         vertex::{Vertex, VertexCommand, VertexQueuer},
-        HephaeRenderPlugin, HephaeSystems,
+        HephaeRenderPlugin, HephaeRenderSystems,
     };
 }
 
@@ -45,7 +43,7 @@ pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = Handle::weak_from_u128(2
 
 /// Labels assigned to Hephae systems that are added to [`Render`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, SystemSet)]
-pub enum HephaeSystems {
+pub enum HephaeRenderSystems {
     /// Label for [`clear_batches`], in [`RenderSet::Queue`].
     ClearBatches,
     /// Label for [`queue_drawers`](drawer::queue_drawers), in
@@ -108,13 +106,13 @@ where
                     Render,
                     (
                         (
-                            HephaeSystems::ClearBatches,
-                            HephaeSystems::QueueDrawers,
-                            HephaeSystems::QueueVertices,
+                            HephaeRenderSystems::ClearBatches,
+                            HephaeRenderSystems::QueueDrawers,
+                            HephaeRenderSystems::QueueVertices,
                         )
                             .in_set(RenderSet::Queue),
-                        HephaeSystems::QueueDrawers.before_ignore_deferred(HephaeSystems::QueueVertices),
-                        HephaeSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
+                        HephaeRenderSystems::QueueDrawers.before_ignore_deferred(HephaeRenderSystems::QueueVertices),
+                        HephaeRenderSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
                     ),
                 );
             }
@@ -128,9 +126,9 @@ where
                 .add_systems(
                     Render,
                     (
-                        clear_batches::<T>.in_set(HephaeSystems::ClearBatches),
-                        queue_vertices::<T>.in_set(HephaeSystems::QueueVertices),
-                        (prepare_batch::<T>, prepare_view_bind_groups::<T>).in_set(HephaeSystems::PrepareBindGroups),
+                        clear_batches::<T>.in_set(HephaeRenderSystems::ClearBatches),
+                        queue_vertices::<T>.in_set(HephaeRenderSystems::QueueVertices),
+                        (prepare_batch::<T>, prepare_view_bind_groups::<T>).in_set(HephaeRenderSystems::PrepareBindGroups),
                     ),
                 );
         }
