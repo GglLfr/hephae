@@ -179,30 +179,28 @@ impl<T: Vertex> Default for VertexQueues<T> {
 /// same [`Vertex`] type also share the same visibility system.
 pub fn check_visibilities<T: Vertex>(
     world: &mut World,
-    mut visibility: Local<QueryState<FilteredEntityRef>>,
-    mut views: Local<
-        SystemState<(
-            Query<(
-                Entity,
-                Read<Frustum>,
-                Option<Read<RenderLayers>>,
-                Read<Camera>,
-                Has<NoCpuCulling>,
-            )>,
-            Query<(
-                Entity,
-                &InheritedVisibility,
-                &mut ViewVisibility,
-                Option<&RenderLayers>,
-                Option<&Aabb>,
-                &GlobalTransform,
-                Has<NoFrustumCulling>,
-                Has<VisibilityRange>,
-            )>,
-            Option<Res<VisibleEntityRanges>>,
+    visibility: &mut QueryState<FilteredEntityRef>,
+    views: &mut SystemState<(
+        Query<(
+            Entity,
+            Read<Frustum>,
+            Option<Read<RenderLayers>>,
+            Read<Camera>,
+            Has<NoCpuCulling>,
         )>,
-    >,
-    mut visible_entities: Local<SystemState<Query<(Entity, &mut VisibleEntities)>>>,
+        Query<(
+            Entity,
+            &InheritedVisibility,
+            &mut ViewVisibility,
+            Option<&RenderLayers>,
+            Option<&Aabb>,
+            &GlobalTransform,
+            Has<NoFrustumCulling>,
+            Has<VisibilityRange>,
+        )>,
+        Option<Res<VisibleEntityRanges>>,
+    )>,
+    visible_entities: &mut SystemState<Query<(Entity, &mut VisibleEntities)>>,
     mut thread_queues: Local<Parallel<Vec<Entity>>>,
     mut view_queues: Local<EntityHashMap<Vec<Entity>>>,
     mut view_maps: Local<EntityHashMap<TypeIdMap<Vec<Entity>>>>,

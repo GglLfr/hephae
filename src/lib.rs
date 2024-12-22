@@ -3,11 +3,15 @@
 
 #[cfg(feature = "atlas")]
 pub use hephae_atlas as atlas;
+#[cfg(feature = "gui")]
+pub use hephae_gui as gui;
 pub use hephae_render as render;
 
 /// Common imports for [`hephae`](crate).
 pub mod prelude {
     #[cfg(feature = "atlas")]
     pub use crate::atlas::prelude::*;
+    #[cfg(feature = "gui")]
+    pub use crate::gui::prelude::*;
     pub use crate::render::prelude::*;
 }

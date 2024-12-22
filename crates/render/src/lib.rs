@@ -42,7 +42,7 @@ pub mod prelude {
 pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = Handle::weak_from_u128(278527494526026980866063021704582553601);
 
 /// Labels assigned to Hephae systems that are added to [`Render`].
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, SystemSet)]
+#[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeRenderSystems {
     /// Label for [`clear_batches`], in [`RenderSet::Queue`].
     ClearBatches,
@@ -111,7 +111,7 @@ where
                             HephaeRenderSystems::QueueVertices,
                         )
                             .in_set(RenderSet::Queue),
-                        HephaeRenderSystems::QueueDrawers.before_ignore_deferred(HephaeRenderSystems::QueueVertices),
+                        HephaeRenderSystems::QueueDrawers.before(HephaeRenderSystems::QueueVertices),
                         HephaeRenderSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
                     ),
                 );

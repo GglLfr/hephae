@@ -43,7 +43,7 @@ impl Plugin for AtlasPlugin {
                 .add_systems(ExtractSchedule, extract_image_events)
                 .add_systems(
                     Render,
-                    validate_image_bind_groups.before_ignore_deferred(HephaeRenderSystems::PrepareBindGroups),
+                    validate_image_bind_groups.before(HephaeRenderSystems::PrepareBindGroups),
                 );
         }
     }

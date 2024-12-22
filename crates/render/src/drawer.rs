@@ -8,7 +8,7 @@ use bevy_ecs::{
     query::{QueryFilter, QueryItem, ReadOnlyQueryData},
     system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
 };
-use bevy_reflect::{prelude::*, TypeInfo, Typed};
+use bevy_reflect::prelude::*;
 use bevy_render::{
     prelude::*,
     sync_component::SyncComponentPlugin,

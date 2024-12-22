@@ -46,7 +46,9 @@ too_many_arguments = "allow"
 bevy_app = "0.15"
 bevy_asset = "0.15"
 bevy_core_pipeline = "0.15"
+bevy_derive = "0.15"
 bevy_ecs = "0.15"
+bevy_hierarchy = "0.15"
 bevy_image = "0.15"
 bevy_math = "0.15"
 bevy_reflect = "0.15"
@@ -87,3 +89,7 @@ name = "quad"
 [[example]]
 name = "atlas"
 required-features = ["atlas"]
+
+[[example]]
+name = "gui"
+required-features = ["gui"]
