@@ -109,7 +109,7 @@ impl Drawer for Draw {
         time: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
     ) {
-        queuer.extend([(0.0, (), Quad(time.elapsed_secs()))]);
+        queuer.extend([(0., (), Quad(time.elapsed_secs()))]);
     }
 }
 
@@ -120,12 +120,12 @@ impl VertexCommand for Quad {
 
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let (sin, cos) = (self.0 * 3.0).sin_cos();
+        let (sin, cos) = (self.0 * 3.).sin_cos();
         queuer.vertices([
-            Vert::new(100.0 + cos * 25.0, 100.0 + sin * 25.0, 2.0, 0.0, 0.0, 1.0),
-            Vert::new(-100.0 - cos * 25.0, 100.0 + sin * 25.0, 0.0, 3.0, 0.0, 1.0),
-            Vert::new(-100.0 - cos * 25.0, -100.0 - sin * 25.0, 0.0, 0.0, 4.0, 1.0),
-            Vert::new(100.0 + cos * 25.0, -100.0 - sin * 25.0, 4.0, 3.0, 2.0, 1.0),
+            Vert::new(100. + cos * 25., 100. + sin * 25., 2., 0., 0., 1.),
+            Vert::new(-100. - cos * 25., 100. + sin * 25., 0., 3., 0., 1.),
+            Vert::new(-100. - cos * 25., -100. - sin * 25., 0., 0., 4., 1.),
+            Vert::new(100. + cos * 25., -100. - sin * 25., 4., 3., 2., 1.),
         ]);
 
         queuer.indices([0, 1, 2, 2, 3, 0]);

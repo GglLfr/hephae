@@ -204,8 +204,8 @@ impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
                 },
                 bias: DepthBiasState {
                     constant: 0,
-                    slope_scale: 0.0,
-                    clamp: 0.0,
+                    slope_scale: 0.,
+                    clamp: 0.,
                 },
             }),
             multisample: MultisampleState {

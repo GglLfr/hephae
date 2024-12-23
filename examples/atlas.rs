@@ -211,11 +211,11 @@ impl Drawer for DrawSprite {
         let Some(page) = images.get(self.page) else { return };
 
         let Vec2 { x, y } = self.pos;
-        let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2.0 * self.scl;
+        let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2. * self.scl;
         let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / page.size.as_vec2();
         let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / page.size.as_vec2();
 
-        queuer.extend([(0.0, self.page, Sprite {
+        queuer.extend([(0., self.page, Sprite {
             x,
             y,
             hw,
@@ -283,15 +283,15 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
     commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
 
     for translation in [
-        Vec3::new(-200.0, -200.0, 0.0),
-        Vec3::new(200.0, -200.0, 0.0),
-        Vec3::new(200.0, 200.0, 0.0),
-        Vec3::new(-200.0, 200.0, 0.0),
+        Vec3::new(-200., -200., 0.),
+        Vec3::new(200., -200., 0.),
+        Vec3::new(200., 200., 0.),
+        Vec3::new(-200., 200., 0.),
     ] {
         commands.spawn((
             Transform {
                 translation,
-                scale: Vec3::splat(10.0),
+                scale: Vec3::splat(10.),
                 ..default()
             },
             AtlasEntry {

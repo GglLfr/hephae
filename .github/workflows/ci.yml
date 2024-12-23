@@ -15,8 +15,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          components: clippy, rustfmt
-      - name: Sanity checks
+          components: clippy
+      - name: Run Clippy
         run: |
-          cargo fmt --check
           cargo clippy --all-features -- -D warnings

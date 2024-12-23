@@ -22,6 +22,7 @@ bevy_derive.workspace = true
 bevy_ecs.workspace = true
 bevy_hierarchy.workspace = true
 bevy_math.workspace = true
+bevy_render.workspace = true
 bevy_transform.workspace = true
 
 fixedbitset.workspace = true

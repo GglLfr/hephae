@@ -25,7 +25,7 @@ use bevy_asset::{
     RenderAssetUsages,
 };
 use bevy_image::{prelude::*, TextureFormatPixelInfo};
-use bevy_math::prelude::*;
+use bevy_math::{prelude::*, uvec2};
 use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_utils::HashMap;
 use guillotiere::{
@@ -429,8 +429,8 @@ impl AssetLoader for TextureAtlasLoader {
 
                 atlas.sprite_map.insert(name, (atlas.pages.len(), sprites.len()));
                 sprites.push(URect {
-                    min: UVec2::new(min_x as u32, min_y as u32),
-                    max: UVec2::new(max_x as u32, max_y as u32),
+                    min: uvec2(min_x as u32, min_y as u32),
+                    max: uvec2(max_x as u32, max_y as u32),
                 });
             }
 

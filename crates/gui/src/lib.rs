@@ -2,22 +2,25 @@
 #![cfg_attr(doc, deny(missing_docs))]
 
 pub mod gui;
+pub mod hui;
 pub mod layout;
+pub mod root;
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
-use bevy_transform::TransformSystem;
+use bevy_render::camera::CameraUpdateSystem;
 
-use crate::{gui::GuiLayouts, layout::calculate_preferred_layout_size};
+use crate::{gui::GuiLayouts, hui::HuiPlugin, layout::propagate_layout};
 
 pub mod prelude {
-    pub use crate::HephaeGuiPlugin;
+    pub use crate::{hui, HephaeGuiPlugin};
 }
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeGuiSystems {
     CalculatePreferredSize,
-    CalculatePreferredLayoutSize,
+    PropagateLayout,
+    CalculateRoot,
 }
 
 #[derive(Copy, Clone, Default)]
@@ -28,15 +31,11 @@ impl Plugin for HephaeGuiPlugin {
             .configure_sets(
                 PostUpdate,
                 (
-                    HephaeGuiSystems::CalculatePreferredSize,
-                    HephaeGuiSystems::CalculatePreferredLayoutSize,
-                )
-                    .chain()
-                    .before(TransformSystem::TransformPropagate),
+                    (HephaeGuiSystems::CalculatePreferredSize, HephaeGuiSystems::PropagateLayout).chain(),
+                    HephaeGuiSystems::CalculateRoot.after(CameraUpdateSystem),
+                ),
             )
-            .add_systems(
-                PostUpdate,
-                calculate_preferred_layout_size.in_set(HephaeGuiSystems::CalculatePreferredLayoutSize),
-            );
+            .add_systems(PostUpdate, propagate_layout.in_set(HephaeGuiSystems::PropagateLayout))
+            .add_plugins(HuiPlugin);
     }
 }

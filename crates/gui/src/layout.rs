@@ -10,11 +10,12 @@ use bevy_math::prelude::*;
 use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
-use crate::gui::{Gui, GuiLayouts, LayoutCache, PreferredLayoutSize, PreferredLayoutSizeSys, PreferredSize};
+use crate::gui::{Gui, GuiLayouts, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache, PreferredSize};
 
 #[derive(Default, Deref, DerefMut)]
 pub(crate) struct InvalidCaches(Vec<Entity>);
 impl SystemBuffer for InvalidCaches {
+    #[inline]
     fn apply(&mut self, _: &SystemMeta, world: &mut World) {
         let id = world.register_component::<LayoutCache>();
         for e in self.drain(..) {
@@ -25,13 +26,13 @@ impl SystemBuffer for InvalidCaches {
     }
 }
 
-pub(crate) fn calculate_preferred_layout_size(
+pub(crate) fn propagate_layout(
     world: &mut World,
-    (mut layout_ids, mut changed_query, mut contains_query, mut preferred_layout_size, caches_query): (
+    (mut layout_ids, mut changed_query, mut contains_query, mut initial_layout_size, caches_query): (
         Local<Vec<ComponentId>>,
         Local<QueryState<Entity>>,
         Local<QueryState<FilteredEntityRef>>,
-        Local<Vec<Box<dyn PreferredLayoutSizeSys>>>,
+        Local<Vec<Box<dyn InitialLayoutSizeSys>>>,
         &mut QueryState<&mut LayoutCache>,
     ),
     (mut root_changed, mut root_iterated, root_gui_query, has_gui_query, ancestor_query): (
@@ -43,7 +44,7 @@ pub(crate) fn calculate_preferred_layout_size(
     ),
     propagate_state: &mut SystemState<(
         Deferred<InvalidCaches>,
-        Query<(Option<&mut LayoutCache>, &mut PreferredLayoutSize)>,
+        Query<(Option<&mut LayoutCache>, &mut InitialLayoutSize)>,
         Query<(Entity, &Parent), With<Gui>>,
         Query<&Children>,
         Query<&PreferredSize>,
@@ -53,12 +54,12 @@ pub(crate) fn calculate_preferred_layout_size(
     let mut all_changed = false;
     world.resource_scope(|world, layouts: Mut<GuiLayouts>| {
         if layouts.is_changed() {
-            let (layout_ids_sys, changed_query_sys, contains_query_sys, preferred_layout_size_sys) =
-                layouts.preferred_layout_size_param(world);
+            let (layout_ids_sys, changed_query_sys, contains_query_sys, initial_layout_size_sys) =
+                layouts.initial_layout_size_param(world);
             *layout_ids = layout_ids_sys;
             *changed_query = changed_query_sys;
             *contains_query = contains_query_sys;
-            *preferred_layout_size = preferred_layout_size_sys;
+            *initial_layout_size = initial_layout_size_sys;
 
             all_changed = true;
 
@@ -105,9 +106,9 @@ pub(crate) fn calculate_preferred_layout_size(
         world: UnsafeWorldCell,
         node: Entity,
         layout_ids: &[ComponentId],
-        preferred_layout_size: &mut [Box<dyn PreferredLayoutSizeSys>],
+        initial_layout_size: &mut [Box<dyn InitialLayoutSizeSys>],
         contains_query: &mut QueryState<FilteredEntityRef>,
-        layout_query: &mut Query<(Option<&mut LayoutCache>, &mut PreferredLayoutSize)>,
+        layout_query: &mut Query<(Option<&mut LayoutCache>, &mut InitialLayoutSize)>,
         parent_query: &Query<(Entity, &Parent), With<Gui>>,
         children_query: &Query<&Children>,
         preferred_size_query: &Query<&PreferredSize>,
@@ -127,7 +128,7 @@ pub(crate) fn calculate_preferred_layout_size(
                     world,
                     child,
                     layout_ids,
-                    preferred_layout_size,
+                    initial_layout_size,
                     contains_query,
                     layout_query,
                     parent_query,
@@ -172,7 +173,7 @@ pub(crate) fn calculate_preferred_layout_size(
 
         let result = if let Some(id) = id {
             // Safety: See below.
-            preferred_layout_size[id].execute(
+            initial_layout_size[id].execute(
                 node,
                 &children_stack[children_offset..],
                 &children_size_stack[children_offset..],
@@ -192,7 +193,7 @@ pub(crate) fn calculate_preferred_layout_size(
     let cell = world.as_unsafe_world_cell();
 
     contains_query.update_archetypes_unsafe_world_cell(cell);
-    for sys in &mut preferred_layout_size {
+    for sys in &mut initial_layout_size {
         sys.update_archetypes(cell);
     }
 
@@ -205,14 +206,14 @@ pub(crate) fn calculate_preferred_layout_size(
     let (mut invalid_caches, mut layout_query, parent_query, children_query, preferred_size_query) =
         unsafe { propagate_state.get_unchecked_manual(cell) };
 
-    for root in root_changed.drain(..) {
+    for &root in &root_changed {
         unsafe {
             propagate(
                 &mut invalid_caches,
                 cell,
                 root,
                 &layout_ids,
-                &mut preferred_layout_size,
+                &mut initial_layout_size,
                 &mut contains_query,
                 &mut layout_query,
                 &parent_query,
@@ -225,7 +226,9 @@ pub(crate) fn calculate_preferred_layout_size(
     }
 
     propagate_state.apply(world);
-    for sys in &mut preferred_layout_size {
+
+    for root in root_changed.drain(..) {}
+    for sys in &mut initial_layout_size {
         sys.apply(world);
     }
 }
