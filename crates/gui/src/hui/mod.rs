@@ -12,6 +12,6 @@ use crate::{gui::GuiLayoutPlugin, root::GuiRootPlugin};
 pub struct HuiPlugin;
 impl Plugin for HuiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((GuiLayoutPlugin::<Cont>::new(), GuiRootPlugin::<FromCamera2d>::new()));
+        app.add_plugins((GuiLayoutPlugin::<ContLayout>::new(), GuiRootPlugin::<FromCamera2d>::new()));
     }
 }

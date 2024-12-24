@@ -8,25 +8,25 @@ use bevy_ecs::{
     },
 };
 use bevy_math::{prelude::*, vec2, Affine2};
-pub use Val::*;
+pub use HuiVal::*;
 
 use crate::gui::{Gui, GuiLayout, PreferredSize};
 
 #[derive(Copy, Clone)]
-pub enum Val {
+pub enum HuiVal {
     Px(f32),
     Frac(f32),
     Auto,
 }
 
-impl Default for Val {
+impl Default for HuiVal {
     #[inline]
     fn default() -> Self {
         Px(0.)
     }
 }
 
-impl Val {
+impl HuiVal {
     #[inline]
     pub fn get(self) -> f32 {
         match self {
@@ -55,32 +55,32 @@ impl Val {
 }
 
 #[derive(Copy, Clone, Default)]
-pub struct ValSize {
-    pub x: Val,
-    pub y: Val,
+pub struct HuiVal2 {
+    pub x: HuiVal,
+    pub y: HuiVal,
 }
 
-impl ValSize {
+impl HuiVal2 {
     #[inline]
-    pub const fn all(value: Val) -> Self {
+    pub const fn all(value: HuiVal) -> Self {
         Self { x: value, y: value }
     }
 
     #[inline]
-    pub const fn new(x: Val, y: Val) -> Self {
+    pub const fn new(x: HuiVal, y: HuiVal) -> Self {
         Self { x, y }
     }
 }
 
 #[derive(Copy, Clone, Default)]
-pub struct Rect {
+pub struct HuiRect {
     pub left: f32,
     pub right: f32,
     pub top: f32,
     pub bottom: f32,
 }
 
-impl Rect {
+impl HuiRect {
     #[inline]
     pub const fn all(value: f32) -> Self {
         Self {
@@ -113,7 +113,7 @@ impl Rect {
 }
 
 #[derive(Component, Copy, Clone, Default)]
-pub enum Cont {
+pub enum ContLayout {
     #[default]
     Horizontal,
     HorizontalReverse,
@@ -123,48 +123,48 @@ pub enum Cont {
 
 #[derive(Component, Copy, Clone, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Size(pub ValSize);
-impl Default for Size {
+pub struct HuiSize(pub HuiVal2);
+impl Default for HuiSize {
     #[inline]
     fn default() -> Self {
-        Self(ValSize::all(Auto))
+        Self(HuiVal2::all(Auto))
     }
 }
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Margin(pub Rect);
+pub struct HuiMargin(pub HuiRect);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Padding(pub Rect);
+pub struct HuiPadding(pub HuiRect);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Expand(pub Vec2);
+pub struct HuiExpand(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Shrink(pub Vec2);
+pub struct HuiShrink(pub Vec2);
 
-impl GuiLayout for Cont {
-    type Changed = Or<(Changed<Size>, Changed<Margin>, Changed<Padding>)>;
+impl GuiLayout for ContLayout {
+    type Changed = Or<(Changed<HuiSize>, Changed<HuiMargin>, Changed<HuiPadding>)>;
 
     type InitialParam = ();
     type InitialItem = (
         Read<Self>,
         Read<PreferredSize>,
-        Option<Read<Size>>,
-        Option<Read<Padding>>,
-        Option<Read<Margin>>,
+        Option<Read<HuiSize>>,
+        Option<Read<HuiPadding>>,
+        Option<Read<HuiMargin>>,
     );
 
     type DistributeParam = (
-        SQuery<Option<Read<Size>>>,
-        SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>,
-        SQuery<Option<Read<Margin>>>,
+        SQuery<Option<Read<HuiSize>>>,
+        SQuery<(Option<Read<HuiExpand>>, Option<Read<HuiShrink>>)>,
+        SQuery<Option<Read<HuiMargin>>>,
     );
-    type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
+    type DistributeItem = (Read<Self>, Option<Read<HuiPadding>>, Option<Read<HuiMargin>>);
 
     fn initial_layout_size(
         _: &SystemParamItem<Self::InitialParam>,
@@ -174,8 +174,8 @@ impl GuiLayout for Cont {
     ) -> Vec2 {
         let size = size.map(|&size| *size).unwrap_or_default();
         let size = match size {
-            ValSize { x: Auto, .. } | ValSize { y: Auto, .. } => {
-                let ValSize { x, y } = size;
+            HuiVal2 { x: Auto, .. } | HuiVal2 { y: Auto, .. } => {
+                let HuiVal2 { x, y } = size;
                 let children_size = children_layout_sizes.iter().fold(Vec2::ZERO, |mut out, &size| {
                     match cont {
                         Self::Horizontal | Self::HorizontalReverse => {
@@ -196,7 +196,7 @@ impl GuiLayout for Cont {
                     y.refer(0., children_size.y.max(preferred_size.y)),
                 )
             }
-            ValSize { x, y } => vec2(x.get(), y.get()),
+            HuiVal2 { x, y } => vec2(x.get(), y.get()),
         };
 
         let padding = *padding.copied().unwrap_or_default();

@@ -13,7 +13,7 @@ use bevy_render::camera::CameraUpdateSystem;
 use crate::{gui::GuiLayouts, hui::HuiPlugin, layout::propagate_layout};
 
 pub mod prelude {
-    pub use crate::{hui, HephaeGuiPlugin};
+    pub use crate::{hui::*, HephaeGuiPlugin};
 }
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
