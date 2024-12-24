@@ -131,13 +131,87 @@ impl Default for HuiSize {
     }
 }
 
+impl HuiSize {
+    #[inline]
+    pub const fn all(value: HuiVal) -> Self {
+        Self(HuiVal2 { x: value, y: value })
+    }
+
+    #[inline]
+    pub const fn new(x: HuiVal, y: HuiVal) -> Self {
+        Self(HuiVal2 { x, y })
+    }
+}
+
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
 pub struct HuiMargin(pub HuiRect);
+impl HuiMargin {
+    #[inline]
+    pub const fn all(value: f32) -> Self {
+        Self(HuiRect {
+            left: value,
+            right: value,
+            top: value,
+            bottom: value,
+        })
+    }
+
+    #[inline]
+    pub const fn xy(x: f32, y: f32) -> Self {
+        Self(HuiRect {
+            left: x,
+            right: x,
+            top: y,
+            bottom: y,
+        })
+    }
+
+    #[inline]
+    pub const fn new(left: f32, right: f32, top: f32, bottom: f32) -> Self {
+        Self(HuiRect {
+            left,
+            right,
+            top,
+            bottom,
+        })
+    }
+}
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
 pub struct HuiPadding(pub HuiRect);
+impl HuiPadding {
+    #[inline]
+    pub const fn all(value: f32) -> Self {
+        Self(HuiRect {
+            left: value,
+            right: value,
+            top: value,
+            bottom: value,
+        })
+    }
+
+    #[inline]
+    pub const fn xy(x: f32, y: f32) -> Self {
+        Self(HuiRect {
+            left: x,
+            right: x,
+            top: y,
+            bottom: y,
+        })
+    }
+
+    #[inline]
+    pub const fn new(left: f32, right: f32, top: f32, bottom: f32) -> Self {
+        Self(HuiRect {
+            left,
+            right,
+            top,
+            bottom,
+        })
+    }
+}
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
