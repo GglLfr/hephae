@@ -15,7 +15,7 @@ use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
 #[derive(Component, Copy, Clone, Default)]
-#[require(Transform, PreferredSize, InitialLayoutSize)]
+#[require(Transform, PreferredSize, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {}
 
 #[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
@@ -23,13 +23,22 @@ pub struct PreferredSize(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, PartialEq)]
 #[require(Gui)]
-pub(crate) struct GuiRootTransform(pub Vec2, pub Affine3A);
+pub(crate) struct GuiRootTransform {
+    pub available_space: Vec2,
+    pub transform: Affine3A,
+}
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 pub(crate) struct LayoutCache(Option<NonMaxUsize>);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 pub(crate) struct InitialLayoutSize(pub Vec2);
+
+#[derive(Component, Copy, Clone, Default)]
+pub(crate) struct DistributedSpace {
+    pub transform: Affine2,
+    pub size: Vec2,
+}
 
 pub trait GuiLayout: Component {
     type Changed: QueryFilter;
@@ -188,15 +197,17 @@ impl GuiLayouts {
         QueryState<Entity>,
         QueryState<FilteredEntityRef<'static>>,
         Vec<Box<dyn InitialLayoutSizeSys>>,
+        Vec<Box<dyn DistributeSpaceSys>>,
     ) {
         let len = self.0.len();
-        let (layout_ids, initial_layout_sizes) = self.0.iter().fold(
-            (Vec::with_capacity(len), Vec::with_capacity(len)),
-            |(mut layout_ids, mut initial_layout_sizes), data| {
+        let (layout_ids, initial_layout_size, distribute_space) = self.0.iter().fold(
+            (Vec::with_capacity(len), Vec::with_capacity(len), Vec::with_capacity(len)),
+            |(mut layout_ids, mut initial_layout_sizes, mut distribute_space), data| {
                 layout_ids.push(data.id);
                 initial_layout_sizes.push((data.initial_layout_size)(world));
+                distribute_space.push((data.distribute_space)(world));
 
-                (layout_ids, initial_layout_sizes)
+                (layout_ids, initial_layout_sizes, distribute_space)
             },
         );
 
@@ -222,7 +233,13 @@ impl GuiLayouts {
             })
             .build();
 
-        (layout_ids, changed_query, contains_query, initial_layout_sizes)
+        (
+            layout_ids,
+            changed_query,
+            contains_query,
+            initial_layout_size,
+            distribute_space,
+        )
     }
 }
 

@@ -31,9 +31,11 @@ impl Plugin for HephaeGuiPlugin {
             .configure_sets(
                 PostUpdate,
                 (
-                    (HephaeGuiSystems::CalculatePreferredSize, HephaeGuiSystems::PropagateLayout).chain(),
-                    HephaeGuiSystems::CalculateRoot.after(CameraUpdateSystem),
-                ),
+                    HephaeGuiSystems::CalculatePreferredSize.ambiguous_with(HephaeGuiSystems::CalculatePreferredSize),
+                    HephaeGuiSystems::CalculateRoot,
+                )
+                    .before(HephaeGuiSystems::PropagateLayout)
+                    .after(CameraUpdateSystem),
             )
             .add_systems(PostUpdate, propagate_layout.in_set(HephaeGuiSystems::PropagateLayout))
             .add_plugins(HuiPlugin);

@@ -17,12 +17,20 @@ fn startup(mut commands: Commands) {
                 hui::Size(hui::ValSize::new(hui::Frac(0.5), hui::Frac(1.))),
             ))
             .with_children(|ui| {
-                ui.spawn((hui::Cont::Horizontal, hui::Size(hui::ValSize::all(hui::Auto))))
-                    .with_children(|ui| {
-                        for _ in 0..3 {
-                            ui.spawn((hui::Cont::Horizontal, hui::Size(hui::ValSize::all(hui::Px(40.)))));
-                        }
-                    });
+                ui.spawn((
+                    hui::Cont::Horizontal,
+                    hui::Size(hui::ValSize::all(hui::Auto)),
+                    hui::Padding(hui::Rect::all(10.)),
+                ))
+                .with_children(|ui| {
+                    for _ in 0..3 {
+                        ui.spawn((
+                            hui::Cont::Horizontal,
+                            hui::Size(hui::ValSize::all(hui::Px(40.))),
+                            hui::Margin(hui::Rect::all(10.)),
+                        ));
+                    }
+                });
             });
         });
 }

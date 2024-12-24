@@ -23,8 +23,11 @@ pub(crate) fn calculate_root<T: GuiRoot>(
 ) {
     let param = &mut param.into_inner();
     for (mut size, item) in &mut query {
-        let (space, trns) = T::calculate(param, item);
-        size.set_if_neq(GuiRootTransform(space, trns));
+        let (available_space, transform) = T::calculate(param, item);
+        size.set_if_neq(GuiRootTransform {
+            available_space,
+            transform,
+        });
     }
 }
 
