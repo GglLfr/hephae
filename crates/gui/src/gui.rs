@@ -14,9 +14,14 @@ use bevy_math::{prelude::*, Affine2, Affine3A};
 use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
-#[derive(Component, Copy, Clone, Default)]
+#[derive(Component, Copy, Clone, PartialEq, Default)]
 #[require(Transform, PreferredSize, InitialLayoutSize, DistributedSpace)]
-pub struct Gui {}
+pub struct Gui {
+    pub bottom_left: Vec2,
+    pub bottom_right: Vec2,
+    pub top_right: Vec2,
+    pub top_left: Vec2,
+}
 
 #[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
 pub struct PreferredSize(pub Vec2);

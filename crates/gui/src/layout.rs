@@ -6,7 +6,7 @@ use bevy_ecs::{
     world::{unsafe_world_cell::UnsafeWorldCell, FilteredEntityRef},
 };
 use bevy_hierarchy::prelude::*;
-use bevy_math::{prelude::*, Affine2};
+use bevy_math::{prelude::*, vec2, Affine2};
 use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
@@ -62,6 +62,7 @@ pub(crate) fn propagate_layout(
         Query<&Children>,
     )>,
     (mut distribute_stack, mut distribute_output_stack): (Local<Vec<Entity>>, Local<Vec<(Affine2, Vec2)>>),
+    corner_state: &mut SystemState<(Query<(&mut Gui, &DistributedSpace)>, Query<&Children>)>,
 ) {
     let mut all_changed = false;
     world.resource_scope(|world, layouts: Mut<GuiLayouts>| {
@@ -319,7 +320,7 @@ pub(crate) fn propagate_layout(
     let (mut distributed_space_query, root_query, cache_query, initial_layout_size_query, children_query) =
         unsafe { distribute_space_state.get_unchecked_manual(cell) };
 
-    for root in root_changed.drain(..) {
+    for &root in &root_changed {
         let available_space = match root_query.get(root) {
             Ok(&root_transform) => root_transform.available_space,
             Err(..) => Vec2::ZERO,
@@ -344,6 +345,36 @@ pub(crate) fn propagate_layout(
                 &mut distribute_output_stack,
             )
         }
+    }
+
+    // Phase 3: Compute corners based on the affine transform tree, and write back to `Gui`.
+    fn propagate_corners(
+        node: Entity,
+        parent_transform: Affine2,
+        gui_query: &mut Query<(&mut Gui, &DistributedSpace)>,
+        children_query: &Query<&Children>,
+    ) {
+        let Ok((mut gui, &space)) = gui_query.get_mut(node) else {
+            return
+        };
+
+        let trns = parent_transform * space.transform;
+        gui.set_if_neq(Gui {
+            bottom_left: trns.transform_point2(Vec2::ZERO),
+            bottom_right: trns.transform_point2(vec2(space.size.x, 0.)),
+            top_right: trns.transform_point2(space.size),
+            top_left: trns.transform_point2(vec2(0., space.size.y)),
+        });
+
+        let Ok(children) = children_query.get(node) else { return };
+        for &child in children {
+            propagate_corners(child, trns, gui_query, children_query);
+        }
+    }
+
+    let (mut gui_query, children_query) = corner_state.get_mut(world);
+    for root in root_changed.drain(..) {
+        propagate_corners(root, Affine2::IDENTITY, &mut gui_query, &children_query);
     }
 
     for sys in &mut initial_layout_size {

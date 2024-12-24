@@ -19,8 +19,8 @@ pub mod prelude {
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeGuiSystems {
     CalculatePreferredSize,
-    PropagateLayout,
     CalculateRoot,
+    PropagateLayout,
 }
 
 #[derive(Copy, Clone, Default)]
