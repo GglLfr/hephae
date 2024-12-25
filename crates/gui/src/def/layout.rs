@@ -222,7 +222,13 @@ pub struct Expand(pub Vec2);
 pub struct Shrink(pub Vec2);
 
 impl GuiLayout for Cont {
-    type Changed = Or<(Changed<UiSize>, Changed<Margin>, Changed<Padding>)>;
+    type Changed = Or<(
+        Changed<UiSize>,
+        Changed<Margin>,
+        Changed<Padding>,
+        Changed<Expand>,
+        Changed<Shrink>,
+    )>;
 
     type InitialParam = ();
     type InitialItem = (

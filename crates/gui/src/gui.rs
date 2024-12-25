@@ -10,17 +10,50 @@ use bevy_ecs::{
     world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredEntityRef},
 };
 use bevy_hierarchy::prelude::*;
-use bevy_math::{prelude::*, Affine2, Affine3A};
+use bevy_math::{prelude::*, Affine2, Affine3A, Vec3A};
 use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
 #[derive(Component, Copy, Clone, PartialEq, Default)]
-#[require(Transform, PreferredSize, InitialLayoutSize, DistributedSpace)]
+#[require(Transform, GuiDepth, PreferredSize, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {
-    pub bottom_left: Vec2,
-    pub bottom_right: Vec2,
-    pub top_right: Vec2,
-    pub top_left: Vec2,
+    pub bottom_left: Vec3,
+    pub bottom_right: Vec3,
+    pub top_right: Vec3,
+    pub top_left: Vec3,
+}
+
+impl Gui {
+    #[inline]
+    pub fn from_transform(
+        global_trns: Affine3A,
+        local_trns: Affine2,
+        bottom_left: Vec2,
+        bottom_right: Vec2,
+        top_right: Vec2,
+        top_left: Vec2,
+    ) -> Self {
+        let trns = global_trns *
+            Affine3A::from_cols(
+                local_trns.x_axis.extend(0.).into(),
+                local_trns.y_axis.extend(0.).into(),
+                Vec3A::Z,
+                local_trns.z_axis.extend(0.).into(),
+            );
+
+        Self {
+            bottom_left: trns.transform_point3(bottom_left.extend(0.)),
+            bottom_right: trns.transform_point3(bottom_right.extend(0.)),
+            top_right: trns.transform_point3(top_right.extend(0.)),
+            top_left: trns.transform_point3(top_left.extend(0.)),
+        }
+    }
+}
+
+#[derive(Component, Copy, Clone, Default, PartialEq)]
+pub struct GuiDepth {
+    pub depth: usize,
+    pub total_depth: usize,
 }
 
 #[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
@@ -28,18 +61,19 @@ pub struct PreferredSize(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, PartialEq)]
 #[require(Gui)]
-pub(crate) struct GuiRootTransform {
+pub struct GuiRootTransform {
     pub available_space: Vec2,
     pub transform: Affine3A,
 }
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
+#[require(Gui)]
 pub(crate) struct LayoutCache(Option<NonMaxUsize>);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 pub(crate) struct InitialLayoutSize(pub Vec2);
 
-#[derive(Component, Copy, Clone, Default)]
+#[derive(Component, Copy, Clone, PartialEq, Default)]
 pub(crate) struct DistributedSpace {
     pub transform: Affine2,
     pub size: Vec2,
@@ -134,7 +168,7 @@ pub(crate) unsafe trait DistributeSpaceSys: Send {
     unsafe fn execute(
         &mut self,
         available_space: Vec2,
-        entity: Entity,
+        parent: Entity,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
         world: UnsafeWorldCell,
@@ -289,8 +323,7 @@ impl<T: GuiLayout> Plugin for GuiLayoutPlugin<T> {
             **cache = None
         }
 
-        app.register_required_components::<T, Gui>()
-            .register_required_components::<T, LayoutCache>();
+        app.register_required_components::<T, LayoutCache>();
 
         let world = app.world_mut();
         world.register_component_hooks::<T>().on_add(hook).on_remove(hook);

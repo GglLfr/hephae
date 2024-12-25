@@ -6,7 +6,7 @@ mod root;
 pub use layout::*;
 pub use root::*;
 
-use crate::{gui::GuiLayoutPlugin, root::GuiRootPlugin};
+use crate::{gui::GuiLayoutPlugin, space::GuiRootPlugin};
 
 #[derive(Copy, Clone, Default)]
 pub struct DefaultUiPlugin;

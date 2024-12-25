@@ -1,12 +1,18 @@
 use bevy::prelude::*;
 use hephae::prelude::*;
-use hephae_gui::{gui::Gui, HephaeGuiSystems};
+use hephae_gui::{
+    gui::{Gui, GuiDepth},
+    HephaeGuiSystems,
+};
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, HephaeGuiPlugin))
         .add_systems(Startup, startup)
-        .add_systems(PostUpdate, print_ui.run_if(run_once).after(HephaeGuiSystems::PropagateLayout))
+        .add_systems(
+            PostUpdate,
+            print_ui.run_if(run_once).after(HephaeGuiSystems::CalculateCorners),
+        )
         .run();
 }
 
@@ -26,12 +32,17 @@ fn startup(mut commands: Commands) {
         });
 }
 
-fn print_ui(query: Query<(&Gui, Option<&Children>)>, root: Query<Entity, (With<Gui>, Without<Parent>)>) {
-    fn print(indent: &mut String, e: Entity, query: &Query<(&Gui, Option<&Children>)>) {
-        let Ok((&gui, children)) = query.get(e) else { return };
+fn print_ui(query: Query<(&Gui, &GuiDepth, Option<&Children>)>, root: Query<Entity, (With<Gui>, Without<Parent>)>) {
+    fn print(indent: &mut String, e: Entity, query: &Query<(&Gui, &GuiDepth, Option<&Children>)>) {
+        let Ok((&gui, depth, children)) = query.get(e) else { return };
         println!(
-            "{indent}{e}: [{}, {}, {}, {}]",
-            gui.bottom_left, gui.bottom_right, gui.top_right, gui.top_left
+            "{indent}{e}: [{}, {}, {}, {}] {}/{}",
+            gui.bottom_left.truncate(),
+            gui.bottom_right.truncate(),
+            gui.top_right.truncate(),
+            gui.top_left.truncate(),
+            depth.depth,
+            depth.total_depth,
         );
 
         if let Some(children) = children {
