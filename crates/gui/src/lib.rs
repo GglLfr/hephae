@@ -1,8 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 
+pub mod def;
 pub mod gui;
-pub mod hui;
 pub mod layout;
 pub mod root;
 
@@ -10,10 +10,10 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_render::camera::CameraUpdateSystem;
 
-use crate::{gui::GuiLayouts, hui::HuiPlugin, layout::propagate_layout};
+use crate::{def::DefaultUiPlugin, gui::GuiLayouts, layout::propagate_layout};
 
 pub mod prelude {
-    pub use crate::{hui::*, HephaeGuiPlugin};
+    pub use crate::{def::*, HephaeGuiPlugin};
 }
 
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -38,6 +38,6 @@ impl Plugin for HephaeGuiPlugin {
                     .after(CameraUpdateSystem),
             )
             .add_systems(PostUpdate, propagate_layout.in_set(HephaeGuiSystems::PropagateLayout))
-            .add_plugins(HuiPlugin);
+            .add_plugins(DefaultUiPlugin);
     }
 }

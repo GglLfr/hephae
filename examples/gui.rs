@@ -12,14 +12,14 @@ fn main() {
 
 fn startup(mut commands: Commands) {
     commands
-        .spawn((Camera2d, FromCamera2d, ContLayout::Horizontal))
+        .spawn((Camera2d, FromCamera2d, Cont::Horizontal))
         .with_children(|ui| {
-            ui.spawn((ContLayout::Horizontal, HuiSize::new(Frac(0.5), Frac(1.))))
+            ui.spawn((Cont::Horizontal, UiSize::new(Rel(0.5), Rel(1.))))
                 .with_children(|ui| {
-                    ui.spawn((ContLayout::Horizontal, HuiSize::all(Auto), HuiPadding::all(10.)))
+                    ui.spawn((Cont::Horizontal, UiSize::all(Auto), Padding::all(10.)))
                         .with_children(|ui| {
                             for _ in 0..3 {
-                                ui.spawn((ContLayout::Horizontal, HuiSize::all(Px(40.)), HuiMargin::all(10.)));
+                                ui.spawn((Cont::Horizontal, UiSize::all(Abs(40.)), Margin::all(10.)));
                             }
                         });
                 });

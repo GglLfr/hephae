@@ -8,38 +8,38 @@ use bevy_ecs::{
     },
 };
 use bevy_math::{prelude::*, vec2, Affine2};
-pub use HuiVal::*;
+pub use UiVal::*;
 
 use crate::gui::{Gui, GuiLayout, PreferredSize};
 
 #[derive(Copy, Clone)]
-pub enum HuiVal {
-    Px(f32),
-    Frac(f32),
+pub enum UiVal {
+    Abs(f32),
+    Rel(f32),
     Auto,
 }
 
-impl Default for HuiVal {
+impl Default for UiVal {
     #[inline]
     fn default() -> Self {
-        Px(0.)
+        Abs(0.)
     }
 }
 
-impl HuiVal {
+impl UiVal {
     #[inline]
     pub fn get(self) -> f32 {
         match self {
-            Px(px) => px,
-            Frac(..) | Auto => 0.,
+            Abs(px) => px,
+            Rel(..) | Auto => 0.,
         }
     }
 
     #[inline]
     pub fn refer(self, ref_frac: f32, ref_auto: f32) -> f32 {
         match self {
-            Px(px) => px,
-            Frac(frac) => frac * ref_frac,
+            Abs(px) => px,
+            Rel(frac) => frac * ref_frac,
             Auto => ref_auto,
         }
     }
@@ -47,27 +47,27 @@ impl HuiVal {
     #[inline]
     pub fn refer_frac(self, ref_frac: f32) -> f32 {
         match self {
-            Px(px) => px,
-            Frac(frac) => frac * ref_frac,
+            Abs(px) => px,
+            Rel(frac) => frac * ref_frac,
             Auto => 0.,
         }
     }
 }
 
 #[derive(Copy, Clone, Default)]
-pub struct HuiVal2 {
-    pub x: HuiVal,
-    pub y: HuiVal,
+pub struct UiVal2 {
+    pub x: UiVal,
+    pub y: UiVal,
 }
 
-impl HuiVal2 {
+impl UiVal2 {
     #[inline]
-    pub const fn all(value: HuiVal) -> Self {
+    pub const fn all(value: UiVal) -> Self {
         Self { x: value, y: value }
     }
 
     #[inline]
-    pub const fn new(x: HuiVal, y: HuiVal) -> Self {
+    pub const fn new(x: UiVal, y: UiVal) -> Self {
         Self { x, y }
     }
 }
@@ -113,7 +113,7 @@ impl HuiRect {
 }
 
 #[derive(Component, Copy, Clone, Default)]
-pub enum ContLayout {
+pub enum Cont {
     #[default]
     Horizontal,
     HorizontalReverse,
@@ -123,30 +123,30 @@ pub enum ContLayout {
 
 #[derive(Component, Copy, Clone, Deref, DerefMut)]
 #[require(Gui)]
-pub struct HuiSize(pub HuiVal2);
-impl Default for HuiSize {
+pub struct UiSize(pub UiVal2);
+impl Default for UiSize {
     #[inline]
     fn default() -> Self {
-        Self(HuiVal2::all(Auto))
+        Self(UiVal2::all(Auto))
     }
 }
 
-impl HuiSize {
+impl UiSize {
     #[inline]
-    pub const fn all(value: HuiVal) -> Self {
-        Self(HuiVal2 { x: value, y: value })
+    pub const fn all(value: UiVal) -> Self {
+        Self(UiVal2 { x: value, y: value })
     }
 
     #[inline]
-    pub const fn new(x: HuiVal, y: HuiVal) -> Self {
-        Self(HuiVal2 { x, y })
+    pub const fn new(x: UiVal, y: UiVal) -> Self {
+        Self(UiVal2 { x, y })
     }
 }
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct HuiMargin(pub HuiRect);
-impl HuiMargin {
+pub struct Margin(pub HuiRect);
+impl Margin {
     #[inline]
     pub const fn all(value: f32) -> Self {
         Self(HuiRect {
@@ -180,8 +180,8 @@ impl HuiMargin {
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct HuiPadding(pub HuiRect);
-impl HuiPadding {
+pub struct Padding(pub HuiRect);
+impl Padding {
     #[inline]
     pub const fn all(value: f32) -> Self {
         Self(HuiRect {
@@ -215,30 +215,30 @@ impl HuiPadding {
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct HuiExpand(pub Vec2);
+pub struct Expand(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct HuiShrink(pub Vec2);
+pub struct Shrink(pub Vec2);
 
-impl GuiLayout for ContLayout {
-    type Changed = Or<(Changed<HuiSize>, Changed<HuiMargin>, Changed<HuiPadding>)>;
+impl GuiLayout for Cont {
+    type Changed = Or<(Changed<UiSize>, Changed<Margin>, Changed<Padding>)>;
 
     type InitialParam = ();
     type InitialItem = (
         Read<Self>,
         Read<PreferredSize>,
-        Option<Read<HuiSize>>,
-        Option<Read<HuiPadding>>,
-        Option<Read<HuiMargin>>,
+        Option<Read<UiSize>>,
+        Option<Read<Padding>>,
+        Option<Read<Margin>>,
     );
 
     type DistributeParam = (
-        SQuery<Option<Read<HuiSize>>>,
-        SQuery<(Option<Read<HuiExpand>>, Option<Read<HuiShrink>>)>,
-        SQuery<Option<Read<HuiMargin>>>,
+        SQuery<Option<Read<UiSize>>>,
+        SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>,
+        SQuery<Option<Read<Margin>>>,
     );
-    type DistributeItem = (Read<Self>, Option<Read<HuiPadding>>, Option<Read<HuiMargin>>);
+    type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     fn initial_layout_size(
         _: &SystemParamItem<Self::InitialParam>,
@@ -248,8 +248,8 @@ impl GuiLayout for ContLayout {
     ) -> Vec2 {
         let size = size.map(|&size| *size).unwrap_or_default();
         let size = match size {
-            HuiVal2 { x: Auto, .. } | HuiVal2 { y: Auto, .. } => {
-                let HuiVal2 { x, y } = size;
+            UiVal2 { x: Auto, .. } | UiVal2 { y: Auto, .. } => {
+                let UiVal2 { x, y } = size;
                 let children_size = children_layout_sizes.iter().fold(Vec2::ZERO, |mut out, &size| {
                     match cont {
                         Self::Horizontal | Self::HorizontalReverse => {
@@ -270,7 +270,7 @@ impl GuiLayout for ContLayout {
                     y.refer(0., children_size.y.max(preferred_size.y)),
                 )
             }
-            HuiVal2 { x, y } => vec2(x.get(), y.get()),
+            UiVal2 { x, y } => vec2(x.get(), y.get()),
         };
 
         let padding = *padding.copied().unwrap_or_default();
@@ -305,11 +305,11 @@ impl GuiLayout for ContLayout {
                 let size = size.map(|&size| *size).unwrap_or_default();
                 let size = vec2(
                     match size.x {
-                        Frac(frac) => frac * available_space.x,
+                        Rel(frac) => frac * available_space.x,
                         _ => initial_size.x,
                     },
                     match size.y {
-                        Frac(frac) => frac * available_space.y,
+                        Rel(frac) => frac * available_space.y,
                         _ => initial_size.y,
                     },
                 );
