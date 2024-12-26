@@ -12,10 +12,16 @@ pub use UiVal::*;
 
 use crate::gui::{Gui, GuiLayout};
 
+/// GUI value measurement use to calculate widget size.
 #[derive(Copy, Clone)]
 pub enum UiVal {
+    /// Absolute units; pixels in 2D, meters in 3D.
     Abs(f32),
+    /// Fraction of the parent's size. Note that it's invalid to have [`Rel`] on parents that have
+    /// [`Auto`], and will produce garbage values.
     Rel(f32),
+    /// Follows the children's size. Note that it's invalid to have [`Auto`] on children that have
+    /// [`Rel`], and will produce garbage values.
     Auto,
 }
 
@@ -27,14 +33,7 @@ impl Default for UiVal {
 }
 
 impl UiVal {
-    #[inline]
-    pub fn get(self) -> f32 {
-        match self {
-            Abs(px) => px,
-            Rel(..) | Auto => 0.,
-        }
-    }
-
+    /// Refers to both the parent and children size accordingly.
     #[inline]
     pub fn refer(self, ref_frac: f32, ref_auto: f32) -> f32 {
         match self {
@@ -44,8 +43,9 @@ impl UiVal {
         }
     }
 
+    /// Refers to the parent size, and returns `0.0` for [`Auto`].
     #[inline]
-    pub fn refer_frac(self, ref_frac: f32) -> f32 {
+    pub fn refer_rel(self, ref_frac: f32) -> f32 {
         match self {
             Abs(px) => px,
             Rel(frac) => frac * ref_frac,
@@ -54,33 +54,44 @@ impl UiVal {
     }
 }
 
+/// 2-Dimensional [`UiVal`].
 #[derive(Copy, Clone, Default)]
 pub struct UiVal2 {
+    /// The value in the X axis.
     pub x: UiVal,
+    /// The value in the Y axis.
     pub y: UiVal,
 }
 
 impl UiVal2 {
+    /// Sets both X and Y axes to `value`.
     #[inline]
     pub const fn all(value: UiVal) -> Self {
         Self { x: value, y: value }
     }
 
+    /// Creates a new [`UiVal2`].
     #[inline]
     pub const fn new(x: UiVal, y: UiVal) -> Self {
         Self { x, y }
     }
 }
 
+/// Absolute units spanning left, right, top, and bottom sides.
 #[derive(Copy, Clone, Default)]
-pub struct HuiRect {
+pub struct AbsRect {
+    /// The length for the left side.
     pub left: f32,
+    /// The length for the right side.
     pub right: f32,
+    /// The length for the top side.
     pub top: f32,
+    /// The length for the bottom side.
     pub bottom: f32,
 }
 
-impl HuiRect {
+impl AbsRect {
+    /// Sets all sides to `value`.
     #[inline]
     pub const fn all(value: f32) -> Self {
         Self {
@@ -91,6 +102,7 @@ impl HuiRect {
         }
     }
 
+    /// Sets left and right to `x`, top and bottom to `y`.
     #[inline]
     pub const fn xy(x: f32, y: f32) -> Self {
         Self {
@@ -101,6 +113,7 @@ impl HuiRect {
         }
     }
 
+    /// Creates a new [`AbsRect`].
     #[inline]
     pub const fn new(left: f32, right: f32, top: f32, bottom: f32) -> Self {
         Self {
@@ -112,15 +125,27 @@ impl HuiRect {
     }
 }
 
+/// A built-in [`GuiLayout`] implementation. Arranges children either horizontally or vertically
+/// without wrapping.
+///
+/// Additional components may be added either to this node or its direct children:
+/// - [`UiSize`], for specifying the size.
+/// - [`Margin`] and [`Padding`] for offsetting.
+/// - [`Expand`] and [`Shrink`] for specifying behavior on either extra or exhausted space.
 #[derive(Component, Copy, Clone, Default)]
 pub enum Cont {
+    /// Arranges the children left-to-right.
     #[default]
     Horizontal,
+    /// Arranges the children right-to-left.
     HorizontalReverse,
+    /// Arranges the children top-to-bottom.
     Vertical,
+    /// Arranges the children bottom-to-top.
     VerticalReverse,
 }
 
+/// Defines the size of this GUI node.
 #[derive(Component, Copy, Clone, Deref, DerefMut)]
 #[require(Gui)]
 pub struct UiSize(pub UiVal2);
@@ -132,24 +157,28 @@ impl Default for UiSize {
 }
 
 impl UiSize {
+    /// Sets both X and Y axes to `value`.
     #[inline]
     pub const fn all(value: UiVal) -> Self {
         Self(UiVal2 { x: value, y: value })
     }
 
+    /// Creates a new [`UiSize`].
     #[inline]
     pub const fn new(x: UiVal, y: UiVal) -> Self {
         Self(UiVal2 { x, y })
     }
 }
 
+/// Defines the empty space around this GUI node outside its borders.
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Margin(pub HuiRect);
+pub struct Margin(pub AbsRect);
 impl Margin {
+    /// Sets all sides to `value`.
     #[inline]
     pub const fn all(value: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left: value,
             right: value,
             top: value,
@@ -157,9 +186,10 @@ impl Margin {
         })
     }
 
+    /// Sets left and right to `x`, top and bottom to `y`.
     #[inline]
     pub const fn xy(x: f32, y: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left: x,
             right: x,
             top: y,
@@ -167,9 +197,10 @@ impl Margin {
         })
     }
 
+    /// Creates a new [`Margin`].
     #[inline]
     pub const fn new(left: f32, right: f32, top: f32, bottom: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left,
             right,
             top,
@@ -178,13 +209,15 @@ impl Margin {
     }
 }
 
+/// Defines the empty space around this GUI node inside its borders, i.e., offsetting its children.
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
-pub struct Padding(pub HuiRect);
+pub struct Padding(pub AbsRect);
 impl Padding {
+    /// Sets all sides to `value`.
     #[inline]
     pub const fn all(value: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left: value,
             right: value,
             top: value,
@@ -192,9 +225,10 @@ impl Padding {
         })
     }
 
+    /// Sets left and right to `x`, top and bottom to `y`.
     #[inline]
     pub const fn xy(x: f32, y: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left: x,
             right: x,
             top: y,
@@ -202,9 +236,10 @@ impl Padding {
         })
     }
 
+    /// Creates a new [`Padding`].
     #[inline]
     pub const fn new(left: f32, right: f32, top: f32, bottom: f32) -> Self {
-        Self(HuiRect {
+        Self(AbsRect {
             left,
             right,
             top,
@@ -213,10 +248,12 @@ impl Padding {
     }
 }
 
+/// Defines how much space in fraction should this GUI node take in case of extra space.
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
 pub struct Expand(pub Vec2);
 
+/// Defines how much space in fraction should this GUI node give up in case of exhausted space.
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
 pub struct Shrink(pub Vec2);
@@ -267,7 +304,7 @@ impl GuiLayout for Cont {
 
                 vec2(x.refer(0., children_size.x), y.refer(0., children_size.y))
             }
-            UiVal2 { x, y } => vec2(x.get(), y.get()),
+            UiVal2 { x, y } => vec2(x.refer_rel(0.), y.refer_rel(0.)),
         };
 
         let padding = *padding.copied().unwrap_or_default();

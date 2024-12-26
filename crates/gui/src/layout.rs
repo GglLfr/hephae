@@ -2,17 +2,18 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::ComponentId,
     prelude::*,
-    system::{SystemBuffer, SystemMeta, SystemState},
+    system::{StaticSystemParam, SystemBuffer, SystemMeta, SystemState},
     world::{unsafe_world_cell::UnsafeWorldCell, FilteredEntityRef},
 };
 use bevy_hierarchy::prelude::*;
-use bevy_math::{prelude::*, Affine2};
+use bevy_math::{prelude::*, vec2, Affine2, Affine3A};
+use bevy_transform::components::GlobalTransform;
 use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
 use crate::gui::{
-    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiLayouts, GuiRootTransform, InitialLayoutSize,
-    InitialLayoutSizeSys, LayoutCache,
+    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootTransform, GuiRoots,
+    InitialLayoutSize, InitialLayoutSizeSys, LayoutCache,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -27,6 +28,63 @@ impl SystemBuffer for InvalidCaches {
             }
         }
     }
+}
+
+pub(crate) fn calculate_root<T: GuiRoot>(
+    param: StaticSystemParam<T::Param>,
+    mut query: Query<(&mut GuiRootTransform, T::Item), With<T>>,
+) {
+    let param = &mut param.into_inner();
+    for (mut size, item) in &mut query {
+        size.set_if_neq(T::calculate(param, item));
+    }
+}
+
+pub(crate) fn validate_root(
+    world: &mut World,
+    test_query: &mut QueryState<(Entity, Option<&Parent>), With<GuiRootTransform>>,
+    has_gui_query: &mut QueryState<(), With<Gui>>,
+    mut root_query: Local<QueryState<FilteredEntityRef>>,
+    mut to_remove: Local<Vec<Entity>>,
+) {
+    world.resource_scope(|world, roots: Mut<GuiRoots>| {
+        if roots.is_changed() {
+            *root_query = QueryBuilder::new(world)
+                .or(|builder| {
+                    for &id in &roots.0 {
+                        builder.with_id(id);
+                    }
+                })
+                .build()
+        }
+    });
+
+    has_gui_query.update_archetypes(world);
+    root_query.update_archetypes(world);
+
+    for (e, parent) in test_query.iter(world) {
+        if parent.and_then(|e| has_gui_query.get_manual(world, e.get()).ok()).is_some() {
+            to_remove.push(e);
+            continue
+        }
+
+        if root_query.get_manual(world, e).is_err() {
+            to_remove.push(e);
+            continue
+        }
+    }
+
+    world.resource_scope(|world, roots: Mut<GuiRoots>| {
+        let root_id = world.register_component::<GuiRootTransform>();
+        for e in to_remove.drain(..) {
+            let mut e = world.entity_mut(e);
+            e.remove_by_id(root_id);
+
+            for &id in &roots.0 {
+                e.remove_by_id(id);
+            }
+        }
+    });
 }
 
 pub(crate) fn propagate_layout(
@@ -353,5 +411,114 @@ pub(crate) fn propagate_layout(
 
     for sys in &mut distribute_space {
         sys.apply(world);
+    }
+}
+
+pub(crate) fn calculate_corners(
+    root_query: Query<(Entity, Ref<GlobalTransform>, Ref<GuiRootTransform>)>,
+    children_query: Query<&Children>,
+    mut gui_query: Query<(&mut Gui, Ref<DistributedSpace>)>,
+    mut gui_depth_query: Query<&mut GuiDepth>,
+    mut orphaned: RemovedComponents<Parent>,
+    mut orphaned_entities: Local<FixedBitSet>,
+    mut depth_list: Local<Vec<(usize, Vec<(usize, Entity)>)>>,
+) {
+    orphaned_entities.clear();
+    orphaned_entities.extend(orphaned.read().map(|e| e.index() as usize));
+
+    fn propagate(
+        node: Entity,
+        global_trns: Affine3A,
+        mut parent_trns: Affine2,
+        children_query: &Query<&Children>,
+        gui_query: &mut Query<(&mut Gui, Ref<DistributedSpace>)>,
+        mut changed: bool,
+        current_depth: usize,
+        depth_list: &mut Vec<(usize, Entity)>,
+    ) -> usize {
+        let Ok((mut gui, space)) = gui_query.get_mut(node) else {
+            return current_depth - 1
+        };
+
+        depth_list.push((current_depth, node));
+        changed |= gui.is_added() || space.is_changed();
+        parent_trns *= space.transform;
+
+        if changed {
+            gui.set_if_neq(Gui::from_transform(
+                global_trns,
+                parent_trns,
+                Vec2::ZERO,
+                vec2(space.size.x, 0.),
+                space.size,
+                vec2(0., space.size.y),
+            ));
+        }
+
+        let mut max_depth = current_depth;
+        if let Ok(children) = children_query.get(node) {
+            for &child in children {
+                max_depth = max_depth.max(propagate(
+                    child,
+                    global_trns,
+                    parent_trns,
+                    children_query,
+                    gui_query,
+                    changed,
+                    current_depth + 1,
+                    depth_list,
+                ));
+            }
+        }
+
+        max_depth
+    }
+
+    let mut depth_index = Some(0);
+    for (root, trns, root_trns) in &root_query {
+        let (gui, space) = gui_query.get_mut(root).unwrap();
+        let changed = space.is_changed() ||
+            trns.is_changed() ||
+            root_trns.is_changed() ||
+            gui.is_added() ||
+            orphaned_entities.contains(root.index() as usize);
+
+        let global_trns = trns.affine() * root_trns.transform;
+
+        let (mut total, mut list) = (&mut 0, &mut Vec::new());
+        if let Some((total_src, list_src)) = depth_index.and_then(|i| depth_list.get_mut(i)) {
+            depth_index = Some(depth_index.unwrap() + 1);
+            total = total_src;
+            list = list_src;
+        } else {
+            depth_index = None;
+        }
+
+        *total = propagate(
+            root,
+            global_trns,
+            space.transform,
+            &children_query,
+            &mut gui_query,
+            changed,
+            0,
+            list,
+        );
+
+        if let None = depth_index {
+            let push = (*total, std::mem::replace(list, Vec::new()));
+            depth_list.push(push);
+        }
+    }
+
+    for (total, ref mut list) in &mut depth_list {
+        for (depth, e) in list.drain(..) {
+            gui_depth_query.get_mut(e).unwrap().set_if_neq(GuiDepth {
+                depth,
+                total_depth: *total,
+            });
+        }
+
+        *total = 0;
     }
 }

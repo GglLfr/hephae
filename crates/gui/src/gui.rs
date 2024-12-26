@@ -1,3 +1,5 @@
+//! Defines components and plugins required to create GUI layout and root components.
+
 use std::{any::type_name, marker::PhantomData};
 
 use bevy_app::prelude::*;
@@ -5,8 +7,8 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::ComponentId,
     prelude::*,
-    query::{QueryFilter, QueryItem, ReadOnlyQueryData},
-    system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem, SystemState},
+    query::{QueryData, QueryFilter, QueryItem, ReadOnlyQueryData},
+    system::{ReadOnlySystemParam, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
     world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredEntityRef},
 };
 use bevy_hierarchy::prelude::*;
@@ -14,16 +16,29 @@ use bevy_math::{prelude::*, Affine2, Affine3A, Vec3A};
 use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
+use crate::{layout::calculate_root, HephaeGuiSystems};
+
+/// The heart of Hephae GUI. All GUI entities must have this component (which is usually done
+/// automatically by required components).
+///
+/// Values stored in this component are the four rectangle corners projected into 3D world-space,
+/// ready to be rendered as-is. They're calculated in
+/// [HephaeGuiSystems::CalculateCorners].
 #[derive(Component, Copy, Clone, PartialEq, Default)]
 #[require(Transform, GuiDepth, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {
+    /// The bottom-left corner of this GUI entity, in world-space.
     pub bottom_left: Vec3,
+    /// The bottom-right corner of this GUI entity, in world-space.
     pub bottom_right: Vec3,
+    /// The top-right corner of this GUI entity, in world-space.
     pub top_right: Vec3,
+    /// The top-left corner of this GUI entity, in world-space.
     pub top_left: Vec3,
 }
 
 impl Gui {
+    /// Computes corners based on global 3D transform, local 2D transform, and local 2D corners.
     #[inline]
     pub fn from_transform(
         global_trns: Affine3A,
@@ -50,16 +65,22 @@ impl Gui {
     }
 }
 
+/// Stores the depth of this GUI entity node in the GUI tree.
 #[derive(Component, Copy, Clone, Default, PartialEq)]
 pub struct GuiDepth {
+    /// The depth of the node, based on its position in the hierarchy. Root nodes are always `0`.
     pub depth: usize,
+    /// The total depth of the tree, i.e., the value of `depth` stored by the deepest leaf nodes.
     pub total_depth: usize,
 }
 
+/// GUI root node computation results from [`GuiRoot::calculate`].
 #[derive(Component, Copy, Clone, Default, PartialEq)]
 #[require(Gui)]
 pub struct GuiRootTransform {
+    /// The available space for its children, e.g., area of the camera viewport.
     pub available_space: Vec2,
+    /// The local transform relative to its parent, e.g., inverse of the camera's viewport origin.
     pub transform: Affine3A,
 }
 
@@ -76,15 +97,27 @@ pub(crate) struct DistributedSpace {
     pub size: Vec2,
 }
 
+/// The main component that handles the affine transform (which includes offset, scale, and
+/// rotation) and size for its direct children.
 pub trait GuiLayout: Component {
+    /// Query filter to observe changes that may affect this GUI layout. Should be
+    /// [`Or<Changed<T>>`].
     type Changed: QueryFilter;
 
+    /// System param to fetch for [`Self::initial_layout_size`].
     type InitialParam: ReadOnlySystemParam;
+    /// Query item to fetch for [`Self::initial_layout_size`]. **Must** match the GUI entity with
+    /// this layout component, otherwise a panic will occur.
     type InitialItem: ReadOnlyQueryData;
 
+    /// System param to fetch for [`Self::distribute_space`].
     type DistributeParam: ReadOnlySystemParam;
+    /// Query item to fetch for [`Self::distribute_space`]. **Must** match the GUI entity with
+    /// this layout component, otherwise a panic will occur.
     type DistributeItem: ReadOnlyQueryData;
 
+    /// Computes the initial layout size of each nodes, based on their children. In most cases, this
+    /// should be "minimum size to fit all children".
     fn initial_layout_size(
         param: &SystemParamItem<Self::InitialParam>,
         parent: QueryItem<Self::InitialItem>,
@@ -92,6 +125,9 @@ pub trait GuiLayout: Component {
         children_layout_sizes: &[Vec2],
     ) -> Vec2;
 
+    /// Distributes the actual available size for each children node, based on their parent. Each
+    /// `children[i]` is associated with `output[i]`, where initially `output[i].1` is the size
+    /// calculated from [`Self::initial_layout_size`].
     fn distribute_space(
         available_space: Vec2,
         param: &SystemParamItem<Self::DistributeParam>,
@@ -101,6 +137,9 @@ pub trait GuiLayout: Component {
     );
 }
 
+/// # Safety
+/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::InitialParam`]
+/// and [`GuiLayout::InitialItem`].
 pub(crate) unsafe trait InitialLayoutSizeSys: Send {
     fn update_archetypes(&mut self, world: UnsafeWorldCell);
 
@@ -153,6 +192,9 @@ unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
     }
 }
 
+/// # Safety
+/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::DistributeParam`]
+/// and [`GuiLayout::DistributeItem`].
 pub(crate) unsafe trait DistributeSpaceSys: Send {
     fn update_archetypes(&mut self, world: UnsafeWorldCell);
 
@@ -211,7 +253,7 @@ unsafe impl<'w, 's, T: GuiLayout> DistributeSpaceSys
 }
 
 #[derive(Resource, Default)]
-pub struct GuiLayouts(Vec<GuiLayoutData>);
+pub(crate) struct GuiLayouts(Vec<GuiLayoutData>);
 impl GuiLayouts {
     #[inline]
     pub fn register<T: GuiLayout>(&mut self, world: &mut World) {
@@ -234,7 +276,7 @@ impl GuiLayouts {
         })
     }
 
-    pub(crate) fn initial_layout_size_param(
+    pub fn initial_layout_size_param(
         &self,
         world: &mut World,
     ) -> (
@@ -298,8 +340,10 @@ impl<F: QueryFilter> ChangedQuery for QueryState<Entity, F> {
     }
 }
 
+/// Registers `T` GUI layout and all of the systems associates with it to the application.
 pub struct GuiLayoutPlugin<T: GuiLayout>(PhantomData<fn() -> T>);
 impl<T: GuiLayout> GuiLayoutPlugin<T> {
+    /// Creates a new [`GuiLayoutPlugin`].
     #[inline]
     pub const fn new() -> Self {
         Self(PhantomData)
@@ -337,5 +381,63 @@ impl<T: GuiLayout> Plugin for GuiLayoutPlugin<T> {
         let world = app.world_mut();
         world.register_component_hooks::<T>().on_add(hook).on_remove(hook);
         world.resource_scope(|world, mut layouts: Mut<GuiLayouts>| layouts.register::<T>(world))
+    }
+}
+
+/// A GUI root component, responsible for how its children are recursively projected into the 3D
+/// space for the camera to pick up. A GUI root component may not have a parent with a [`Gui`]
+/// component.
+pub trait GuiRoot: Component {
+    /// System param to fetch for [`Self::calculate`]. Must **not** have write access to
+    /// [`GuiRootTransform`], otherwise a panic will arise.
+    type Param: SystemParam;
+    /// World query to fetch for [`Self::calculate`].
+    type Item: QueryData;
+
+    /// Calculates [`GuiRootTransform`] for each GUI root nodes.
+    fn calculate(param: &mut SystemParamItem<Self::Param>, item: QueryItem<Self::Item>) -> GuiRootTransform;
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct GuiRoots(pub Vec<ComponentId>);
+impl GuiRoots {
+    #[inline]
+    pub fn register<T: GuiRoot>(&mut self, world: &mut World) {
+        self.0.push(world.register_component::<T>())
+    }
+}
+
+/// Registers `T` GUI root and all of the systems associates with it to the application.
+pub struct GuiRootPlugin<T: GuiRoot>(PhantomData<fn() -> T>);
+impl<T: GuiRoot> GuiRootPlugin<T> {
+    /// Creates a new [`GuiRootPlugin`].
+    #[inline]
+    pub const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T: GuiRoot> Default for GuiRootPlugin<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: GuiRoot> Clone for GuiRootPlugin<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: GuiRoot> Copy for GuiRootPlugin<T> {}
+
+impl<T: GuiRoot> Plugin for GuiRootPlugin<T> {
+    fn build(&self, app: &mut App) {
+        app.register_required_components::<T, GuiRootTransform>()
+            .add_systems(PostUpdate, calculate_root::<T>.in_set(HephaeGuiSystems::CalculateRoot))
+            .world_mut()
+            .resource_scope(|world, mut roots: Mut<GuiRoots>| roots.register::<T>(world))
     }
 }
