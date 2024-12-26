@@ -244,7 +244,7 @@ impl GuiLayout for Cont {
         SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>,
         SQuery<Option<Read<Margin>>>,
     );
-    type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
+    type DistributeItem = (Read<Self>, Option<Read<Padding>>);
 
     fn initial_layout_size(
         _: &SystemParamItem<Self::InitialParam>,
@@ -289,15 +289,12 @@ impl GuiLayout for Cont {
     fn distribute_space(
         available_space: Vec2,
         (size_query, flex_query, margin_query): &SystemParamItem<Self::DistributeParam>,
-        (&cont, padding, margin): QueryItem<Self::DistributeItem>,
+        (&cont, padding): QueryItem<Self::DistributeItem>,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
     ) {
         let padding = *padding.copied().unwrap_or_default();
-        let margin = *margin.copied().unwrap_or_default();
-        let available_space = available_space -
-            vec2(margin.left + margin.right, margin.top + margin.bottom) -
-            vec2(padding.left + padding.right, padding.top + padding.bottom);
+        let available_space = available_space - vec2(padding.left + padding.right, padding.top + padding.bottom);
 
         let (taken, mut total_expand, mut total_shrink) = children.iter().zip(output.iter_mut()).fold(
             (Vec2::ZERO, Vec2::ZERO, Vec2::ZERO),
@@ -345,9 +342,9 @@ impl GuiLayout for Cont {
 
         let mut offset = match cont {
             Self::Horizontal | Self::Vertical => vec2(0., available_space.y),
-            Self::HorizontalReverse => available_space,
+            Self::HorizontalReverse => vec2(available_space.x, available_space.y),
             Self::VerticalReverse => Vec2::ZERO,
-        } + vec2(margin.left + padding.left, margin.bottom + padding.bottom);
+        } + vec2(padding.left, padding.bottom);
 
         for (&child, (trns, output)) in children.iter().zip(output.iter_mut()) {
             let (expand, shrink) = flex_query.get(child).unwrap();

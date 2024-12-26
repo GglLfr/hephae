@@ -172,7 +172,7 @@ fn startup(mut commands: Commands) {
                     Rotate,
                     Cont::Horizontal,
                     UiSize::all(Auto),
-                    Padding::all(10.),
+                    Margin::all(10.),
                     Shrink(Vec2::ONE),
                     HasDrawer::<Draw>::new(),
                 ))
