@@ -228,6 +228,7 @@ impl GuiLayouts {
                         Changed<PreferredSize>,
                         Changed<Parent>,
                         Changed<Children>,
+                        Changed<T>,
                         T::Changed,
                     )>,
                 >::new(world))

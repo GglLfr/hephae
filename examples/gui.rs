@@ -141,6 +141,9 @@ impl VertexCommand for DrawGui {
     }
 }
 
+#[derive(Component, Copy, Clone)]
+struct Rotate;
+
 fn main() {
     App::new()
         .add_plugins((
@@ -150,6 +153,7 @@ fn main() {
             HephaeGuiPlugin,
         ))
         .add_systems(Startup, startup)
+        .add_systems(Update, rotate)
         .run();
 }
 
@@ -157,24 +161,47 @@ fn startup(mut commands: Commands) {
     commands
         .spawn((Camera2d, FromCamera2d, Cont::Horizontal, HasDrawer::<Draw>::new()))
         .with_children(|ui| {
-            ui.spawn((Cont::Horizontal, UiSize::new(Rel(0.5), Rel(1.)), HasDrawer::<Draw>::new()))
+            ui.spawn((
+                Rotate,
+                Cont::Horizontal,
+                UiSize::new(Rel(0.5), Rel(1.)),
+                HasDrawer::<Draw>::new(),
+            ))
+            .with_children(|ui| {
+                ui.spawn((
+                    Rotate,
+                    Cont::Horizontal,
+                    UiSize::all(Auto),
+                    Padding::all(10.),
+                    Shrink(Vec2::ONE),
+                    HasDrawer::<Draw>::new(),
+                ))
                 .with_children(|ui| {
-                    ui.spawn((
-                        Cont::Horizontal,
-                        UiSize::all(Auto),
-                        Padding::all(10.),
-                        HasDrawer::<Draw>::new(),
-                    ))
-                    .with_children(|ui| {
-                        for _ in 0..3 {
-                            ui.spawn((
-                                Cont::Horizontal,
-                                UiSize::all(Abs(40.)),
-                                Margin::all(10.),
-                                HasDrawer::<Draw>::new(),
-                            ));
-                        }
-                    });
+                    for _ in 0..3 {
+                        ui.spawn((
+                            Cont::Horizontal,
+                            UiSize::all(Abs(40.)),
+                            Margin::all(10.),
+                            Shrink(Vec2::ONE),
+                            HasDrawer::<Draw>::new(),
+                        ));
+                    }
                 });
+            });
         });
+}
+
+fn rotate(time: Res<Time>, mut rotate: Query<&mut Cont, With<Rotate>>, mut timer: Local<f64>) {
+    *timer += time.delta_secs_f64();
+    if *timer >= 1. {
+        *timer -= 1.;
+        for mut cont in &mut rotate {
+            *cont = match *cont {
+                Cont::Horizontal => Cont::HorizontalReverse,
+                Cont::HorizontalReverse => Cont::Vertical,
+                Cont::Vertical => Cont::VerticalReverse,
+                Cont::VerticalReverse => Cont::Horizontal,
+            };
+        }
+    }
 }

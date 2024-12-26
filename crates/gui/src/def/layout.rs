@@ -353,7 +353,8 @@ impl GuiLayout for Cont {
             let (expand, shrink) = flex_query.get(child).unwrap();
             let margin = *margin_query.get(child).unwrap().copied().unwrap_or_default();
 
-            let size = *output + delta_expand * (*expand.copied().unwrap_or_default() / total_expand) -
+            let size = *output +
+                delta_expand * (*expand.copied().unwrap_or_default() / total_expand) +
                 delta_shrink * (*shrink.copied().unwrap_or_default() / total_shrink);
 
             let pos = offset +
