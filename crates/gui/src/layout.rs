@@ -348,9 +348,9 @@ pub(crate) fn propagate_layout(
                 size,
                 child,
                 distributed_space_query,
-                &cache_query,
-                &initial_layout_size_query,
-                &children_query,
+                cache_query,
+                initial_layout_size_query,
+                children_query,
                 distribute_space,
                 children_stack,
                 children_output_stack,
@@ -505,8 +505,8 @@ pub(crate) fn calculate_corners(
             list,
         );
 
-        if let None = depth_index {
-            let push = (*total, std::mem::replace(list, Vec::new()));
+        if depth_index.is_none() {
+            let push = (*total, std::mem::take(list));
             depth_list.push(push);
         }
     }
