@@ -15,7 +15,7 @@ use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
 #[derive(Component, Copy, Clone, PartialEq, Default)]
-#[require(Transform, GuiDepth, PreferredSize, InitialLayoutSize, DistributedSpace)]
+#[require(Transform, GuiDepth, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {
     pub bottom_left: Vec3,
     pub bottom_right: Vec3,
@@ -55,9 +55,6 @@ pub struct GuiDepth {
     pub depth: usize,
     pub total_depth: usize,
 }
-
-#[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
-pub struct PreferredSize(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, PartialEq)]
 #[require(Gui)]
@@ -225,7 +222,6 @@ impl GuiLayouts {
                     Entity,
                     Or<(
                         Changed<GuiRootTransform>,
-                        Changed<PreferredSize>,
                         Changed<Parent>,
                         Changed<Children>,
                         Changed<T>,

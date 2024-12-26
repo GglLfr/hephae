@@ -17,13 +17,15 @@ use crate::{
     space::{calculate_corners, validate_root, GuiRoots},
 };
 
+/// Common imports for [`hephae_gui`](crate).
 pub mod prelude {
     pub use crate::{def::*, HephaeGuiPlugin};
 }
 
+/// Labels assigned to Hephae systems that are added to [`PostUpdate`], responsible over all GUI
+/// layout calculations.
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeGuiSystems {
-    CalculatePreferredSize,
     CalculateRoot,
     ValidateRoot,
     PropagateLayout,
@@ -39,11 +41,7 @@ impl Plugin for HephaeGuiPlugin {
             .configure_sets(
                 PostUpdate,
                 (
-                    (
-                        HephaeGuiSystems::CalculatePreferredSize.ambiguous_with(HephaeGuiSystems::CalculatePreferredSize),
-                        HephaeGuiSystems::CalculateRoot,
-                        HephaeGuiSystems::ValidateRoot,
-                    )
+                    (HephaeGuiSystems::CalculateRoot, HephaeGuiSystems::ValidateRoot)
                         .before(HephaeGuiSystems::PropagateLayout)
                         .after(CameraUpdateSystem),
                     (HephaeGuiSystems::PropagateLayout, HephaeGuiSystems::CalculateCorners).chain(),

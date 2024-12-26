@@ -12,7 +12,7 @@ use nonmax::NonMaxUsize;
 
 use crate::gui::{
     ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiLayouts, GuiRootTransform, InitialLayoutSize,
-    InitialLayoutSizeSys, LayoutCache, PreferredSize,
+    InitialLayoutSizeSys, LayoutCache,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -51,7 +51,6 @@ pub(crate) fn propagate_layout(
         Query<(Option<&mut LayoutCache>, &mut InitialLayoutSize)>,
         Query<(Entity, &Parent), With<Gui>>,
         Query<&Children>,
-        Query<&PreferredSize>,
     )>,
     (mut initial_stack, mut initial_size_stack): (Local<Vec<Entity>>, Local<Vec<Vec2>>),
     distribute_space_state: &mut SystemState<(
@@ -125,7 +124,6 @@ pub(crate) fn propagate_layout(
         layout_query: &mut Query<(Option<&mut LayoutCache>, &mut InitialLayoutSize)>,
         parent_query: &Query<(Entity, &Parent), With<Gui>>,
         children_query: &Query<&Children>,
-        preferred_size_query: &Query<&PreferredSize>,
         children_stack: &mut Vec<Entity>,
         children_size_stack: &mut Vec<Vec2>,
     ) -> Vec2 {
@@ -147,7 +145,6 @@ pub(crate) fn propagate_layout(
                     layout_query,
                     parent_query,
                     children_query,
-                    preferred_size_query,
                     children_stack,
                     children_size_stack,
                 );
@@ -194,7 +191,7 @@ pub(crate) fn propagate_layout(
                 world,
             )
         } else {
-            preferred_size_query.get(node).unwrap().0
+            Vec2::ZERO
         };
 
         children_stack.truncate(children_offset);
@@ -217,7 +214,7 @@ pub(crate) fn propagate_layout(
     // - We only ever write to `GuiCache` and `PreferredLayoutSize`, which is guaranteed to be unique
     //   because of the type's restricted visibility.
     initial_size_state.update_archetypes_unsafe_world_cell(cell);
-    let (mut invalid_caches, mut layout_query, parent_query, children_query, preferred_size_query) =
+    let (mut invalid_caches, mut layout_query, parent_query, children_query) =
         unsafe { initial_size_state.get_unchecked_manual(cell) };
 
     for &root in &root_changed {
@@ -232,7 +229,6 @@ pub(crate) fn propagate_layout(
                 &mut layout_query,
                 &parent_query,
                 &children_query,
-                &preferred_size_query,
                 &mut initial_stack,
                 &mut initial_size_stack,
             );

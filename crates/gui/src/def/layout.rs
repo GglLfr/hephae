@@ -10,7 +10,7 @@ use bevy_ecs::{
 use bevy_math::{prelude::*, vec2, Affine2};
 pub use UiVal::*;
 
-use crate::gui::{Gui, GuiLayout, PreferredSize};
+use crate::gui::{Gui, GuiLayout};
 
 #[derive(Copy, Clone)]
 pub enum UiVal {
@@ -231,13 +231,7 @@ impl GuiLayout for Cont {
     )>;
 
     type InitialParam = ();
-    type InitialItem = (
-        Read<Self>,
-        Read<PreferredSize>,
-        Option<Read<UiSize>>,
-        Option<Read<Padding>>,
-        Option<Read<Margin>>,
-    );
+    type InitialItem = (Read<Self>, Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     type DistributeParam = (
         SQuery<Option<Read<UiSize>>>,
@@ -248,7 +242,7 @@ impl GuiLayout for Cont {
 
     fn initial_layout_size(
         _: &SystemParamItem<Self::InitialParam>,
-        (&cont, &preferred_size, size, padding, margin): QueryItem<Self::InitialItem>,
+        (&cont, size, padding, margin): QueryItem<Self::InitialItem>,
         _: &[Entity],
         children_layout_sizes: &[Vec2],
     ) -> Vec2 {
@@ -271,10 +265,7 @@ impl GuiLayout for Cont {
                     out
                 });
 
-                vec2(
-                    x.refer(0., children_size.x.max(preferred_size.x)),
-                    y.refer(0., children_size.y.max(preferred_size.y)),
-                )
+                vec2(x.refer(0., children_size.x), y.refer(0., children_size.y))
             }
             UiVal2 { x, y } => vec2(x.get(), y.get()),
         };
