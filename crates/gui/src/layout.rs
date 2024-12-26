@@ -11,8 +11,8 @@ use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
 use crate::gui::{
-    DistributeSpaceSys, DistributedSpace, Gui, GuiLayouts, GuiRootTransform, InitialLayoutSize, InitialLayoutSizeSys,
-    LayoutCache, PreferredSize,
+    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiLayouts, GuiRootTransform, InitialLayoutSize,
+    InitialLayoutSizeSys, LayoutCache, PreferredSize,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -31,9 +31,9 @@ impl SystemBuffer for InvalidCaches {
 
 pub(crate) fn propagate_layout(
     world: &mut World,
-    (mut layout_ids, mut changed_query, mut contains_query, mut initial_layout_size, mut distribute_space, caches_query): (
+    (mut layout_ids, mut changed_queries, mut contains_query, mut initial_layout_size, mut distribute_space, caches_query): (
         Local<Vec<ComponentId>>,
-        Local<QueryState<Entity>>,
+        Local<Vec<Box<dyn ChangedQuery>>>,
         Local<QueryState<FilteredEntityRef>>,
         Local<Vec<Box<dyn InitialLayoutSizeSys>>>,
         Local<Vec<Box<dyn DistributeSpaceSys>>>,
@@ -66,10 +66,10 @@ pub(crate) fn propagate_layout(
     let mut all_changed = false;
     world.resource_scope(|world, layouts: Mut<GuiLayouts>| {
         if layouts.is_changed() {
-            let (layout_ids_sys, changed_query_sys, contains_query_sys, initial_layout_size_sys, distribute_space_sys) =
+            let (layout_ids_sys, changed_queries_sys, contains_query_sys, initial_layout_size_sys, distribute_space_sys) =
                 layouts.initial_layout_size_param(world);
             *layout_ids = layout_ids_sys;
-            *changed_query = changed_query_sys;
+            *changed_queries = changed_queries_sys;
             *contains_query = contains_query_sys;
             *initial_layout_size = initial_layout_size_sys;
             *distribute_space = distribute_space_sys;
@@ -88,25 +88,26 @@ pub(crate) fn propagate_layout(
         root_changed.extend(root_gui_query.iter(world));
     } else {
         root_iterated.clear();
-
-        'node: for mut e in changed_query.iter(world) {
-            root_iterated.grow((e.index() + 1) as usize);
-            if root_iterated.put(e.index() as usize) {
-                continue 'node
-            }
-
-            root_changed.push(loop {
-                let Ok(parent) = ancestor_query.get_manual(world, e) else {
-                    break e
-                };
-
-                if has_gui_query.get_manual(world, parent.get()).is_ok() {
-                    e = parent.get()
-                } else {
-                    break e
+        changed_queries.iter_mut().for_each(|query| {
+            query.for_each(world, &mut |mut e| {
+                root_iterated.grow((e.index() + 1) as usize);
+                if root_iterated.put(e.index() as usize) {
+                    return
                 }
-            });
-        }
+
+                root_changed.push(loop {
+                    let Ok(parent) = ancestor_query.get_manual(world, e) else {
+                        break e
+                    };
+
+                    if has_gui_query.get_manual(world, parent.get()).is_ok() {
+                        e = parent.get()
+                    } else {
+                        break e
+                    }
+                });
+            })
+        });
     }
 
     if root_changed.is_empty() {

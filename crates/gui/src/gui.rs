@@ -220,8 +220,17 @@ impl GuiLayouts {
     pub fn register<T: GuiLayout>(&mut self, world: &mut World) {
         self.0.push(GuiLayoutData {
             id: world.register_component::<T>(),
-            changed: |builder| {
-                builder.filter::<T::Changed>();
+            changed: |world| {
+                Box::new(QueryState::<
+                    Entity,
+                    Or<(
+                        Changed<GuiRootTransform>,
+                        Changed<PreferredSize>,
+                        Changed<Parent>,
+                        Changed<Children>,
+                        T::Changed,
+                    )>,
+                >::new(world))
             },
             initial_layout_size: |world| Box::new((SystemState::new(world), PhantomData::<T>)),
             distribute_space: |world| Box::new((SystemState::new(world), PhantomData::<T>)),
@@ -233,36 +242,28 @@ impl GuiLayouts {
         world: &mut World,
     ) -> (
         Vec<ComponentId>,
-        QueryState<Entity>,
+        Vec<Box<dyn ChangedQuery>>,
         QueryState<FilteredEntityRef<'static>>,
         Vec<Box<dyn InitialLayoutSizeSys>>,
         Vec<Box<dyn DistributeSpaceSys>>,
     ) {
         let len = self.0.len();
-        let (layout_ids, initial_layout_size, distribute_space) = self.0.iter().fold(
-            (Vec::with_capacity(len), Vec::with_capacity(len), Vec::with_capacity(len)),
-            |(mut layout_ids, mut initial_layout_sizes, mut distribute_space), data| {
+        let (layout_ids, changed_queries, initial_layout_size, distribute_space) = self.0.iter().fold(
+            (
+                Vec::with_capacity(len),
+                Vec::with_capacity(len),
+                Vec::with_capacity(len),
+                Vec::with_capacity(len),
+            ),
+            |(mut layout_ids, mut changed_queries, mut initial_layout_sizes, mut distribute_space), data| {
                 layout_ids.push(data.id);
+                changed_queries.push((data.changed)(world));
                 initial_layout_sizes.push((data.initial_layout_size)(world));
                 distribute_space.push((data.distribute_space)(world));
 
-                (layout_ids, initial_layout_sizes, distribute_space)
+                (layout_ids, changed_queries, initial_layout_sizes, distribute_space)
             },
         );
-
-        let changed_query = QueryBuilder::new(world)
-            .or(|builder| {
-                builder
-                    .filter::<Changed<GuiRootTransform>>()
-                    .filter::<Changed<PreferredSize>>()
-                    .filter::<Changed<Parent>>()
-                    .filter::<Changed<Children>>();
-
-                for data in &self.0 {
-                    (data.changed)(builder);
-                }
-            })
-            .build();
 
         let contains_query = QueryBuilder::new(world)
             .or(|builder| {
@@ -274,7 +275,7 @@ impl GuiLayouts {
 
         (
             layout_ids,
-            changed_query,
+            changed_queries,
             contains_query,
             initial_layout_size,
             distribute_space,
@@ -284,9 +285,20 @@ impl GuiLayouts {
 
 struct GuiLayoutData {
     id: ComponentId,
-    changed: fn(&mut QueryBuilder),
+    changed: fn(&mut World) -> Box<dyn ChangedQuery>,
     initial_layout_size: fn(&mut World) -> Box<dyn InitialLayoutSizeSys>,
     distribute_space: fn(&mut World) -> Box<dyn DistributeSpaceSys>,
+}
+
+pub(crate) trait ChangedQuery: Send {
+    fn for_each(&mut self, world: &World, callback: &mut dyn FnMut(Entity));
+}
+
+impl<F: QueryFilter> ChangedQuery for QueryState<Entity, F> {
+    #[inline]
+    fn for_each(&mut self, world: &World, callback: &mut dyn FnMut(Entity)) {
+        self.iter(world).for_each(callback)
+    }
 }
 
 pub struct GuiLayoutPlugin<T: GuiLayout>(PhantomData<fn() -> T>);

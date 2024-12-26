@@ -92,6 +92,7 @@ impl Vertex for Vert {
 struct Draw;
 impl Drawer for Draw {
     type Vertex = Vert;
+
     type ExtractParam = ();
     type ExtractData = ();
     type ExtractFilter = ();

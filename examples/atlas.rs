@@ -18,16 +18,15 @@ use bevy::{
         },
         render_resource::{
             binding_types::{sampler, texture_2d},
-            BindGroup, BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding,
-            RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
+            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
+            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
         },
         renderer::RenderDevice,
         sync_world::MainEntity,
         texture::GpuImage,
-        Extract, Render, RenderApp,
     },
-    utils::HashMap,
 };
+use bytemuck::{Pod, Zeroable};
 use hephae::{
     atlas::bind_group::ImageBindGroups,
     prelude::*,

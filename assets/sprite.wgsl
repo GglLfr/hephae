@@ -17,7 +17,7 @@ struct VertexOutput {
 @vertex
 fn vertex(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = view.clip_from_world * vec4<f32>(in.position, 0.0, 1.0);
+    out.clip_position = view.clip_from_world * vec4<f32>(in.position, 0., 1.);
     out.uv = in.uv;
 
     return out;
