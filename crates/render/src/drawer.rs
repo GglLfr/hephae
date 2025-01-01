@@ -87,6 +87,7 @@ pub trait Drawer: TypePath + Component + Sized {
 /// be added to those entities so they'll be calculated in
 /// [`check_visibilities`](crate::vertex::check_visibilities).
 #[derive(Reflect, Component, Copy, Clone)]
+#[reflect(Component, Default)]
 #[require(Visibility)]
 pub struct HasDrawer<T: Drawer>(#[reflect(ignore)] pub PhantomData<fn() -> T>);
 

@@ -29,7 +29,7 @@ use nonmax::NonMaxUsize;
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
 #[derive(Asset, Reflect, Debug, Clone)]
-#[reflect(Asset)]
+#[reflect(Asset, Debug)]
 pub struct TextureAtlas {
     /// The list of pages contained in this atlas. Items may be modified, but growing or shrinking
     /// this vector is **discouraged**.

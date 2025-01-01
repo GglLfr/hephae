@@ -6,6 +6,8 @@ pub use hephae_atlas as atlas;
 #[cfg(feature = "gui")]
 pub use hephae_gui as gui;
 pub use hephae_render as render;
+#[cfg(feature = "text")]
+pub use hephae_text as text;
 
 /// Common imports for [`hephae`](crate).
 pub mod prelude {

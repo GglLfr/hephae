@@ -26,6 +26,7 @@ members = [
     "crates/atlas",
     "crates/gui",
     "crates/render",
+    "crates/text",
 ]
 
 [workspace.package]
@@ -36,7 +37,7 @@ rust-version = "1.83"
 categories = ["graphics", "rendering"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/GlennFolker/hephae"
-version = "0.3.0"
+version = "0.4.0"
 
 [workspace.lints.clippy]
 type_complexity = "allow"
@@ -57,21 +58,25 @@ bevy_transform = "0.15"
 bevy_utils = "0.15"
 
 bytemuck = { version = "1", features = ["derive"] }
+cosmic-text = { version = "0.12", default-features = false, features = ["std", "swash"] }
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 guillotiere = "0.6"
 nonmax = "0.5"
 serde = { version = "1", features = ["derive"] }
+sys-locale = "0.3"
 thiserror = "2"
 
-hephae-atlas = { version = "0.3.0", path = "crates/atlas" }
-hephae-gui = { version = "0.3.0", path = "crates/gui" }
-hephae-render = { version = "0.3.0", path = "crates/render" }
+hephae-atlas = { version = "0.4.0", path = "crates/atlas" }
+hephae-gui = { version = "0.4.0", path = "crates/gui" }
+hephae-render = { version = "0.4.0", path = "crates/render" }
+hephae-text = { version = "0.4.0", path = "crates/text" }
 
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }
 hephae-gui = { optional = true, workspace = true }
 hephae-render.workspace = true
+hephae-text = { optional = true, workspace = true }
 
 [dev-dependencies]
 bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "multi_threaded", "png"] }
@@ -79,9 +84,10 @@ bevy = { version = "0.15", default-features = false, features = ["bevy_window", 
 bytemuck.workspace = true
 
 [features]
-default = ["atlas", "gui"]
+default = ["atlas", "gui", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
+text = ["dep:hephae-text"]
 
 [[example]]
 name = "quad"
