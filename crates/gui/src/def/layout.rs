@@ -273,9 +273,8 @@ impl GuiLayout for Cont {
     type DistributeParam = (
         SQuery<Option<Read<UiSize>>>,
         SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>,
-        SQuery<Option<Read<Margin>>>,
     );
-    type DistributeItem = (Read<Self>, Option<Read<Padding>>);
+    type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     fn initial_layout_size(
         _: &SystemParamItem<Self::InitialParam>,
@@ -315,14 +314,18 @@ impl GuiLayout for Cont {
     }
 
     fn distribute_space(
-        available_space: Vec2,
-        (size_query, flex_query, margin_query): &SystemParamItem<Self::DistributeParam>,
-        (&cont, padding): QueryItem<Self::DistributeItem>,
+        (this_transform, this_size): (&mut Affine2, &mut Vec2),
+        (size_query, flex_query): &SystemParamItem<Self::DistributeParam>,
+        (&cont, padding, margin): QueryItem<Self::DistributeItem>,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
     ) {
+        let margin = *margin.copied().unwrap_or_default();
+        *this_transform *= Affine2::from_translation(vec2(margin.left, margin.bottom));
+        *this_size -= vec2(margin.left + margin.right, margin.bottom + margin.top);
+
         let padding = *padding.copied().unwrap_or_default();
-        let available_space = available_space - vec2(padding.left + padding.right, padding.top + padding.bottom);
+        let available_space = *this_size - vec2(padding.left + padding.right, padding.top + padding.bottom);
 
         let (taken, mut total_expand, mut total_shrink) = children.iter().zip(output.iter_mut()).fold(
             (Vec2::ZERO, Vec2::ZERO, Vec2::ZERO),
@@ -376,8 +379,6 @@ impl GuiLayout for Cont {
 
         for (&child, (trns, output)) in children.iter().zip(output.iter_mut()) {
             let (expand, shrink) = flex_query.get(child).unwrap();
-            let margin = *margin_query.get(child).unwrap().copied().unwrap_or_default();
-
             let size = *output +
                 delta_expand * (*expand.copied().unwrap_or_default() / total_expand) +
                 delta_shrink * (*shrink.copied().unwrap_or_default() / total_shrink);
@@ -389,8 +390,8 @@ impl GuiLayout for Cont {
                     Self::VerticalReverse => vec2(0., size.y),
                 };
 
-            *trns = Affine2::from_translation(pos + vec2(margin.left, margin.bottom - size.y));
-            *output = size - vec2(margin.left + margin.right, margin.top + margin.bottom);
+            *trns = Affine2::from_translation(pos - vec2(0., size.y));
+            *output = size;
 
             offset += match cont {
                 Self::Horizontal => vec2(size.x, 0.),

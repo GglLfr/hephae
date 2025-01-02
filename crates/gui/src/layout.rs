@@ -298,8 +298,8 @@ pub(crate) fn propagate_layout(
     // Phase 2: Calculate and distribute space, parent-to-children.
     unsafe fn propagate_distribute_space(
         world: UnsafeWorldCell,
-        available_space: Vec2,
         node: Entity,
+        (node_transform, node_size): (Affine2, Vec2),
         distributed_space_query: &mut Query<&mut DistributedSpace>,
         cache_query: &Query<&LayoutCache>,
         initial_layout_size_query: &Query<(Entity, &InitialLayoutSize)>,
@@ -324,14 +324,20 @@ pub(crate) fn propagate_layout(
             .ok()
             .and_then(|&cache| cache.and_then(|id| distribute_space.get_mut(id.get())))
         {
+            let (mut transform, mut size) = (node_transform, node_size);
             // Safety: See below.
             distribute_space.execute(
-                available_space,
+                (&mut transform, &mut size),
                 node,
                 &children_stack[from..to],
                 &mut children_output_stack[from..to],
                 world,
-            )
+            );
+
+            distributed_space_query
+                .get_mut(node)
+                .unwrap()
+                .set_if_neq(DistributedSpace { transform, size });
         }
 
         for i in from..to {
@@ -345,8 +351,8 @@ pub(crate) fn propagate_layout(
 
             propagate_distribute_space(
                 world,
-                size,
                 child,
+                (transform, size),
                 distributed_space_query,
                 cache_query,
                 initial_layout_size_query,
@@ -392,8 +398,8 @@ pub(crate) fn propagate_layout(
         unsafe {
             propagate_distribute_space(
                 cell,
-                available_space,
                 root,
+                (Affine2::IDENTITY, available_space),
                 &mut distributed_space_query,
                 &cache_query,
                 &initial_layout_size_query,

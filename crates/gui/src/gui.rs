@@ -129,7 +129,7 @@ pub trait GuiLayout: Component {
     /// `children[i]` is associated with `output[i]`, where initially `output[i].1` is the size
     /// calculated from [`Self::initial_layout_size`].
     fn distribute_space(
-        available_space: Vec2,
+        this: (&mut Affine2, &mut Vec2),
         param: &SystemParamItem<Self::DistributeParam>,
         parent: QueryItem<Self::DistributeItem>,
         children: &[Entity],
@@ -206,7 +206,7 @@ pub(crate) unsafe trait DistributeSpaceSys: Send {
     ///   [`GuiLayout::DistributeParam`] nor [`GuiLayout::DistributeItem`].
     unsafe fn execute(
         &mut self,
-        available_space: Vec2,
+        this: (&mut Affine2, &mut Vec2),
         parent: Entity,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
@@ -236,7 +236,7 @@ unsafe impl<'w, 's, T: GuiLayout> DistributeSpaceSys
     #[inline]
     unsafe fn execute(
         &mut self,
-        available_space: Vec2,
+        this: (&mut Affine2, &mut Vec2),
         parent: Entity,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
@@ -248,7 +248,7 @@ unsafe impl<'w, 's, T: GuiLayout> DistributeSpaceSys
             type_name::<T>()
         ));
 
-        T::distribute_space(available_space, &param, item, children, output)
+        T::distribute_space(this, &param, item, children, output)
     }
 }
 

@@ -42,6 +42,7 @@ pub struct TextureAtlas {
 /// A page located in a [`TextureAtlas`]. Contains the handle to the page image, and rectangle
 /// placements of each sprites.
 #[derive(Reflect, Debug, Clone)]
+#[reflect(Debug)]
 pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
@@ -54,7 +55,7 @@ pub struct AtlasPage {
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
 #[derive(Reflect, Component, Debug, Clone)]
-#[reflect(Component)]
+#[reflect(Component, Debug)]
 #[require(AtlasIndex)]
 pub struct AtlasEntry {
     /// The handle to the texture atlas.
