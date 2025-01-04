@@ -16,4 +16,6 @@ pub mod prelude {
     #[cfg(feature = "gui")]
     pub use crate::gui::prelude::*;
     pub use crate::render::prelude::*;
+    #[cfg(feature = "text")]
+    pub use crate::text::prelude::*;
 }

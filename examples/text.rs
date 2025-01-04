@@ -1,7 +1,7 @@
 use std::mem::offset_of;
 
 use bevy::{
-    core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
+    core_pipeline::core_2d::Transparent2d,
     ecs::{
         query::{QueryItem, ROQueryItem},
         system::{
@@ -9,7 +9,7 @@ use bevy::{
             SystemParamItem,
         },
     },
-    math::FloatOrd,
+    math::{vec2, FloatOrd},
     prelude::*,
     render::{
         render_asset::RenderAssets,
@@ -25,6 +25,7 @@ use bevy::{
         sync_world::MainEntity,
         texture::GpuImage,
     },
+    window::PrimaryWindow,
 };
 use bytemuck::{Pod, Zeroable};
 use hephae::{
@@ -34,27 +35,31 @@ use hephae::{
         pipeline::{HephaeBatchSection, HephaePipeline},
     },
 };
+use hephae_text::atlas::FontAtlas;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
-struct SpriteVertex {
+struct Vert {
     pos: [f32; 2],
     uv: [f32; 2],
 }
 
-impl SpriteVertex {
+impl Vert {
     #[inline]
-    pub const fn new(x: f32, y: f32, u: f32, v: f32) -> Self {
-        Self { pos: [x, y], uv: [u, v] }
+    pub const fn new(xy: Vec2, uv: Vec2) -> Self {
+        Self {
+            pos: [xy.x, xy.y],
+            uv: [uv.x, uv.y],
+        }
     }
 }
 
-impl Vertex for SpriteVertex {
+impl Vertex for Vert {
     type PipelineParam = SRes<RenderDevice>;
     type PipelineProp = BindGroupLayout;
     type PipelineKey = AssetId<Image>;
 
-    type Command = Sprite;
+    type Command = Glyph;
 
     type BatchParam = (
         SRes<RenderDevice>,
@@ -83,7 +88,7 @@ impl Vertex for SpriteVertex {
 
     #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {
-        render_device.create_bind_group_layout("sprite_material_layout", &[
+        render_device.create_bind_group_layout("text_material_layout", &[
             texture_2d(TextureSampleType::Float { filterable: true }).build(0, ShaderStages::FRAGMENT),
             sampler(SamplerBindingType::Filtering).build(1, ShaderStages::FRAGMENT),
         ])
@@ -140,7 +145,7 @@ struct SetSpriteBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     type Param = SRes<ImageBindGroups>;
     type ViewQuery = ();
-    type ItemQuery = Read<HephaeBatchSection<SpriteVertex>>;
+    type ItemQuery = Read<HephaeBatchSection<Vert>>;
 
     #[inline]
     fn render<'w>(
@@ -164,104 +169,71 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     }
 }
 
-#[derive(TypePath, Component, Copy, Clone)]
-struct DrawSprite {
+#[derive(TypePath, Component, Clone)]
+struct DrawText {
     pos: Vec2,
-    scl: Vec2,
-    page: AssetId<Image>,
-    rect: URect,
+    glyphs: Vec<TextGlyph>,
 }
 
-impl Drawer for DrawSprite {
-    type Vertex = SpriteVertex;
+impl Drawer for DrawText {
+    type Vertex = Vert;
 
-    type ExtractParam = SRes<Assets<TextureAtlas>>;
-    type ExtractData = (Read<GlobalTransform>, Read<AtlasEntry>, Read<AtlasIndex>);
+    type ExtractParam = ();
+    type ExtractData = (Read<GlobalTransform>, Read<TextGlyphs>);
     type ExtractFilter = ();
 
-    type DrawParam = SRes<RenderAssets<GpuImage>>;
+    type DrawParam = SRes<ExtractedFontAtlases>;
 
     #[inline]
-    fn extract(
-        atlases: &SystemParamItem<Self::ExtractParam>,
-        (&trns, atlas, &index): QueryItem<Self::ExtractData>,
-    ) -> Option<Self> {
-        let atlas = atlases.get(&atlas.atlas)?;
-        let (page_index, rect_index) = index.indices()?;
-
-        let (page, rect) = atlas
-            .pages
-            .get(page_index)
-            .and_then(|page| Some((page.image.id(), *page.sprites.get(rect_index)?)))?;
-
-        let (scale, .., translation) = trns.to_scale_rotation_translation();
-        Some(DrawSprite {
-            pos: translation.truncate(),
-            scl: scale.truncate(),
-            page,
-            rect,
+    fn extract(_: &SystemParamItem<Self::ExtractParam>, (&trns, glyphs): QueryItem<Self::ExtractData>) -> Option<Self> {
+        Some(Self {
+            pos: trns.translation().truncate() - glyphs.size / 2.,
+            glyphs: glyphs.glyphs.clone(),
         })
     }
 
     #[inline]
     fn enqueue(
         &self,
-        images: &SystemParamItem<Self::DrawParam>,
+        atlases: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
     ) {
-        let Some(page) = images.get(self.page) else { return };
+        queuer.extend(self.glyphs.iter().flat_map(|&glyph| {
+            let atlas = atlases.get(glyph.atlas)?;
+            let (.., rect) = atlas.get_info_index(glyph.index)?;
 
-        let Vec2 { x, y } = self.pos;
-        let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2. * self.scl;
-        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / page.size.as_vec2();
-        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / page.size.as_vec2();
-
-        queuer.extend([(0., self.page, Sprite {
-            x,
-            y,
-            hw,
-            hh,
-            u,
-            v,
-            u2,
-            v2,
-        })]);
+            Some((0., atlas.image(), Glyph {
+                pos: self.pos + glyph.origin,
+                rect: rect.as_rect(),
+                atlas: atlas.size().as_vec2(),
+            }))
+        }));
     }
 }
 
 #[derive(Copy, Clone)]
-struct Sprite {
-    x: f32,
-    y: f32,
-    hw: f32,
-    hh: f32,
-    u: f32,
-    v: f32,
-    u2: f32,
-    v2: f32,
+struct Glyph {
+    pos: Vec2,
+    rect: Rect,
+    atlas: Vec2,
 }
 
-impl VertexCommand for Sprite {
-    type Vertex = SpriteVertex;
+impl VertexCommand for Glyph {
+    type Vertex = Vert;
 
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self {
-            x,
-            y,
-            hw,
-            hh,
-            u,
-            v,
-            u2,
-            v2,
-        } = *self;
+        let Self { pos, rect, atlas } = *self;
+        let bottom_left = (pos, vec2(rect.min.x, rect.max.y) / atlas);
+        let bottom_right = (pos + vec2(rect.width(), 0.), rect.max / atlas);
+        let top_right = (pos + vec2(rect.width(), rect.height()), vec2(rect.max.x, rect.min.y) / atlas);
+        let top_left = (pos + vec2(0., rect.height()), rect.min / atlas);
 
         queuer.vertices([
-            SpriteVertex::new(x - hw, y - hh, u, v),
-            SpriteVertex::new(x + hw, y - hh, u2, v),
-            SpriteVertex::new(x + hw, y + hh, u2, v2),
-            SpriteVertex::new(x - hw, y + hh, u, v2),
+            Vert::new(bottom_left.0, bottom_left.1),
+            Vert::new(bottom_right.0, bottom_right.1),
+            Vert::new(top_right.0, top_right.1),
+            Vert::new(top_left.0, top_left.1),
         ]);
 
         queuer.indices([0, 1, 2, 2, 3, 0]);
@@ -272,34 +244,63 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
-            HephaeRenderPlugin::<SpriteVertex>::new(),
-            AtlasPlugin,
-            DrawerPlugin::<DrawSprite>::new(),
+            HephaeRenderPlugin::<Vert>::new(),
+            DrawerPlugin::<DrawText>::new(),
+            HephaeTextPlugin,
         ))
         .add_systems(Startup, startup)
+        .add_systems(Update, update)
         .run();
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
-    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
+    commands.spawn(Camera2d);
 
-    for translation in [
-        Vec3::new(-200., -200., 0.),
-        Vec3::new(200., -200., 0.),
-        Vec3::new(200., 200., 0.),
-        Vec3::new(-200., 200., 0.),
-    ] {
-        commands.spawn((
-            Transform {
-                translation,
-                scale: Vec3::splat(10.),
-                ..default()
-            },
-            AtlasEntry {
-                atlas: server.load::<TextureAtlas>("sprites/sprites.atlas"),
-                key: "cix".into(),
-            },
-            HasDrawer::<DrawSprite>::new(),
-        ));
+    commands.spawn((
+        Transform::IDENTITY,
+        Text::new("Hi, Hephae!"),
+        TextFont {
+            font: server.load("fonts/roboto.ttf"),
+            font_size: 64.,
+            line_height: 1.,
+            antialias: true,
+        },
+        HasDrawer::<DrawText>::new(),
+    ));
+}
+
+fn update(
+    mut font_layout: ResMut<FontLayout>,
+    mut query: Query<(&mut TextGlyphs, &Text, &TextFont)>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    fonts: Res<Assets<Font>>,
+    mut images: ResMut<Assets<Image>>,
+    mut atlases: ResMut<Assets<FontAtlas>>,
+    mut updated: Local<bool>,
+) {
+    if *updated {
+        return
+    }
+
+    let Ok(window) = window.get_single() else { return };
+    let scale = window.scale_factor();
+
+    for (mut glyphs, text, text_font) in &mut query {
+        if font_layout
+            .compute_glyphs(
+                &mut glyphs,
+                (None, None),
+                default(),
+                default(),
+                scale,
+                &fonts,
+                &mut images,
+                &mut atlases,
+                [(&*text.text, text_font, LinearRgba::WHITE)].into_iter(),
+            )
+            .is_ok()
+        {
+            *updated = true;
+        }
     }
 }

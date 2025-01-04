@@ -2,6 +2,7 @@
 #![cfg_attr(doc, deny(missing_docs))]
 
 pub mod drawer;
+pub mod image_bind;
 pub mod pipeline;
 pub mod vertex;
 
@@ -19,6 +20,7 @@ use bevy_render::{
 };
 
 use crate::{
+    image_bind::{extract_image_events, validate_image_bind_groups, ImageAssetEvents, ImageBindGroups},
     pipeline::{
         clear_batches, extract_shader, load_shader, prepare_batch, prepare_view_bind_groups, queue_vertices, DrawRequests,
         HephaeBatchEntities, HephaePipeline,
@@ -102,19 +104,27 @@ where
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             if run {
-                render_app.configure_sets(
-                    Render,
-                    (
+                render_app
+                    .configure_sets(
+                        Render,
                         (
-                            HephaeRenderSystems::ClearBatches,
-                            HephaeRenderSystems::QueueDrawers,
-                            HephaeRenderSystems::QueueVertices,
-                        )
-                            .in_set(RenderSet::Queue),
-                        HephaeRenderSystems::QueueDrawers.before(HephaeRenderSystems::QueueVertices),
-                        HephaeRenderSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
-                    ),
-                );
+                            (
+                                HephaeRenderSystems::ClearBatches,
+                                HephaeRenderSystems::QueueDrawers,
+                                HephaeRenderSystems::QueueVertices,
+                            )
+                                .in_set(RenderSet::Queue),
+                            HephaeRenderSystems::QueueDrawers.before(HephaeRenderSystems::QueueVertices),
+                            HephaeRenderSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
+                        ),
+                    )
+                    .init_resource::<ImageAssetEvents>()
+                    .init_resource::<ImageBindGroups>()
+                    .add_systems(ExtractSchedule, extract_image_events)
+                    .add_systems(
+                        Render,
+                        validate_image_bind_groups.before(HephaeRenderSystems::PrepareBindGroups),
+                    );
             }
 
             render_app

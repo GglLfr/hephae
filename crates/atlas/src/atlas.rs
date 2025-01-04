@@ -28,8 +28,8 @@ use nonmax::NonMaxUsize;
 /// A list of textures packed into one large texture. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Asset, Reflect, Debug, Clone)]
-#[reflect(Asset, Debug)]
+#[derive(Asset, Reflect, Clone)]
+#[reflect(Asset)]
 pub struct TextureAtlas {
     /// The list of pages contained in this atlas. Items may be modified, but growing or shrinking
     /// this vector is **discouraged**.
@@ -41,8 +41,7 @@ pub struct TextureAtlas {
 
 /// A page located in a [`TextureAtlas`]. Contains the handle to the page image, and rectangle
 /// placements of each sprites.
-#[derive(Reflect, Debug, Clone)]
-#[reflect(Debug)]
+#[derive(Reflect, Clone)]
 pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
@@ -54,8 +53,8 @@ pub struct AtlasPage {
 /// Component denoting a texture atlas sprite lookup key. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Reflect, Component, Debug, Clone)]
-#[reflect(Component, Debug)]
+#[derive(Reflect, Component, Clone)]
+#[reflect(Component)]
 #[require(AtlasIndex)]
 pub struct AtlasEntry {
     /// The handle to the texture atlas.
@@ -67,7 +66,7 @@ pub struct AtlasEntry {
 /// Component denoting a texture atlas cached sprite index. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Component, Default, Copy, Clone, Debug)]
+#[derive(Component, Default, Copy, Clone)]
 pub struct AtlasIndex {
     page_index: Option<NonMaxUsize>,
     sprite_index: Option<NonMaxUsize>,
@@ -90,7 +89,7 @@ pub fn update_atlas_index(
     mut events: EventReader<AssetEvent<TextureAtlas>>,
     atlases: Res<Assets<TextureAtlas>>,
     mut entries: ParamSet<(
-        Query<(&AtlasEntry, &mut AtlasIndex), Changed<AtlasEntry>>,
+        Query<(&AtlasEntry, &mut AtlasIndex), Or<(Changed<AtlasEntry>, Added<AtlasIndex>)>>,
         Query<(&AtlasEntry, &mut AtlasIndex)>,
     )>,
     mut changed: Local<HashSet<AssetId<TextureAtlas>>>,

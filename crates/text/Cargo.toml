@@ -19,11 +19,21 @@ all-features = true
 [dependencies]
 bevy_app.workspace = true
 bevy_asset.workspace = true
+bevy_color.workspace = true
 bevy_derive.workspace = true
 bevy_ecs.workspace = true
 bevy_hierarchy.workspace = true
+bevy_image.workspace = true
+bevy_math.workspace = true
 bevy_reflect.workspace = true
+bevy_render.workspace = true
+bevy_utils.workspace = true
 
+async-channel.workspace = true
 cosmic-text.workspace = true
+fixedbitset.workspace = true
+guillotiere.workspace = true
+scopeguard.workspace = true
+smallvec.workspace = true
 sys-locale.workspace = true
 thiserror.workspace = true

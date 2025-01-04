@@ -46,6 +46,7 @@ too_many_arguments = "allow"
 [workspace.dependencies]
 bevy_app = "0.15"
 bevy_asset = "0.15"
+bevy_color = "0.15"
 bevy_core_pipeline = "0.15"
 bevy_derive = "0.15"
 bevy_ecs = "0.15"
@@ -57,13 +58,16 @@ bevy_render = "0.15"
 bevy_transform = "0.15"
 bevy_utils = "0.15"
 
+async-channel = "2"
 bytemuck = { version = "1", features = ["derive"] }
 cosmic-text = { version = "0.12", default-features = false, features = ["std", "swash"] }
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 guillotiere = "0.6"
 nonmax = "0.5"
+scopeguard = "1"
 serde = { version = "1", features = ["derive"] }
+smallvec = "1"
 sys-locale = "0.3"
 thiserror = "2"
 
@@ -99,3 +103,7 @@ required-features = ["atlas"]
 [[example]]
 name = "gui"
 required-features = ["gui"]
+
+[[example]]
+name = "text"
+required-features = ["text"]
