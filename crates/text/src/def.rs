@@ -1,8 +1,7 @@
-use std::io::Error as IoError;
+use std::{io::Error as IoError, slice::Iter, sync::Mutex};
 
 use async_channel::Sender;
 use bevy_asset::{io::Reader, prelude::*, AssetLoader, LoadContext};
-use bevy_color::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
 use bevy_hierarchy::prelude::*;
@@ -156,24 +155,68 @@ impl Default for TextFont {
     }
 }
 
-#[derive(Component, Reflect, Copy, Clone, Deref, DerefMut)]
-#[reflect(Component, Default)]
-pub struct TextColor(pub Color);
-impl Default for TextColor {
+#[derive(Component, Clone, Deref, DerefMut, Default)]
+pub struct TextStructure(SmallVec<[(Entity, usize); 1]>);
+impl TextStructure {
     #[inline]
-    fn default() -> Self {
-        Self(Color::WHITE)
+    pub fn iter<'a>(
+        &'a self,
+        query: &'a Query<'a, 'a, (Option<&'a Text>, Option<&'a TextSpan>, Option<&'a TextFont>)>,
+    ) -> TextStructureIter<'a> {
+        TextStructureIter {
+            inner: self.0.iter(),
+            fonts: SmallVec::new_const(),
+            query,
+        }
     }
 }
 
-#[derive(Component, Clone, Deref, DerefMut, Default)]
-pub struct TextStructure(SmallVec<[Entity; 1]>);
+pub struct TextStructureIter<'a> {
+    inner: Iter<'a, (Entity, usize)>,
+    fonts: SmallVec<[(&'a TextFont, usize); 1]>,
+    query: &'a Query<'a, 'a, (Option<&'a Text>, Option<&'a TextSpan>, Option<&'a TextFont>)>,
+}
 
-#[derive(Component, Clone)]
+impl<'a> Iterator for TextStructureIter<'a> {
+    type Item = (&'a str, &'a TextFont);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        static DEFAULT_FONT: TextFont = TextFont {
+            font: Handle::Weak(AssetId::Uuid {
+                uuid: AssetId::<Font>::DEFAULT_UUID,
+            }),
+            font_size: 16.,
+            line_height: 1.2,
+            antialias: true,
+        };
+
+        let &(e, depth) = self.inner.next()?;
+        let (text, span, font) = self.query.get(e).ok()?;
+        let str = match (text, span) {
+            (Some(text), ..) => text.text.as_str(),
+            (None, Some(span)) => span.0.as_str(),
+            (None, None) => return None,
+        };
+
+        let font = font.unwrap_or_else(|| loop {
+            let &(last_font, last_depth) = self.fonts.last().unwrap_or(&(&DEFAULT_FONT, 0));
+            if depth > 0 && last_depth >= depth {
+                self.fonts.pop();
+            } else {
+                self.fonts.push((last_font, depth));
+                break last_font
+            }
+        });
+
+        Some((str, font))
+    }
+}
+
+#[derive(Component)]
 pub struct TextGlyphs {
     pub glyphs: Vec<TextGlyph>,
     pub size: Vec2,
-    pub(crate) buffer: Buffer,
+    pub(crate) buffer: Mutex<Buffer>,
 }
 
 impl Default for TextGlyphs {
@@ -182,7 +225,7 @@ impl Default for TextGlyphs {
         Self {
             glyphs: Vec::new(),
             size: Vec2::ZERO,
-            buffer: Buffer::new_empty(Metrics::new(f32::MIN_POSITIVE, f32::MIN_POSITIVE)),
+            buffer: Mutex::new(Buffer::new_empty(Metrics::new(f32::MIN_POSITIVE, f32::MIN_POSITIVE))),
         }
     }
 }
@@ -191,7 +234,6 @@ impl Default for TextGlyphs {
 pub struct TextGlyph {
     pub origin: Vec2,
     pub size: Vec2,
-    pub color: [u8; 4],
     pub atlas: AssetId<FontAtlas>,
     pub index: usize,
 }
@@ -207,13 +249,14 @@ pub fn compute_structure(
         Entity,
         Option<Ref<Text>>,
         Option<Ref<TextSpan>>,
-        Ref<Parent>,
+        Option<Ref<Parent>>,
         Option<Ref<Children>>,
     )>,
     parent_query: Query<&Parent>,
     mut removed_span: RemovedComponents<TextSpan>,
     mut iterated: Local<FixedBitSet>,
     mut removed: Local<FixedBitSet>,
+    mut old: Local<SmallVec<[(Entity, usize); 1]>>,
 ) {
     iterated.clear();
     removed.clear();
@@ -228,7 +271,7 @@ pub fn compute_structure(
             continue 'out
         }
 
-        let parent_changed = parent.is_changed();
+        let parent_changed = parent.as_ref().is_some_and(Ref::is_changed);
         let children_changed = children.is_some_and(|children| children.is_changed());
 
         if match (text.as_ref(), span) {
@@ -242,13 +285,10 @@ pub fn compute_structure(
                 }
             }
         } {
-            let (root, structure, children) = if text.is_some() {
-                match text_query.get_mut(e) {
-                    Ok(structure) => structure,
-                    Err(..) => continue 'out,
-                }
+            let Ok((root, mut structure, children)) = (if text.is_some() {
+                text_query.get_mut(e)
             } else {
-                let mut e = parent.get();
+                let Some(mut e) = parent.map(|p| p.get()) else { continue 'out };
                 loop {
                     iterated.grow((e.index() + 1) as usize);
                     if iterated.put((e.index() + 1) as usize) {
@@ -256,7 +296,7 @@ pub fn compute_structure(
                     }
 
                     match text_query.get_mut(e) {
-                        Ok(structure) => break structure,
+                        Ok(structure) => break Ok(structure),
                         Err(..) => match parent_query.get(e) {
                             Ok(parent) => {
                                 e = parent.get();
@@ -266,10 +306,16 @@ pub fn compute_structure(
                         },
                     }
                 }
+            }) else {
+                continue 'out
             };
 
+            let inner = &mut structure.bypass_change_detection().0;
+            old.append(inner);
+
             fn recurse(
-                structure: &mut SmallVec<[Entity; 1]>,
+                structure: &mut SmallVec<[(Entity, usize); 1]>,
+                depth: usize,
                 parent: Entity,
                 children: &[Entity],
                 recurse_query: &Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
@@ -280,18 +326,44 @@ pub fn compute_structure(
                         "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                     );
 
-                    structure.push(e);
+                    structure.push((e, depth));
                     if let Some(children) = children {
-                        recurse(structure, e, children, recurse_query);
+                        recurse(structure, depth + 1, e, children, recurse_query);
                     }
                 }
             }
 
-            let structure = structure.into_inner();
-            structure.clear();
-            structure.push(root);
+            inner.clear();
+            inner.push((root, 0));
             if let Some(children) = children {
-                recurse(structure, root, children, &recurse_query);
+                recurse(inner, 1, root, children, &recurse_query);
+            }
+
+            if &*old != inner {
+                structure.set_changed();
+            }
+
+            old.clear();
+        }
+    }
+}
+
+pub fn notify_structure(
+    mut root_query: Query<&mut TextStructure>,
+    changed_query: Query<
+        (Option<Ref<Text>>, Option<Ref<TextSpan>>, Option<Ref<TextFont>>),
+        Or<(With<Text>, With<TextSpan>)>,
+    >,
+) {
+    'out: for mut structure in &mut root_query {
+        let inner = &structure.bypass_change_detection().0;
+        for (text, span, font) in changed_query.iter_many(inner.iter().map(|&(e, ..)| e)) {
+            if text.is_some_and(|text| text.is_changed()) ||
+                span.is_some_and(|span| span.is_changed()) ||
+                font.is_some_and(|font| font.is_changed())
+            {
+                structure.set_changed();
+                continue 'out
             }
         }
     }

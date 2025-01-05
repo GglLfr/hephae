@@ -74,15 +74,17 @@ pub struct GuiDepth {
     pub total_depth: usize,
 }
 
-/// GUI root node computation results from [`GuiRoot::calculate`].
-#[derive(Component, Copy, Clone, Default, PartialEq)]
+/// GUI root node transform computation results from [`GuiRoot::calculate`]. Contains the local
+/// transform relative to its parent, e.g., inverse of the camera's viewport origin.
+#[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
 #[require(Gui)]
-pub struct GuiRootTransform {
-    /// The available space for its children, e.g., area of the camera viewport.
-    pub available_space: Vec2,
-    /// The local transform relative to its parent, e.g., inverse of the camera's viewport origin.
-    pub transform: Affine3A,
-}
+pub struct GuiRootTransform(pub Affine3A);
+
+/// GUI root node available space computation results from [`GuiRoot::calculate`]. Contains the
+/// available space for its children, e.g., area of the camera viewport.
+#[derive(Component, Copy, Clone, Default, PartialEq, Deref, DerefMut)]
+#[require(Gui)]
+pub struct GuiRootSpace(pub Vec2);
 
 #[derive(Component, Copy, Clone, Default, Deref, DerefMut)]
 #[require(Gui)]
@@ -263,7 +265,7 @@ impl GuiLayouts {
                 Box::new(QueryState::<
                     Entity,
                     Or<(
-                        Changed<GuiRootTransform>,
+                        Changed<GuiRootSpace>,
                         Changed<Parent>,
                         Changed<Children>,
                         Changed<T>,
@@ -389,13 +391,13 @@ impl<T: GuiLayout> Plugin for GuiLayoutPlugin<T> {
 /// component.
 pub trait GuiRoot: Component {
     /// System param to fetch for [`Self::calculate`]. Must **not** have write access to
-    /// [`GuiRootTransform`], otherwise a panic will arise.
+    /// [`GuiRootTransform`] and [`GuiRootSpace`], otherwise a panic will arise.
     type Param: SystemParam;
     /// World query to fetch for [`Self::calculate`].
     type Item: QueryData;
 
-    /// Calculates [`GuiRootTransform`] for each GUI root nodes.
-    fn calculate(param: &mut SystemParamItem<Self::Param>, item: QueryItem<Self::Item>) -> GuiRootTransform;
+    /// Calculates [`GuiRootTransform`] and [`GuiRootSpace`] for each GUI root nodes.
+    fn calculate(param: &mut SystemParamItem<Self::Param>, item: QueryItem<Self::Item>) -> (Vec2, Affine3A);
 }
 
 #[derive(Resource, Default)]
@@ -436,6 +438,7 @@ impl<T: GuiRoot> Copy for GuiRootPlugin<T> {}
 impl<T: GuiRoot> Plugin for GuiRootPlugin<T> {
     fn build(&self, app: &mut App) {
         app.register_required_components::<T, GuiRootTransform>()
+            .register_required_components::<T, GuiRootSpace>()
             .add_systems(PostUpdate, calculate_root::<T>.in_set(HephaeGuiSystems::CalculateRoot))
             .world_mut()
             .resource_scope(|world, mut roots: Mut<GuiRoots>| roots.register::<T>(world))

@@ -12,8 +12,8 @@ use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
 use crate::gui::{
-    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootTransform, GuiRoots,
-    InitialLayoutSize, InitialLayoutSizeSys, LayoutCache,
+    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform,
+    GuiRoots, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -32,11 +32,13 @@ impl SystemBuffer for InvalidCaches {
 
 pub(crate) fn calculate_root<T: GuiRoot>(
     param: StaticSystemParam<T::Param>,
-    mut query: Query<(&mut GuiRootTransform, T::Item), With<T>>,
+    mut query: Query<(&mut GuiRootTransform, &mut GuiRootSpace, T::Item), With<T>>,
 ) {
     let param = &mut param.into_inner();
-    for (mut size, item) in &mut query {
-        size.set_if_neq(T::calculate(param, item));
+    for (mut trns, mut space, item) in &mut query {
+        let (in_space, in_trns) = T::calculate(param, item);
+        trns.set_if_neq(GuiRootTransform(in_trns));
+        space.set_if_neq(GuiRootSpace(in_space));
     }
 }
 
@@ -113,7 +115,7 @@ pub(crate) fn propagate_layout(
     (mut initial_stack, mut initial_size_stack): (Local<Vec<Entity>>, Local<Vec<Vec2>>),
     distribute_space_state: &mut SystemState<(
         Query<&mut DistributedSpace>,
-        Query<&GuiRootTransform>,
+        Query<&GuiRootSpace>,
         Query<&LayoutCache>,
         Query<(Entity, &InitialLayoutSize)>,
         Query<&Children>,
@@ -386,7 +388,7 @@ pub(crate) fn propagate_layout(
 
     for root in root_changed.drain(..) {
         let available_space = match root_query.get(root) {
-            Ok(&root_transform) => root_transform.available_space,
+            Ok(&root_transform) => *root_transform,
             Err(..) => Vec2::ZERO,
         };
 
@@ -489,7 +491,7 @@ pub(crate) fn calculate_corners(
             gui.is_added() ||
             orphaned_entities.contains(root.index() as usize);
 
-        let global_trns = trns.affine() * root_trns.transform;
+        let global_trns = trns.affine() * **root_trns;
 
         let (mut total, mut list) = (&mut 0, &mut Vec::new());
         if let Some((total_src, list_src)) = depth_index.and_then(|i| depth_list.get_mut(i)) {

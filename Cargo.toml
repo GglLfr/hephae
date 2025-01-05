@@ -46,7 +46,6 @@ too_many_arguments = "allow"
 [workspace.dependencies]
 bevy_app = "0.15"
 bevy_asset = "0.15"
-bevy_color = "0.15"
 bevy_core_pipeline = "0.15"
 bevy_derive = "0.15"
 bevy_ecs = "0.15"
@@ -91,7 +90,7 @@ bytemuck.workspace = true
 default = ["atlas", "gui", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
-text = ["dep:hephae-text"]
+text = ["dep:hephae-text", "hephae-gui?/text"]
 
 [[example]]
 name = "quad"

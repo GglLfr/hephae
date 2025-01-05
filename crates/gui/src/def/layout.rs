@@ -133,7 +133,7 @@ impl AbsRect {
 /// - [`Margin`] and [`Padding`] for offsetting.
 /// - [`Expand`] and [`Shrink`] for specifying behavior on either extra or exhausted space.
 #[derive(Component, Copy, Clone, Default)]
-pub enum Cont {
+pub enum UiCont {
     /// Arranges the children left-to-right.
     #[default]
     Horizontal,
@@ -258,7 +258,7 @@ pub struct Expand(pub Vec2);
 #[require(Gui)]
 pub struct Shrink(pub Vec2);
 
-impl GuiLayout for Cont {
+impl GuiLayout for UiCont {
     type Changed = Or<(
         Changed<UiSize>,
         Changed<Margin>,

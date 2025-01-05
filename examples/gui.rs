@@ -159,18 +159,18 @@ fn main() {
 
 fn startup(mut commands: Commands) {
     commands
-        .spawn((Camera2d, FromCamera2d, Cont::Horizontal, HasDrawer::<Draw>::new()))
+        .spawn((Camera2d, FromCamera2d, UiCont::Horizontal, HasDrawer::<Draw>::new()))
         .with_children(|ui| {
             ui.spawn((
                 Rotate,
-                Cont::Horizontal,
+                UiCont::Horizontal,
                 UiSize::new(Rel(0.5), Rel(1.)),
                 HasDrawer::<Draw>::new(),
             ))
             .with_children(|ui| {
                 ui.spawn((
                     Rotate,
-                    Cont::Horizontal,
+                    UiCont::Horizontal,
                     UiSize::all(Auto),
                     Margin::all(10.),
                     Shrink(Vec2::ONE),
@@ -179,7 +179,7 @@ fn startup(mut commands: Commands) {
                 .with_children(|ui| {
                     for _ in 0..3 {
                         ui.spawn((
-                            Cont::Horizontal,
+                            UiCont::Horizontal,
                             UiSize::all(Abs(40.)),
                             Margin::all(10.),
                             Shrink(Vec2::ONE),
@@ -191,17 +191,25 @@ fn startup(mut commands: Commands) {
         });
 }
 
-fn rotate(time: Res<Time>, mut rotate: Query<&mut Cont, With<Rotate>>, mut timer: Local<f64>) {
+fn rotate(
+    time: Res<Time>,
+    mut camera: Query<&mut OrthographicProjection>,
+    mut rotate: Query<&mut UiCont, With<Rotate>>,
+    mut timer: Local<f64>,
+) {
     *timer += time.delta_secs_f64();
     if *timer >= 1. {
         *timer -= 1.;
         for mut cont in &mut rotate {
             *cont = match *cont {
-                Cont::Horizontal => Cont::HorizontalReverse,
-                Cont::HorizontalReverse => Cont::Vertical,
-                Cont::Vertical => Cont::VerticalReverse,
-                Cont::VerticalReverse => Cont::Horizontal,
+                UiCont::Horizontal => UiCont::HorizontalReverse,
+                UiCont::HorizontalReverse => UiCont::Vertical,
+                UiCont::Vertical => UiCont::VerticalReverse,
+                UiCont::VerticalReverse => UiCont::Horizontal,
             };
         }
     }
+
+    let Ok(mut proj) = camera.get_single_mut() else { return };
+    proj.scale = 1.5 + (time.elapsed_secs().sin() + 1.0) * 0.25;
 }

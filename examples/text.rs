@@ -210,7 +210,6 @@ impl Drawer for DrawText {
             let (.., rect) = atlas.get_info_index(glyph.index)?;
 
             Some((0., atlas.image(), Glyph {
-                col: glyph.color,
                 pos: self.pos + glyph.origin,
                 rect: rect.as_rect(),
                 atlas: atlas.size().as_vec2(),
@@ -221,7 +220,6 @@ impl Drawer for DrawText {
 
 #[derive(Copy, Clone)]
 struct Glyph {
-    col: [u8; 4],
     pos: Vec2,
     rect: Rect,
     atlas: Vec2,
@@ -232,12 +230,13 @@ impl VertexCommand for Glyph {
 
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self { col, pos, rect, atlas } = *self;
+        let Self { pos, rect, atlas } = *self;
         let bottom_left = (pos, vec2(rect.min.x, rect.max.y) / atlas);
         let bottom_right = (pos + vec2(rect.width(), 0.), rect.max / atlas);
         let top_right = (pos + vec2(rect.width(), rect.height()), vec2(rect.max.x, rect.min.y) / atlas);
         let top_left = (pos + vec2(0., rect.height()), rect.min / atlas);
 
+        let col = [127, 255, 100, 255];
         queuer.vertices([
             Vert::new(bottom_left.0, bottom_left.1, col),
             Vert::new(bottom_right.0, bottom_right.1, col),
@@ -296,6 +295,7 @@ fn update(
 
     for (mut glyphs, text, text_font) in &mut query {
         if font_layout
+            .get_mut()
             .compute_glyphs(
                 &mut glyphs,
                 (None, None),
@@ -305,7 +305,7 @@ fn update(
                 &fonts,
                 &mut images,
                 &mut atlases,
-                [(&*text.text, text_font, LinearRgba::RED)].into_iter(),
+                [(&*text.text, text_font)].into_iter(),
             )
             .is_ok()
         {

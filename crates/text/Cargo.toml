@@ -19,7 +19,6 @@ all-features = true
 [dependencies]
 bevy_app.workspace = true
 bevy_asset.workspace = true
-bevy_color.workspace = true
 bevy_derive.workspace = true
 bevy_ecs.workspace = true
 bevy_hierarchy.workspace = true

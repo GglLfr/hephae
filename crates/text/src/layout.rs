@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use async_channel::{Receiver, Sender};
 use bevy_asset::prelude::*;
-use bevy_color::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
 use bevy_math::prelude::*;
@@ -10,7 +9,7 @@ use bevy_utils::HashMap;
 use cosmic_text::{
     fontdb::{Database, Source},
     ttf_parser::{Face, FaceParsingError},
-    Attrs, Buffer, CacheKey, Color, Family, FontSystem, Metrics, Shaping, SwashCache,
+    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 use thiserror::Error;
 
@@ -20,16 +19,29 @@ use crate::{
 };
 
 #[derive(Resource)]
-pub struct FontLayout {
+pub struct FontLayout(pub(crate) Mutex<FontLayoutInner>);
+impl FontLayout {
+    #[inline]
+    pub fn get(&self) -> MutexGuard<FontLayoutInner> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut FontLayoutInner {
+        self.0.get_mut().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+pub struct FontLayoutInner {
     sys: FontSystem,
     cache: SwashCache,
     pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>,
     font_atlases: HashMap<AssetId<Font>, FontAtlases>,
-    spans: Vec<(&'static str, &'static TextFont, LinearRgba)>,
+    spans: Vec<(&'static str, &'static TextFont)>,
     glyph_spans: Vec<(AssetId<Font>, FontAtlasKey)>,
 }
 
-impl FontLayout {
+impl FontLayoutInner {
     #[inline]
     pub fn new(pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>) -> Self {
         let locale = sys_locale::get_locale().unwrap_or("en-US".into());
@@ -44,8 +56,8 @@ impl FontLayout {
     }
 }
 
-pub fn load_fonts_to_database(fonts: ResMut<FontLayout>) {
-    let fonts = fonts.into_inner();
+pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
+    let fonts = fonts.get_mut();
     while let Ok((bytes, sender)) = fonts.pending_fonts.try_recv() {
         if let Err(e) = Face::parse(&bytes, 0) {
             _ = sender.send_blocking(Err(e));
@@ -80,7 +92,7 @@ pub enum FontLayoutError {
     NoGlyphImage(CacheKey),
 }
 
-impl FontLayout {
+impl FontLayoutInner {
     pub fn compute_glyphs<'a>(
         &mut self,
         glyphs: &mut TextGlyphs,
@@ -91,29 +103,29 @@ impl FontLayout {
         fonts: &Assets<Font>,
         images: &mut Assets<Image>,
         atlases: &mut Assets<FontAtlas>,
-        spans: impl Iterator<Item = (&'a str, &'a TextFont, LinearRgba)>,
+        spans: impl Iterator<Item = (&'a str, &'a TextFont)>,
     ) -> Result<(), FontLayoutError> {
         glyphs.size = Vec2::ZERO;
         glyphs.glyphs.clear();
 
         let mut glyph_spans = std::mem::take(&mut self.glyph_spans);
-        let spans = spans.inspect(|&(_, font, _)| {
+        let spans = spans.inspect(|&(.., font)| {
             glyph_spans.push((font.font.id(), FontAtlasKey {
                 font_size: font.font_size.to_bits(),
                 antialias: font.antialias,
             }))
         });
 
-        if let Err(e) = self.update_buffer(glyphs, (width, height), wrap, align, scale_factor, fonts, spans) {
+        let buffer = glyphs.buffer.get_mut().unwrap_or_else(PoisonError::into_inner);
+        if let Err(e) = self.update_buffer(buffer, (width, height), wrap, align, scale_factor, fonts, spans) {
             glyph_spans.clear();
             self.glyph_spans = glyph_spans;
 
             return Err(e)
         }
 
-        let buffer_size = buffer_size(&mut glyphs.buffer);
-        if let Err::<(), FontLayoutError>(e) = glyphs
-            .buffer
+        let buffer_size = buffer_size(buffer);
+        if let Err::<(), FontLayoutError>(e) = buffer
             .layout_runs()
             .flat_map(|run| run.glyphs.iter().map(move |glyph| (glyph, run.line_y)))
             .try_for_each(|(glyph, line)| {
@@ -145,10 +157,6 @@ impl FontLayout {
                 let y = buffer_size.y - (line.round() + phys.y as f32 - (top - size.y));
 
                 glyphs.glyphs.push(TextGlyph {
-                    color: glyph
-                        .color_opt
-                        .map(|color| color.0.to_le_bytes())
-                        .unwrap_or([255, 255, 255, 255]),
                     origin: Vec2::new(x, y),
                     size,
                     atlas: atlas_id,
@@ -172,15 +180,32 @@ impl FontLayout {
         Ok(())
     }
 
-    fn update_buffer<'a>(
+    #[inline]
+    pub fn measure_glyphs<'a>(
         &mut self,
-        glyphs: &mut TextGlyphs,
+        glyphs: &TextGlyphs,
         (width, height): (Option<f32>, Option<f32>),
         wrap: TextWrap,
         align: TextAlign,
         scale_factor: f32,
         fonts: &Assets<Font>,
-        spans: impl Iterator<Item = (&'a str, &'a TextFont, LinearRgba)>,
+        spans: impl Iterator<Item = (&'a str, &'a TextFont)>,
+    ) -> Result<Vec2, FontLayoutError> {
+        let mut buffer = glyphs.buffer.lock().unwrap_or_else(PoisonError::into_inner);
+        self.update_buffer(&mut buffer, (width, height), wrap, align, scale_factor, fonts, spans)?;
+
+        Ok(buffer_size(&buffer))
+    }
+
+    fn update_buffer<'a>(
+        &mut self,
+        buffer: &mut Buffer,
+        (width, height): (Option<f32>, Option<f32>),
+        wrap: TextWrap,
+        align: TextAlign,
+        scale_factor: f32,
+        fonts: &Assets<Font>,
+        spans: impl Iterator<Item = (&'a str, &'a TextFont)>,
     ) -> Result<(), FontLayoutError> {
         // Safety:
         // - We only change the lifetime, so the value is valid for both types.
@@ -191,8 +216,8 @@ impl FontLayout {
             unsafe {
                 std::mem::transmute::<
                     // Write out the input type here so that if the field type is changed and this one isn't, it errors.
-                    &mut Vec<(&'static str, &'static TextFont, LinearRgba)>,
-                    &mut Vec<(&'a str, &'a TextFont, LinearRgba)>,
+                    &mut Vec<(&'static str, &'static TextFont)>,
+                    &mut Vec<(&'a str, &'a TextFont)>,
                 >(&mut self.spans)
             },
             Vec::clear,
@@ -201,7 +226,7 @@ impl FontLayout {
         let sys = &mut self.sys;
 
         let mut font_size = f32::MIN_POSITIVE;
-        for (span, font, color) in spans {
+        for (span, font) in spans {
             if span.is_empty() || font.font_size <= 0. || font.line_height <= 0. {
                 continue
             }
@@ -211,21 +236,20 @@ impl FontLayout {
             }
 
             font_size = font_size.max(font.font_size);
-            spans_vec.push((span, font, color));
+            spans_vec.push((span, font));
         }
 
-        let mut buffer = glyphs.buffer.borrow_with(sys);
+        let mut buffer = buffer.borrow_with(sys);
         buffer.lines.clear();
         buffer.set_metrics_and_size(Metrics::relative(font_size, 1.2).scale(scale_factor), width, height);
         buffer.set_wrap(wrap.into());
         buffer.set_rich_text(
-            spans_vec.iter().enumerate().map(|(span_index, &(span, font, color))| {
+            spans_vec.iter().enumerate().map(|(span_index, &(span, font))| {
                 // The unwrap won't fail because the existence of the fonts have been checked.
                 let info = fonts.get(&font.font).unwrap();
                 (
                     span,
                     Attrs::new()
-                        .color(Color(color.as_u32())) // Technically the format differs here, but `cosmic-text` doesn't really care.
                         .family(Family::Name(&info.name))
                         .stretch(info.stretch)
                         .style(info.style)

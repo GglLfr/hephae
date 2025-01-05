@@ -8,6 +8,8 @@ pub(crate) mod layout;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_render::camera::CameraUpdateSystem;
+#[cfg(feature = "text")]
+use hephae_text::HephaeTextSystems;
 
 use crate::{
     def::DefaultUiPlugin,
@@ -66,5 +68,11 @@ impl Plugin for HephaeGuiPlugin {
                 ),
             )
             .add_plugins(DefaultUiPlugin);
+
+        #[cfg(feature = "text")]
+        app.configure_sets(
+            PostUpdate,
+            HephaeGuiSystems::PropagateLayout.after(HephaeTextSystems::ComputeStructure),
+        );
     }
 }
