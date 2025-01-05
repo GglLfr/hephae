@@ -86,6 +86,15 @@ impl Text {
             ..Self::default()
         }
     }
+
+    #[inline]
+    pub fn new_wrapped(text: impl ToString) -> Self {
+        Self {
+            text: text.to_string(),
+            wrap: TextWrap::Word,
+            ..Self::default()
+        }
+    }
 }
 
 #[derive(Reflect, Eq, PartialEq, Copy, Clone, Default)]
@@ -159,10 +168,10 @@ impl Default for TextFont {
 pub struct TextStructure(SmallVec<[(Entity, usize); 1]>);
 impl TextStructure {
     #[inline]
-    pub fn iter<'a>(
-        &'a self,
-        query: &'a Query<'a, 'a, (Option<&'a Text>, Option<&'a TextSpan>, Option<&'a TextFont>)>,
-    ) -> TextStructureIter<'a> {
+    pub fn iter<'w, 's, 'a, 'b, 'c>(
+        &'w self,
+        query: &'w Query<'w, 's, (Option<&'a Text>, Option<&'b TextSpan>, Option<&'c TextFont>)>,
+    ) -> TextStructureIter<'w, 's, 'a, 'b, 'c> {
         TextStructureIter {
             inner: self.0.iter(),
             fonts: SmallVec::new_const(),
@@ -171,21 +180,21 @@ impl TextStructure {
     }
 }
 
-pub struct TextStructureIter<'a> {
-    inner: Iter<'a, (Entity, usize)>,
-    fonts: SmallVec<[(&'a TextFont, usize); 1]>,
-    query: &'a Query<'a, 'a, (Option<&'a Text>, Option<&'a TextSpan>, Option<&'a TextFont>)>,
+pub struct TextStructureIter<'w, 's, 'a, 'b, 'c> {
+    inner: Iter<'w, (Entity, usize)>,
+    fonts: SmallVec<[(&'w TextFont, usize); 1]>,
+    query: &'w Query<'w, 's, (Option<&'a Text>, Option<&'b TextSpan>, Option<&'c TextFont>)>,
 }
 
-impl<'a> Iterator for TextStructureIter<'a> {
-    type Item = (&'a str, &'a TextFont);
+impl<'w, 's, 'a, 'b, 'c> Iterator for TextStructureIter<'w, 's, 'a, 'b, 'c> {
+    type Item = (&'w str, &'w TextFont);
 
     fn next(&mut self) -> Option<Self::Item> {
         static DEFAULT_FONT: TextFont = TextFont {
             font: Handle::Weak(AssetId::Uuid {
                 uuid: AssetId::<Font>::DEFAULT_UUID,
             }),
-            font_size: 16.,
+            font_size: 24.,
             line_height: 1.2,
             antialias: true,
         };
@@ -262,12 +271,12 @@ pub fn compute_structure(
     removed.clear();
 
     for e in removed_span.read() {
-        removed.grow_and_insert((e.index() + 1) as usize);
+        removed.grow_and_insert(e.index() as usize);
     }
 
     'out: for (e, text, span, parent, children) in &changed_query {
         iterated.grow((e.index() + 1) as usize);
-        if iterated.put((e.index() + 1) as usize) {
+        if iterated.put(e.index() as usize) {
             continue 'out
         }
 
@@ -278,7 +287,7 @@ pub fn compute_structure(
             (Some(text), ..) => text.is_added() || children_changed,
             (None, Some(span)) => span.is_added() || parent_changed || children_changed,
             (None, None) => {
-                if removed.contains((e.index() + 1) as usize) {
+                if removed.contains(e.index() as usize) {
                     true
                 } else {
                     continue 'out
@@ -291,7 +300,7 @@ pub fn compute_structure(
                 let Some(mut e) = parent.map(|p| p.get()) else { continue 'out };
                 loop {
                     iterated.grow((e.index() + 1) as usize);
-                    if iterated.put((e.index() + 1) as usize) {
+                    if iterated.put(e.index() as usize) {
                         continue 'out
                     }
 

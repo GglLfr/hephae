@@ -20,9 +20,11 @@ all-features = true
 hephae-text = { workspace = true, optional = true }
 
 bevy_app.workspace = true
+bevy_asset = { workspace = true, optional = true }
 bevy_derive.workspace = true
 bevy_ecs.workspace = true
 bevy_hierarchy.workspace = true
+bevy_image = { workspace = true, optional = true }
 bevy_math.workspace = true
 bevy_render.workspace = true
 bevy_transform.workspace = true
@@ -31,4 +33,4 @@ fixedbitset.workspace = true
 nonmax.workspace = true
 
 [features]
-text = ["dep:hephae-text"]
+text = ["dep:hephae-text", "dep:bevy_asset", "dep:bevy_image"]

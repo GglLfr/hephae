@@ -6,7 +6,7 @@ use bevy::{
         query::QueryItem,
         system::{lifetimeless::Read, SystemParamItem},
     },
-    math::FloatOrd,
+    math::{vec2, FloatOrd},
     prelude::*,
     render::{
         render_phase::{DrawFunctionId, PhaseItemExtraIndex},
@@ -108,26 +108,75 @@ impl Drawer for Draw {
         _: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
     ) {
-        queuer.extend([(self.1.depth as f32, (), DrawGui(self.0, self.1))]);
+        let Gui {
+            bottom_left,
+            bottom_right,
+            top_right,
+            top_left,
+            ..
+        } = self.0;
+
+        queuer.extend([(
+            self.1.depth as f32,
+            (),
+            DrawGui([bottom_left, bottom_right, top_right, top_left], self.1),
+        )]);
+    }
+}
+
+#[derive(TypePath, Component, Clone)]
+struct DrawText(Gui, GuiDepth, Vec<TextGlyph>);
+impl Drawer for DrawText {
+    type Vertex = Vert;
+
+    type ExtractParam = ();
+    type ExtractData = (Read<Gui>, Read<GuiDepth>, Read<TextGlyphs>);
+    type ExtractFilter = ();
+
+    type DrawParam = ();
+
+    #[inline]
+    fn extract(
+        _: &SystemParamItem<Self::ExtractParam>,
+        (&gui, &gui_depth, glyphs): QueryItem<Self::ExtractData>,
+    ) -> Option<Self> {
+        Some(Self(gui, gui_depth, glyphs.glyphs.clone()))
+    }
+
+    #[inline]
+    fn enqueue(
+        &self,
+        _: &SystemParamItem<Self::DrawParam>,
+        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
+    ) {
+        let gui = self.0;
+        let base = self.0.bottom_left;
+        queuer.extend(self.2.iter().map(|&glyph| {
+            (
+                self.1.depth as f32,
+                (),
+                DrawGui(
+                    [
+                        base + gui.project(glyph.origin),
+                        base + gui.project(glyph.origin + vec2(glyph.size.x, 0.)),
+                        base + gui.project(glyph.origin + glyph.size),
+                        base + gui.project(glyph.origin + vec2(0., glyph.size.y)),
+                    ],
+                    self.1,
+                ),
+            )
+        }));
     }
 }
 
 #[derive(Copy, Clone)]
-struct DrawGui(Gui, GuiDepth);
+struct DrawGui([Vec3; 4], GuiDepth);
 impl VertexCommand for DrawGui {
     type Vertex = Vert;
 
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let &Self(
-            Gui {
-                bottom_left,
-                bottom_right,
-                top_right,
-                top_left,
-            },
-            GuiDepth { depth, total_depth },
-        ) = self;
+        let &Self([bottom_left, bottom_right, top_right, top_left], GuiDepth { depth, total_depth }) = self;
 
         let depth = (depth as f32) / (total_depth as f32);
         queuer.vertices([
@@ -150,6 +199,8 @@ fn main() {
             DefaultPlugins,
             HephaeRenderPlugin::<Vert>::new(),
             DrawerPlugin::<Draw>::new(),
+            DrawerPlugin::<DrawText>::new(),
+            HephaeTextPlugin,
             HephaeGuiPlugin,
         ))
         .add_systems(Startup, startup)
@@ -157,7 +208,7 @@ fn main() {
         .run();
 }
 
-fn startup(mut commands: Commands) {
+fn startup(mut commands: Commands, server: Res<AssetServer>) {
     commands
         .spawn((Camera2d, FromCamera2d, UiCont::Horizontal, HasDrawer::<Draw>::new()))
         .with_children(|ui| {
@@ -189,6 +240,19 @@ fn startup(mut commands: Commands) {
                         ));
                     }
                 });
+
+                ui.spawn((
+                    UiText,
+                    UiSize::all(Auto),
+                    Margin::all(10.),
+                    Text::new_wrapped("Hi, Hephae GUI!"),
+                    TextFont {
+                        font: server.load("fonts/roboto.ttf"),
+                        font_size: 24.,
+                        ..default()
+                    },
+                    HasDrawer::<DrawText>::new(),
+                ));
             });
         });
 }
@@ -213,5 +277,5 @@ fn rotate(
     }
 
     let Ok(mut proj) = camera.get_single_mut() else { return };
-    proj.scale = 1.5 + (time.elapsed_secs().sin() + 1.0) * 0.25;
+    proj.scale = 1.5 + ((time.elapsed_secs() * 4.).sin() + 1.0) * 0.25;
 }

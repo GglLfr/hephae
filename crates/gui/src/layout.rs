@@ -13,7 +13,7 @@ use nonmax::NonMaxUsize;
 
 use crate::gui::{
     ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform,
-    GuiRoots, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache, SubsequentLayoutSizeSys,
+    GuiRoots, GuiSize, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache, SubsequentLayoutSizeSys,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -505,7 +505,7 @@ pub(crate) fn propagate_layout(
 pub(crate) fn calculate_corners(
     root_query: Query<(Entity, Ref<GlobalTransform>, Ref<GuiRootTransform>)>,
     children_query: Query<&Children>,
-    mut gui_query: Query<(&mut Gui, Ref<DistributedSpace>)>,
+    mut gui_query: Query<(&mut Gui, &mut GuiSize, Ref<DistributedSpace>)>,
     mut gui_depth_query: Query<&mut GuiDepth>,
     mut orphaned: RemovedComponents<Parent>,
     mut orphaned_entities: Local<FixedBitSet>,
@@ -519,17 +519,17 @@ pub(crate) fn calculate_corners(
         global_trns: Affine3A,
         mut parent_trns: Affine2,
         children_query: &Query<&Children>,
-        gui_query: &mut Query<(&mut Gui, Ref<DistributedSpace>)>,
+        gui_query: &mut Query<(&mut Gui, &mut GuiSize, Ref<DistributedSpace>)>,
         mut changed: bool,
         current_depth: usize,
         depth_list: &mut Vec<(usize, Entity)>,
     ) -> usize {
-        let Ok((mut gui, space)) = gui_query.get_mut(node) else {
+        let Ok((mut gui, mut size, space)) = gui_query.get_mut(node) else {
             return current_depth - 1
         };
 
         depth_list.push((current_depth, node));
-        changed |= gui.is_added() || space.is_changed();
+        changed |= gui.is_added() || size.is_added() || space.is_changed();
         parent_trns *= space.transform;
 
         if changed {
@@ -541,6 +541,8 @@ pub(crate) fn calculate_corners(
                 space.size,
                 vec2(0., space.size.y),
             ));
+
+            size.set_if_neq(GuiSize(space.size));
         }
 
         let mut max_depth = current_depth;
@@ -564,11 +566,12 @@ pub(crate) fn calculate_corners(
 
     let mut depth_index = Some(0);
     for (root, trns, root_trns) in &root_query {
-        let (gui, space) = gui_query.get_mut(root).unwrap();
+        let (gui, size, space) = gui_query.get_mut(root).unwrap();
         let changed = space.is_changed() ||
             trns.is_changed() ||
             root_trns.is_changed() ||
             gui.is_added() ||
+            size.is_added() ||
             orphaned_entities.contains(root.index() as usize);
 
         let global_trns = trns.affine() * **root_trns;

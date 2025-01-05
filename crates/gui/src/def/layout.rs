@@ -345,8 +345,10 @@ impl GuiLayout for UiCont {
         output: &mut [(Affine2, Vec2)],
     ) {
         let margin = *margin.copied().unwrap_or_default();
-        *this_transform *= Affine2::from_translation(vec2(margin.left, margin.bottom));
-        *this_size -= margin.size();
+        let size_margin = this_size.min(margin.size());
+
+        *this_transform *= Affine2::from_translation(vec2(margin.left, margin.bottom).min(size_margin / 2.));
+        *this_size -= size_margin;
 
         let padding = *padding.copied().unwrap_or_default();
         let available_space = *this_size - padding.size();
@@ -389,9 +391,10 @@ impl GuiLayout for UiCont {
 
         for (&child, (trns, output)) in children.iter().zip(output.iter_mut()) {
             let (expand, shrink) = flex_query.get(child).unwrap();
-            let size = *output +
+            let size = (*output +
                 delta_expand * (*expand.copied().unwrap_or_default() / total_expand) +
-                delta_shrink * (*shrink.copied().unwrap_or_default() / total_shrink);
+                delta_shrink * (*shrink.copied().unwrap_or_default() / total_shrink))
+                .max(Vec2::ZERO);
 
             let pos = offset +
                 match cont {

@@ -24,8 +24,8 @@ use crate::{layout::calculate_root, HephaeGuiSystems};
 /// Values stored in this component are the four rectangle corners projected into 3D world-space,
 /// ready to be rendered as-is. They're calculated in
 /// [HephaeGuiSystems::CalculateCorners].
-#[derive(Component, Copy, Clone, PartialEq, Default)]
-#[require(Transform, GuiDepth, InitialLayoutSize, DistributedSpace)]
+#[derive(Component, Copy, Clone, PartialEq, Default, Debug)]
+#[require(Transform, GuiSize, GuiDepth, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {
     /// The bottom-left corner of this GUI entity, in world-space.
     pub bottom_left: Vec3,
@@ -35,6 +35,10 @@ pub struct Gui {
     pub top_right: Vec3,
     /// The top-left corner of this GUI entity, in world-space.
     pub top_left: Vec3,
+    /// The projected positive Y direction of this GUI entity.
+    pub up: Vec3,
+    /// The projected positive X direction of this GUI entity.
+    pub right: Vec3,
 }
 
 impl Gui {
@@ -61,9 +65,20 @@ impl Gui {
             bottom_right: trns.transform_point3(bottom_right.extend(0.)),
             top_right: trns.transform_point3(top_right.extend(0.)),
             top_left: trns.transform_point3(top_left.extend(0.)),
+            up: trns.transform_vector3(Vec3::Y),
+            right: trns.transform_vector3(Vec3::X),
         }
     }
+
+    #[inline]
+    pub fn project(self, vec: Vec2) -> Vec3 {
+        self.up * vec.y + self.right * vec.x
+    }
 }
+
+/// Size and scale of the GUI widget after calculations for convenience.
+#[derive(Component, Copy, Clone, PartialEq, Default, Deref, DerefMut)]
+pub struct GuiSize(pub Vec2);
 
 /// Stores the depth of this GUI entity node in the GUI tree.
 #[derive(Component, Copy, Clone, Default, PartialEq)]

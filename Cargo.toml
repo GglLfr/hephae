@@ -82,7 +82,7 @@ hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
 
 [dev-dependencies]
-bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "multi_threaded", "png"] }
+bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "png"] }
 
 bytemuck.workspace = true
 
@@ -101,7 +101,7 @@ required-features = ["atlas"]
 
 [[example]]
 name = "gui"
-required-features = ["gui"]
+required-features = ["gui", "text"]
 
 [[example]]
 name = "text"
