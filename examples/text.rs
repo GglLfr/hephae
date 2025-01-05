@@ -42,14 +42,16 @@ use hephae_text::atlas::FontAtlas;
 struct Vert {
     pos: [f32; 2],
     uv: [f32; 2],
+    col: [u8; 4],
 }
 
 impl Vert {
     #[inline]
-    pub const fn new(xy: Vec2, uv: Vec2) -> Self {
+    pub const fn new(xy: Vec2, uv: Vec2, col: [u8; 4]) -> Self {
         Self {
             pos: [xy.x, xy.y],
             uv: [uv.x, uv.y],
+            col,
         }
     }
 }
@@ -70,9 +72,9 @@ impl Vertex for Vert {
     type BatchProp = AssetId<Image>;
 
     type Item = Transparent2d;
-    type RenderCommand = SetSpriteBindGroup<1>;
+    type RenderCommand = SetTextBindGroup<1>;
 
-    const SHADER: &'static str = "sprite.wgsl";
+    const SHADER: &'static str = "text.wgsl";
     const LAYOUT: &'static [VertexAttribute] = &[
         VertexAttribute {
             format: VertexFormat::Float32x2,
@@ -83,6 +85,11 @@ impl Vertex for Vert {
             format: VertexFormat::Float32x2,
             offset: offset_of!(Self, uv) as BufferAddress,
             shader_location: 1,
+        },
+        VertexAttribute {
+            format: VertexFormat::Unorm8x4,
+            offset: offset_of!(Self, col) as BufferAddress,
+            shader_location: 2,
         },
     ];
 
@@ -141,8 +148,8 @@ impl Vertex for Vert {
     }
 }
 
-struct SetSpriteBindGroup<const I: usize>;
-impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
+struct SetTextBindGroup<const I: usize>;
+impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
     type Param = SRes<ImageBindGroups>;
     type ViewQuery = ();
     type ItemQuery = Read<HephaeBatchSection<Vert>>;
@@ -203,6 +210,7 @@ impl Drawer for DrawText {
             let (.., rect) = atlas.get_info_index(glyph.index)?;
 
             Some((0., atlas.image(), Glyph {
+                col: glyph.color,
                 pos: self.pos + glyph.origin,
                 rect: rect.as_rect(),
                 atlas: atlas.size().as_vec2(),
@@ -213,6 +221,7 @@ impl Drawer for DrawText {
 
 #[derive(Copy, Clone)]
 struct Glyph {
+    col: [u8; 4],
     pos: Vec2,
     rect: Rect,
     atlas: Vec2,
@@ -223,17 +232,17 @@ impl VertexCommand for Glyph {
 
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self { pos, rect, atlas } = *self;
+        let Self { col, pos, rect, atlas } = *self;
         let bottom_left = (pos, vec2(rect.min.x, rect.max.y) / atlas);
         let bottom_right = (pos + vec2(rect.width(), 0.), rect.max / atlas);
         let top_right = (pos + vec2(rect.width(), rect.height()), vec2(rect.max.x, rect.min.y) / atlas);
         let top_left = (pos + vec2(0., rect.height()), rect.min / atlas);
 
         queuer.vertices([
-            Vert::new(bottom_left.0, bottom_left.1),
-            Vert::new(bottom_right.0, bottom_right.1),
-            Vert::new(top_right.0, top_right.1),
-            Vert::new(top_left.0, top_left.1),
+            Vert::new(bottom_left.0, bottom_left.1, col),
+            Vert::new(bottom_right.0, bottom_right.1, col),
+            Vert::new(top_right.0, top_right.1, col),
+            Vert::new(top_left.0, top_left.1, col),
         ]);
 
         queuer.indices([0, 1, 2, 2, 3, 0]);
@@ -296,7 +305,7 @@ fn update(
                 &fonts,
                 &mut images,
                 &mut atlases,
-                [(&*text.text, text_font, LinearRgba::WHITE)].into_iter(),
+                [(&*text.text, text_font, LinearRgba::RED)].into_iter(),
             )
             .is_ok()
         {

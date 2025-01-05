@@ -9,7 +9,7 @@ use bevy_render::{
 };
 use bevy_utils::HashMap;
 use cosmic_text::{CacheKey, FontSystem, LayoutGlyph, Placement, SwashCache, SwashContent};
-use guillotiere::{point2, size2, AtlasAllocator};
+use guillotiere::{size2, AtlasAllocator};
 
 use crate::layout::FontLayoutError;
 

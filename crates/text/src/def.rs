@@ -191,6 +191,7 @@ impl Default for TextGlyphs {
 pub struct TextGlyph {
     pub origin: Vec2,
     pub size: Vec2,
+    pub color: [u8; 4],
     pub atlas: AssetId<FontAtlas>,
     pub index: usize,
 }

@@ -145,6 +145,10 @@ impl FontLayout {
                 let y = buffer_size.y - (line.round() + phys.y as f32 - (top - size.y));
 
                 glyphs.glyphs.push(TextGlyph {
+                    color: glyph
+                        .color_opt
+                        .map(|color| color.0.to_le_bytes())
+                        .unwrap_or([255, 255, 255, 255]),
                     origin: Vec2::new(x, y),
                     size,
                     atlas: atlas_id,
