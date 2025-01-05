@@ -13,7 +13,7 @@ use nonmax::NonMaxUsize;
 
 use crate::gui::{
     ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform,
-    GuiRoots, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache,
+    GuiRoots, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache, SubsequentLayoutSizeSys,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -91,11 +91,20 @@ pub(crate) fn validate_root(
 
 pub(crate) fn propagate_layout(
     world: &mut World,
-    (mut layout_ids, mut changed_queries, mut contains_query, mut initial_layout_size, mut distribute_space, caches_query): (
+    (
+        mut layout_ids,
+        mut changed_queries,
+        mut contains_query,
+        mut initial_layout_size,
+        mut subsequent_layout_size,
+        mut distribute_space,
+        caches_query,
+    ): (
         Local<Vec<ComponentId>>,
         Local<Vec<Box<dyn ChangedQuery>>>,
         Local<QueryState<FilteredEntityRef>>,
         Local<Vec<Box<dyn InitialLayoutSizeSys>>>,
+        Local<Vec<Box<dyn SubsequentLayoutSizeSys>>>,
         Local<Vec<Box<dyn DistributeSpaceSys>>>,
         &mut QueryState<&mut LayoutCache>,
     ),
@@ -113,6 +122,10 @@ pub(crate) fn propagate_layout(
         Query<&Children>,
     )>,
     (mut initial_stack, mut initial_size_stack): (Local<Vec<Entity>>, Local<Vec<Vec2>>),
+    subsequent_size_state: &mut SystemState<(
+        Query<(&GuiRootSpace, Option<&Children>)>,
+        Query<(Option<&LayoutCache>, &mut InitialLayoutSize, Option<&Children>)>,
+    )>,
     distribute_space_state: &mut SystemState<(
         Query<&mut DistributedSpace>,
         Query<&GuiRootSpace>,
@@ -125,12 +138,20 @@ pub(crate) fn propagate_layout(
     let mut all_changed = false;
     world.resource_scope(|world, layouts: Mut<GuiLayouts>| {
         if layouts.is_changed() {
-            let (layout_ids_sys, changed_queries_sys, contains_query_sys, initial_layout_size_sys, distribute_space_sys) =
-                layouts.initial_layout_size_param(world);
+            let (
+                layout_ids_sys,
+                changed_queries_sys,
+                contains_query_sys,
+                initial_layout_size_sys,
+                subsequent_layout_size_sys,
+                distribute_space_sys,
+            ) = layouts.initial_layout_size_param(world);
+
             *layout_ids = layout_ids_sys;
             *changed_queries = changed_queries_sys;
             *contains_query = contains_query_sys;
             *initial_layout_size = initial_layout_size_sys;
+            *subsequent_layout_size = subsequent_layout_size_sys;
             *distribute_space = distribute_space_sys;
 
             all_changed = true;
@@ -297,7 +318,62 @@ pub(crate) fn propagate_layout(
 
     initial_size_state.apply(world);
 
-    // Phase 2: Calculate and distribute space, parent-to-children.
+    // Phase 2: Further calculate layout size, parent-to-children.
+    unsafe fn propagate_subsequent_size(
+        world: UnsafeWorldCell,
+        node: Entity,
+        parent: Vec2,
+        layout_query: &Query<(Option<&LayoutCache>, &mut InitialLayoutSize, Option<&Children>)>,
+        subsequent_layout_size: &mut [Box<dyn SubsequentLayoutSizeSys>],
+    ) {
+        // Safety: Hierarchy is validated, so no aliasing may occur.
+        let Ok((cache, mut size, children)) = (unsafe { layout_query.get_unchecked(node) }) else {
+            return
+        };
+
+        let mut size_child = **size;
+        if let Some(sys) = cache
+            .and_then(|cache| cache.map(|id| id.get()))
+            .and_then(|id| subsequent_layout_size.get_mut(id))
+        {
+            // Safety: See below.
+            let (new_size, new_size_child) = sys.execute((**size, node), parent, world);
+            **size = new_size;
+            size_child = new_size_child;
+        }
+
+        if let Some(children) = children {
+            for &child in children {
+                propagate_subsequent_size(world, child, size_child, layout_query, subsequent_layout_size);
+            }
+        }
+    }
+
+    let cell = world.as_unsafe_world_cell();
+    for sys in &mut subsequent_layout_size {
+        sys.update_archetypes(cell);
+    }
+
+    // Safety:
+    // - `GuiLayout::SubsequentParam` and `GuiLayout::SubsequentItem` aren't accessed mutably. This is
+    //   enforced by the read-only constrain in `GuiLayout`'s associated type definitions.
+    // - We only ever write to `InitialLayoutSize`, which is guaranteed to be unique because of the
+    //   type's restricted visibility.
+    subsequent_size_state.update_archetypes_unsafe_world_cell(cell);
+    let (root_query, layout_query) = unsafe { subsequent_size_state.get_unchecked_manual(cell) };
+
+    for &root in &root_changed {
+        let (&size, children) = root_query.get(root).unwrap();
+        if let Some(children) = children {
+            for &child in children {
+                unsafe {
+                    propagate_subsequent_size(cell, child, *size, &layout_query, &mut subsequent_layout_size);
+                }
+            }
+        }
+    }
+
+    // Phase 3: Calculate and distribute space, parent-to-children.
     unsafe fn propagate_distribute_space(
         world: UnsafeWorldCell,
         node: Entity,
@@ -388,7 +464,7 @@ pub(crate) fn propagate_layout(
 
     for root in root_changed.drain(..) {
         let available_space = match root_query.get(root) {
-            Ok(&root_transform) => *root_transform,
+            Ok(&size) => *size,
             Err(..) => Vec2::ZERO,
         };
 
@@ -409,11 +485,15 @@ pub(crate) fn propagate_layout(
                 &mut distribute_space,
                 &mut distribute_stack,
                 &mut distribute_output_stack,
-            )
+            );
         }
     }
 
     for sys in &mut initial_layout_size {
+        sys.apply(world);
+    }
+
+    for sys in &mut subsequent_layout_size {
         sys.apply(world);
     }
 

@@ -56,7 +56,9 @@ impl Plugin for HephaeGuiPlugin {
                     (HephaeGuiSystems::CalculateRoot, HephaeGuiSystems::ValidateRoot)
                         .before(HephaeGuiSystems::PropagateLayout)
                         .after(CameraUpdateSystem),
-                    (HephaeGuiSystems::PropagateLayout, HephaeGuiSystems::CalculateCorners).chain(),
+                    (HephaeGuiSystems::PropagateLayout, HephaeGuiSystems::CalculateCorners)
+                        .chain()
+                        .after(CameraUpdateSystem),
                 ),
             )
             .add_systems(

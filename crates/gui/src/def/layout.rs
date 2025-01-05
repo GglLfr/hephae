@@ -123,6 +123,11 @@ impl AbsRect {
             bottom,
         }
     }
+
+    #[inline]
+    pub const fn size(self) -> Vec2 {
+        vec2(self.left + self.right, self.top + self.bottom)
+    }
 }
 
 /// A built-in [`GuiLayout`] implementation. Arranges children either horizontally or vertically
@@ -270,10 +275,10 @@ impl GuiLayout for UiCont {
     type InitialParam = ();
     type InitialItem = (Read<Self>, Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
-    type DistributeParam = (
-        SQuery<Option<Read<UiSize>>>,
-        SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>,
-    );
+    type SubsequentParam = ();
+    type SubsequentItem = (Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
+
+    type DistributeParam = SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>;
     type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     fn initial_layout_size(
@@ -282,6 +287,9 @@ impl GuiLayout for UiCont {
         _: &[Entity],
         children_layout_sizes: &[Vec2],
     ) -> Vec2 {
+        let padding = *padding.copied().unwrap_or_default();
+        let margin = *margin.copied().unwrap_or_default();
+
         let size = size.map(|&size| *size).unwrap_or_default();
         let size = match size {
             UiVal2 { x: Auto, .. } | UiVal2 { y: Auto, .. } => {
@@ -306,49 +314,51 @@ impl GuiLayout for UiCont {
             UiVal2 { x, y } => vec2(x.refer_rel(0.), y.refer_rel(0.)),
         };
 
+        size + padding.size() + margin.size()
+    }
+
+    fn subsequent_layout_size(
+        _: &SystemParamItem<Self::SubsequentParam>,
+        (mut this, (size, padding, margin)): (Vec2, QueryItem<Self::SubsequentItem>),
+        parent: Vec2,
+    ) -> (Vec2, Vec2) {
+        let size = size.map(|&size| *size).unwrap_or_default();
         let padding = *padding.copied().unwrap_or_default();
         let margin = *margin.copied().unwrap_or_default();
 
-        size + vec2(padding.left + padding.right, padding.top + padding.bottom) +
-            vec2(margin.left + margin.right, margin.top + margin.bottom)
+        if let Rel(..) = size.x {
+            this.x = size.x.refer_rel(parent.x);
+        }
+
+        if let Rel(..) = size.y {
+            this.y = size.y.refer_rel(parent.y);
+        }
+
+        (this, this - padding.size() - margin.size())
     }
 
     fn distribute_space(
         (this_transform, this_size): (&mut Affine2, &mut Vec2),
-        (size_query, flex_query): &SystemParamItem<Self::DistributeParam>,
+        flex_query: &SystemParamItem<Self::DistributeParam>,
         (&cont, padding, margin): QueryItem<Self::DistributeItem>,
         children: &[Entity],
         output: &mut [(Affine2, Vec2)],
     ) {
         let margin = *margin.copied().unwrap_or_default();
         *this_transform *= Affine2::from_translation(vec2(margin.left, margin.bottom));
-        *this_size -= vec2(margin.left + margin.right, margin.bottom + margin.top);
+        *this_size -= margin.size();
 
         let padding = *padding.copied().unwrap_or_default();
-        let available_space = *this_size - vec2(padding.left + padding.right, padding.top + padding.bottom);
+        let available_space = *this_size - padding.size();
 
         let (taken, mut total_expand, mut total_shrink) = children.iter().zip(output.iter_mut()).fold(
             (Vec2::ZERO, Vec2::ZERO, Vec2::ZERO),
-            |(mut taken, mut total_expand, mut total_shrink), (&child, (.., initial_size))| {
-                let size = size_query.get(child).unwrap();
+            |(mut taken, mut total_expand, mut total_shrink), (&child, &mut (.., size))| {
                 let (expand, shrink) = flex_query.get(child).unwrap();
 
                 total_expand += *expand.copied().unwrap_or_default();
                 total_shrink += *shrink.copied().unwrap_or_default();
 
-                let size = size.map(|&size| *size).unwrap_or_default();
-                let size = vec2(
-                    match size.x {
-                        Rel(frac) => frac * available_space.x,
-                        _ => initial_size.x,
-                    },
-                    match size.y {
-                        Rel(frac) => frac * available_space.y,
-                        _ => initial_size.y,
-                    },
-                );
-
-                *initial_size = size;
                 match cont {
                     Self::Horizontal | Self::HorizontalReverse => {
                         taken.x += size.x;

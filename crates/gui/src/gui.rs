@@ -112,6 +112,12 @@ pub trait GuiLayout: Component {
     /// this layout component, otherwise a panic will occur.
     type InitialItem: ReadOnlyQueryData;
 
+    /// System param to fetch for [`Self::subsequent_layout_size`].
+    type SubsequentParam: ReadOnlySystemParam;
+    /// Query item to fetch for [`Self::subsequent_layout_size`]. **Must** match the GUI entity with
+    /// this layout component, otherwise a panic will occur.
+    type SubsequentItem: ReadOnlyQueryData;
+
     /// System param to fetch for [`Self::distribute_space`].
     type DistributeParam: ReadOnlySystemParam;
     /// Query item to fetch for [`Self::distribute_space`]. **Must** match the GUI entity with
@@ -126,6 +132,15 @@ pub trait GuiLayout: Component {
         children: &[Entity],
         children_layout_sizes: &[Vec2],
     ) -> Vec2;
+
+    /// Computes the subsequent layout size of each nodes, based on their parent. In most cases,
+    /// this should continue [`Self::initial_layout_size`]'s computation, with additional parent
+    /// size parameter.
+    fn subsequent_layout_size(
+        param: &SystemParamItem<Self::SubsequentParam>,
+        this: (Vec2, QueryItem<Self::SubsequentItem>),
+        parent: Vec2,
+    ) -> (Vec2, Vec2);
 
     /// Distributes the actual available size for each children node, based on their parent. Each
     /// `children[i]` is associated with `output[i]`, where initially `output[i].1` is the size
@@ -191,6 +206,52 @@ unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
         ));
 
         T::initial_layout_size(&param, item, children, children_layout_sizes)
+    }
+}
+
+/// # Safety
+/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::SubsequentParam`]
+/// and [`GuiLayout::SubsequentItem`].
+pub(crate) unsafe trait SubsequentLayoutSizeSys: Send {
+    fn update_archetypes(&mut self, world: UnsafeWorldCell);
+
+    fn apply(&mut self, world: &mut World);
+
+    /// # Safety
+    /// - `world` must be the same [`World`] that's passed to [`Self::update_archetypes`].
+    /// - Within the entire span of this function call **no** write accesses to
+    ///   [`GuiLayout::SubsequentParam`] nor [`GuiLayout::SubsequentItem`].
+    unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2);
+}
+
+unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
+    for (
+        SystemState<(
+            StaticSystemParam<'w, 's, T::SubsequentParam>,
+            Query<'w, 's, T::SubsequentItem>,
+        )>,
+        PhantomData<T>,
+    )
+{
+    #[inline]
+    fn update_archetypes(&mut self, world: UnsafeWorldCell) {
+        self.0.update_archetypes_unsafe_world_cell(world);
+    }
+
+    #[inline]
+    fn apply(&mut self, world: &mut World) {
+        self.0.apply(world);
+    }
+
+    #[inline]
+    unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2) {
+        let (param, mut query) = self.0.get_unchecked_manual(world);
+        let item = query.get_mut(this.1).unwrap_or_else(|_| panic!(
+            "{}::SubsequentItem must *always* match the GUI entities. A common escape hatch is using `Option<T>::unwrap_or_default()`",
+            type_name::<T>()
+        ));
+
+        T::subsequent_layout_size(&param, (this.0, item), parent)
     }
 }
 
@@ -274,6 +335,7 @@ impl GuiLayouts {
                 >::new(world))
             },
             initial_layout_size: |world| Box::new((SystemState::new(world), PhantomData::<T>)),
+            subsequent_layout_size: |world| Box::new((SystemState::new(world), PhantomData::<T>)),
             distribute_space: |world| Box::new((SystemState::new(world), PhantomData::<T>)),
         })
     }
@@ -286,25 +348,42 @@ impl GuiLayouts {
         Vec<Box<dyn ChangedQuery>>,
         QueryState<FilteredEntityRef<'static>>,
         Vec<Box<dyn InitialLayoutSizeSys>>,
+        Vec<Box<dyn SubsequentLayoutSizeSys>>,
         Vec<Box<dyn DistributeSpaceSys>>,
     ) {
         let len = self.0.len();
-        let (layout_ids, changed_queries, initial_layout_size, distribute_space) = self.0.iter().fold(
-            (
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-            ),
-            |(mut layout_ids, mut changed_queries, mut initial_layout_sizes, mut distribute_space), data| {
-                layout_ids.push(data.id);
-                changed_queries.push((data.changed)(world));
-                initial_layout_sizes.push((data.initial_layout_size)(world));
-                distribute_space.push((data.distribute_space)(world));
+        let (layout_ids, changed_queries, initial_layout_size, subsequent_layout_size, distribute_space) =
+            self.0.iter().fold(
+                (
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                ),
+                |(
+                    mut layout_ids,
+                    mut changed_queries,
+                    mut initial_layout_sizes,
+                    mut subsequent_layout_sizes,
+                    mut distribute_space,
+                ),
+                 data| {
+                    layout_ids.push(data.id);
+                    changed_queries.push((data.changed)(world));
+                    initial_layout_sizes.push((data.initial_layout_size)(world));
+                    subsequent_layout_sizes.push((data.subsequent_layout_size)(world));
+                    distribute_space.push((data.distribute_space)(world));
 
-                (layout_ids, changed_queries, initial_layout_sizes, distribute_space)
-            },
-        );
+                    (
+                        layout_ids,
+                        changed_queries,
+                        initial_layout_sizes,
+                        subsequent_layout_sizes,
+                        distribute_space,
+                    )
+                },
+            );
 
         let contains_query = QueryBuilder::new(world)
             .or(|builder| {
@@ -319,6 +398,7 @@ impl GuiLayouts {
             changed_queries,
             contains_query,
             initial_layout_size,
+            subsequent_layout_size,
             distribute_space,
         )
     }
@@ -328,6 +408,7 @@ struct GuiLayoutData {
     id: ComponentId,
     changed: fn(&mut World) -> Box<dyn ChangedQuery>,
     initial_layout_size: fn(&mut World) -> Box<dyn InitialLayoutSizeSys>,
+    subsequent_layout_size: fn(&mut World) -> Box<dyn SubsequentLayoutSizeSys>,
     distribute_space: fn(&mut World) -> Box<dyn DistributeSpaceSys>,
 }
 

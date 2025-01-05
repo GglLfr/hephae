@@ -165,6 +165,8 @@ fn startup(mut commands: Commands) {
                 Rotate,
                 UiCont::Horizontal,
                 UiSize::new(Rel(0.5), Rel(1.)),
+                Margin::all(25.),
+                Padding::xy(0., 10.),
                 HasDrawer::<Draw>::new(),
             ))
             .with_children(|ui| {
@@ -198,8 +200,8 @@ fn rotate(
     mut timer: Local<f64>,
 ) {
     *timer += time.delta_secs_f64();
-    if *timer >= 1. {
-        *timer -= 1.;
+    if *timer >= 0.5 {
+        *timer -= 0.5;
         for mut cont in &mut rotate {
             *cont = match *cont {
                 UiCont::Horizontal => UiCont::HorizontalReverse,

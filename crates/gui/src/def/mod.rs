@@ -26,7 +26,7 @@ impl PluginGroup for DefaultUiPlugin {
 
         #[cfg(feature = "text")]
         {
-            group = group.add(GuiLayoutPlugin::<UiText>::new());
+            //group = group.add(GuiLayoutPlugin::<UiText>::new());
         }
 
         group
