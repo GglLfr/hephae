@@ -245,12 +245,18 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                     UiText,
                     UiSize::all(Auto),
                     Margin::all(10.),
-                    Text::new_wrapped("Hi, Hephae GUI!"),
+                    Text {
+                        text: "Hi, Hephae GUI!".into(),
+                        wrap: TextWrap::Glyph,
+                        align: TextAlign::Center,
+                    },
                     TextFont {
                         font: server.load("fonts/roboto.ttf"),
                         font_size: 24.,
                         ..default()
                     },
+                    Expand(vec2(1., 0.)),
+                    Shrink(Vec2::ONE),
                     HasDrawer::<DrawText>::new(),
                 ));
             });

@@ -86,15 +86,6 @@ impl Text {
             ..Self::default()
         }
     }
-
-    #[inline]
-    pub fn new_wrapped(text: impl ToString) -> Self {
-        Self {
-            text: text.to_string(),
-            wrap: TextWrap::Word,
-            ..Self::default()
-        }
-    }
 }
 
 #[derive(Reflect, Eq, PartialEq, Copy, Clone, Default)]

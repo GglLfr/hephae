@@ -158,7 +158,7 @@ impl GuiLayout for UiText {
     ) {
         let margin = *margin.copied().unwrap_or_default();
         *this_transform *= Affine2::from_translation(vec2(margin.left, margin.bottom));
-        *this_size -= margin.size();
+        *this_size = (*this_size - margin.size()).max(Vec2::ZERO);
     }
 }
 
