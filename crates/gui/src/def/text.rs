@@ -16,6 +16,15 @@ use crate::{
     gui::{GuiLayout, GuiSize},
 };
 
+/// UI layout that can be used for texts.
+///
+/// Additional components may be added to this node:
+/// - [`UiSize`] for specifying the size.
+/// - [`Margin`] for offsetting.
+///
+/// Note that adding [`Shrink`](crate::def::Shrink) may be unfavorable, as the shrinking mechanism
+/// isn't recognized by the text layout to increase its height in case of text wrapping. In general,
+/// if a node's width is [`Auto`], never expect text wrapping to work.
 #[derive(Component, Copy, Clone, Default)]
 #[require(Text)]
 pub struct UiText;
@@ -23,12 +32,12 @@ pub struct UiText;
 impl GuiLayout for UiText {
     type Changed = Changed<TextStructure>;
 
-    type InitialParam = (
+    type PrimaryParam = (
         SRes<FontLayout>,
         SRes<Assets<Font>>,
         SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>,
     );
-    type InitialItem = (
+    type PrimaryItem = (
         Read<Text>,
         Read<TextGlyphs>,
         Read<TextStructure>,
@@ -36,12 +45,12 @@ impl GuiLayout for UiText {
         Option<Read<Margin>>,
     );
 
-    type SubsequentParam = (
+    type SecondaryParam = (
         SRes<FontLayout>,
         SRes<Assets<Font>>,
         SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>,
     );
-    type SubsequentItem = (
+    type SecondaryItem = (
         Read<Text>,
         Read<TextGlyphs>,
         Read<TextStructure>,
@@ -52,9 +61,9 @@ impl GuiLayout for UiText {
     type DistributeParam = ();
     type DistributeItem = Option<Read<Margin>>;
 
-    fn initial_layout_size(
-        (layout, fonts, query): &SystemParamItem<Self::InitialParam>,
-        (text, glyphs, structure, size, margin): QueryItem<Self::InitialItem>,
+    fn primary_layout_size(
+        (layout, fonts, query): &SystemParamItem<Self::PrimaryParam>,
+        (text, glyphs, structure, size, margin): QueryItem<Self::PrimaryItem>,
         _: &[Entity],
         _: &[Vec2],
     ) -> Vec2 {
@@ -104,9 +113,9 @@ impl GuiLayout for UiText {
         size + margin.size()
     }
 
-    fn subsequent_layout_size(
-        (layout, fonts, query): &SystemParamItem<Self::SubsequentParam>,
-        (mut this, (text, glyphs, structure, size, margin)): (Vec2, QueryItem<Self::SubsequentItem>),
+    fn secondary_layout_size(
+        (layout, fonts, query): &SystemParamItem<Self::SecondaryParam>,
+        (mut this, (text, glyphs, structure, size, margin)): (Vec2, QueryItem<Self::SecondaryItem>),
         parent: Vec2,
     ) -> (Vec2, Vec2) {
         let size = size.map(|&size| *size).unwrap_or_default();
@@ -162,6 +171,7 @@ impl GuiLayout for UiText {
     }
 }
 
+/// Computes GUI text glyphs after a UI recalculation.
 pub fn update_text_widget(
     mut layout: ResMut<FontLayout>,
     fonts: Res<Assets<Font>>,

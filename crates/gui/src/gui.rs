@@ -70,6 +70,7 @@ impl Gui {
         }
     }
 
+    /// Projects a local 2D GUI space into 3D world-space.
     #[inline]
     pub fn project(self, vec: Vec2) -> Vec3 {
         self.up * vec.y + self.right * vec.x
@@ -121,17 +122,17 @@ pub trait GuiLayout: Component {
     /// [`Or<Changed<T>>`].
     type Changed: QueryFilter;
 
-    /// System param to fetch for [`Self::initial_layout_size`].
-    type InitialParam: ReadOnlySystemParam;
-    /// Query item to fetch for [`Self::initial_layout_size`]. **Must** match the GUI entity with
+    /// System param to fetch for [`Self::primary_layout_size`].
+    type PrimaryParam: ReadOnlySystemParam;
+    /// Query item to fetch for [`Self::primary_layout_size`]. **Must** match the GUI entity with
     /// this layout component, otherwise a panic will occur.
-    type InitialItem: ReadOnlyQueryData;
+    type PrimaryItem: ReadOnlyQueryData;
 
-    /// System param to fetch for [`Self::subsequent_layout_size`].
-    type SubsequentParam: ReadOnlySystemParam;
-    /// Query item to fetch for [`Self::subsequent_layout_size`]. **Must** match the GUI entity with
+    /// System param to fetch for [`Self::secondary_layout_size`].
+    type SecondaryParam: ReadOnlySystemParam;
+    /// Query item to fetch for [`Self::secondary_layout_size`]. **Must** match the GUI entity with
     /// this layout component, otherwise a panic will occur.
-    type SubsequentItem: ReadOnlyQueryData;
+    type SecondaryItem: ReadOnlyQueryData;
 
     /// System param to fetch for [`Self::distribute_space`].
     type DistributeParam: ReadOnlySystemParam;
@@ -141,25 +142,25 @@ pub trait GuiLayout: Component {
 
     /// Computes the initial layout size of each nodes, based on their children. In most cases, this
     /// should be "minimum size to fit all children".
-    fn initial_layout_size(
-        param: &SystemParamItem<Self::InitialParam>,
-        parent: QueryItem<Self::InitialItem>,
+    fn primary_layout_size(
+        param: &SystemParamItem<Self::PrimaryParam>,
+        parent: QueryItem<Self::PrimaryItem>,
         children: &[Entity],
         children_layout_sizes: &[Vec2],
     ) -> Vec2;
 
     /// Computes the subsequent layout size of each nodes, based on their parent. In most cases,
-    /// this should continue [`Self::initial_layout_size`]'s computation, with additional parent
+    /// this should continue [`Self::primary_layout_size`]'s computation, with additional parent
     /// size parameter.
-    fn subsequent_layout_size(
-        param: &SystemParamItem<Self::SubsequentParam>,
-        this: (Vec2, QueryItem<Self::SubsequentItem>),
+    fn secondary_layout_size(
+        param: &SystemParamItem<Self::SecondaryParam>,
+        this: (Vec2, QueryItem<Self::SecondaryItem>),
         parent: Vec2,
     ) -> (Vec2, Vec2);
 
     /// Distributes the actual available size for each children node, based on their parent. Each
     /// `children[i]` is associated with `output[i]`, where initially `output[i].1` is the size
-    /// calculated from [`Self::initial_layout_size`].
+    /// calculated from [`Self::primary_layout_size`].
     fn distribute_space(
         this: (&mut Affine2, &mut Vec2),
         param: &SystemParamItem<Self::DistributeParam>,
@@ -170,8 +171,8 @@ pub trait GuiLayout: Component {
 }
 
 /// # Safety
-/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::InitialParam`]
-/// and [`GuiLayout::InitialItem`].
+/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::PrimaryParam`]
+/// and [`GuiLayout::PrimaryItem`].
 pub(crate) unsafe trait InitialLayoutSizeSys: Send {
     fn update_archetypes(&mut self, world: UnsafeWorldCell);
 
@@ -180,7 +181,7 @@ pub(crate) unsafe trait InitialLayoutSizeSys: Send {
     /// # Safety
     /// - `world` must be the same [`World`] that's passed to [`Self::update_archetypes`].
     /// - Within the entire span of this function call **no** write accesses to
-    ///   [`GuiLayout::InitialParam`] nor [`GuiLayout::InitialItem`].
+    ///   [`GuiLayout::PrimaryParam`] nor [`GuiLayout::PrimaryItem`].
     unsafe fn execute(
         &mut self,
         parent: Entity,
@@ -192,7 +193,7 @@ pub(crate) unsafe trait InitialLayoutSizeSys: Send {
 
 unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
     for (
-        SystemState<(StaticSystemParam<'w, 's, T::InitialParam>, Query<'w, 's, T::InitialItem>)>,
+        SystemState<(StaticSystemParam<'w, 's, T::PrimaryParam>, Query<'w, 's, T::PrimaryItem>)>,
         PhantomData<T>,
     )
 {
@@ -220,13 +221,13 @@ unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
             type_name::<T>()
         ));
 
-        T::initial_layout_size(&param, item, children, children_layout_sizes)
+        T::primary_layout_size(&param, item, children, children_layout_sizes)
     }
 }
 
 /// # Safety
-/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::SubsequentParam`]
-/// and [`GuiLayout::SubsequentItem`].
+/// In [`Self::execute`], implementors may only have read accesses to [`GuiLayout::SecondaryParam`]
+/// and [`GuiLayout::SecondaryItem`].
 pub(crate) unsafe trait SubsequentLayoutSizeSys: Send {
     fn update_archetypes(&mut self, world: UnsafeWorldCell);
 
@@ -235,16 +236,13 @@ pub(crate) unsafe trait SubsequentLayoutSizeSys: Send {
     /// # Safety
     /// - `world` must be the same [`World`] that's passed to [`Self::update_archetypes`].
     /// - Within the entire span of this function call **no** write accesses to
-    ///   [`GuiLayout::SubsequentParam`] nor [`GuiLayout::SubsequentItem`].
+    ///   [`GuiLayout::SecondaryParam`] nor [`GuiLayout::SecondaryItem`].
     unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2);
 }
 
 unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
     for (
-        SystemState<(
-            StaticSystemParam<'w, 's, T::SubsequentParam>,
-            Query<'w, 's, T::SubsequentItem>,
-        )>,
+        SystemState<(StaticSystemParam<'w, 's, T::SecondaryParam>, Query<'w, 's, T::SecondaryItem>)>,
         PhantomData<T>,
     )
 {
@@ -266,7 +264,7 @@ unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
             type_name::<T>()
         ));
 
-        T::subsequent_layout_size(&param, (this.0, item), parent)
+        T::secondary_layout_size(&param, (this.0, item), parent)
     }
 }
 

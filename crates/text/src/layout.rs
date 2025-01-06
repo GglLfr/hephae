@@ -1,3 +1,5 @@
+//! Defines font layout computation systems.
+
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use async_channel::{Receiver, Sender};
@@ -18,20 +20,24 @@ use crate::{
     def::{Font, TextAlign, TextFont, TextGlyph, TextGlyphs, TextWrap},
 };
 
+/// Global handle to the font layout, wrapped in a mutex.
 #[derive(Resource)]
 pub struct FontLayout(pub(crate) Mutex<FontLayoutInner>);
 impl FontLayout {
+    /// Gets a reference to the inner resource. When possible, always prefer [`Self::get_mut`].
     #[inline]
     pub fn get(&self) -> MutexGuard<FontLayoutInner> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Gets a reference to the inner resource.
     #[inline]
     pub fn get_mut(&mut self) -> &mut FontLayoutInner {
         self.0.get_mut().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
+/// Handles computations for font glyphs.
 pub struct FontLayoutInner {
     sys: FontSystem,
     cache: SwashCache,
@@ -42,8 +48,9 @@ pub struct FontLayoutInner {
 }
 
 impl FontLayoutInner {
+    /// Creates a new font layout pipeline.
     #[inline]
-    pub fn new(pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>) -> Self {
+    pub(crate) fn new(pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>) -> Self {
         let locale = sys_locale::get_locale().unwrap_or("en-US".into());
         Self {
             sys: FontSystem::new_with_locale_and_db(locale, Database::new()),
@@ -56,6 +63,8 @@ impl FontLayoutInner {
     }
 }
 
+/// loads bytes sent from [`FontLoader`](crate::def::FontLoader) into a [`Font`] and adds them to
+/// the database.
 pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
     let fonts = fonts.get_mut();
     while let Ok((bytes, sender)) = fonts.pending_fonts.try_recv() {
@@ -73,7 +82,7 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
             id,
             name: info
                 .families
-                .get(0)
+                .first()
                 .map(|(name, _)| name)
                 .cloned()
                 .unwrap_or("Times New Roman".into()),
@@ -84,15 +93,19 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
     }
 }
 
+/// Errors that may arise from font computations.
 #[derive(Error, Debug)]
 pub enum FontLayoutError {
+    /// A font has not been loaded yet.
     #[error("required font hasn't been loaded yet or has failed loading")]
     FontNotLoaded(AssetId<Font>),
+    /// Couldn't get an image for a glyph.
     #[error("couldn't render an image for a glyph")]
     NoGlyphImage(CacheKey),
 }
 
 impl FontLayoutInner {
+    /// Computes [`TextGlyphs`].
     pub fn compute_glyphs<'a>(
         &mut self,
         glyphs: &mut TextGlyphs,
@@ -132,7 +145,7 @@ impl FontLayoutInner {
                 let (id, key) = glyph_spans[glyph.metadata];
 
                 let mut tmp;
-                let glyph = if key.antialias {
+                let glyph = if !key.antialias {
                     tmp = glyph.clone();
                     tmp.x = tmp.x.round();
                     tmp.y = tmp.y.round();
@@ -180,6 +193,7 @@ impl FontLayoutInner {
         Ok(())
     }
 
+    /// Gets the box size of a text.
     #[inline]
     pub fn measure_glyphs<'a>(
         &mut self,
@@ -195,6 +209,12 @@ impl FontLayoutInner {
         self.update_buffer(&mut buffer, (width, height), wrap, align, scale_factor, fonts, spans)?;
 
         Ok(buffer_size(&buffer))
+    }
+
+    /// Gets the box size of a precomputed text.
+    #[inline]
+    pub fn size(&self, glyphs: &TextGlyphs) -> Vec2 {
+        buffer_size(&glyphs.buffer.lock().unwrap_or_else(PoisonError::into_inner))
     }
 
     fn update_buffer<'a>(

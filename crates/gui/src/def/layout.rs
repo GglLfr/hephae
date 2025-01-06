@@ -124,6 +124,7 @@ impl AbsRect {
         }
     }
 
+    /// Returns a vector where X is `left + right` and Y is `top + bottom`.
     #[inline]
     pub const fn size(self) -> Vec2 {
         vec2(self.left + self.right, self.top + self.bottom)
@@ -134,7 +135,7 @@ impl AbsRect {
 /// without wrapping.
 ///
 /// Additional components may be added either to this node or its direct children:
-/// - [`UiSize`], for specifying the size.
+/// - [`UiSize`] for specifying the size.
 /// - [`Margin`] and [`Padding`] for offsetting.
 /// - [`Expand`] and [`Shrink`] for specifying behavior on either extra or exhausted space.
 #[derive(Component, Copy, Clone, Default)]
@@ -272,18 +273,18 @@ impl GuiLayout for UiCont {
         Changed<Shrink>,
     )>;
 
-    type InitialParam = ();
-    type InitialItem = (Read<Self>, Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
+    type PrimaryParam = ();
+    type PrimaryItem = (Read<Self>, Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
-    type SubsequentParam = ();
-    type SubsequentItem = (Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
+    type SecondaryParam = ();
+    type SecondaryItem = (Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     type DistributeParam = SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>;
     type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
 
-    fn initial_layout_size(
-        _: &SystemParamItem<Self::InitialParam>,
-        (&cont, size, padding, margin): QueryItem<Self::InitialItem>,
+    fn primary_layout_size(
+        _: &SystemParamItem<Self::PrimaryParam>,
+        (&cont, size, padding, margin): QueryItem<Self::PrimaryItem>,
         _: &[Entity],
         children_layout_sizes: &[Vec2],
     ) -> Vec2 {
@@ -317,9 +318,9 @@ impl GuiLayout for UiCont {
         size + padding.size() + margin.size()
     }
 
-    fn subsequent_layout_size(
-        _: &SystemParamItem<Self::SubsequentParam>,
-        (mut this, (size, padding, margin)): (Vec2, QueryItem<Self::SubsequentItem>),
+    fn secondary_layout_size(
+        _: &SystemParamItem<Self::SecondaryParam>,
+        (mut this, (size, padding, margin)): (Vec2, QueryItem<Self::SecondaryItem>),
         parent: Vec2,
     ) -> (Vec2, Vec2) {
         let size = size.map(|&size| *size).unwrap_or_default();
@@ -349,7 +350,7 @@ impl GuiLayout for UiCont {
         *this_size = (*this_size - margin.size()).max(Vec2::ZERO);
 
         let padding = *padding.copied().unwrap_or_default();
-        let available_space = *this_size - padding.size();
+        let available_space = (*this_size - padding.size()).max(Vec2::ZERO);
 
         let (taken, mut total_expand, mut total_shrink) = children.iter().zip(output.iter_mut()).fold(
             (0., 0., 0.),

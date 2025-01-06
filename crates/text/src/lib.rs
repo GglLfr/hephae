@@ -20,6 +20,7 @@ use crate::{
     layout::{load_fonts_to_database, FontLayout, FontLayoutInner},
 };
 
+/// Common imports for [`hephae_text`](crate).
 pub mod prelude {
     pub use crate::{
         atlas::ExtractedFontAtlases,
@@ -29,12 +30,20 @@ pub mod prelude {
     };
 }
 
+/// Labels for systems added by Hephae Text.
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeTextSystems {
+    /// System in [`ExtractSchedule`] that extracts font atlases into the render world.
+    ExtractFontAtlases,
+    /// System in [`Update`] that loads bytes sent from [`FontLoader`] into a [`Font`] and adds them
+    /// to the database.
     LoadFontsToDatabase,
+    /// System in [`PostUpdate`] that computes and marks [`TextStructure`](def::TextStructure) as
+    /// changed as necessary, for convenience of systems wishing to listen for change-detection.
     ComputeStructure,
 }
 
+/// Initializes Hephae Text into the application.
 #[derive(Copy, Clone, Default)]
 pub struct HephaeTextPlugin;
 impl Plugin for HephaeTextPlugin {
@@ -62,7 +71,11 @@ impl Plugin for HephaeTextPlugin {
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedFontAtlases>()
-                .add_systems(ExtractSchedule, extract_font_atlases);
+                .configure_sets(ExtractSchedule, HephaeTextSystems::ExtractFontAtlases)
+                .add_systems(
+                    ExtractSchedule,
+                    extract_font_atlases.in_set(HephaeTextSystems::ExtractFontAtlases),
+                );
         }
     }
 }

@@ -149,23 +149,42 @@ impl Drawer for DrawText {
         _: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
     ) {
+        let Gui {
+            bottom_left,
+            bottom_right,
+            top_right,
+            top_left,
+            ..
+        } = self.0;
+
         let gui = self.0;
-        let base = self.0.bottom_left;
-        queuer.extend(self.2.iter().map(|&glyph| {
-            (
+        let base = bottom_left;
+        queuer.extend(
+            [(
                 self.1.depth as f32,
                 (),
-                DrawGui(
-                    [
-                        base + gui.project(glyph.origin),
-                        base + gui.project(glyph.origin + vec2(glyph.size.x, 0.)),
-                        base + gui.project(glyph.origin + glyph.size),
-                        base + gui.project(glyph.origin + vec2(0., glyph.size.y)),
-                    ],
-                    self.1,
-                ),
-            )
-        }));
+                DrawGui([bottom_left, bottom_right, top_right, top_left], self.1),
+            )]
+            .into_iter()
+            .chain(self.2.iter().map(|&glyph| {
+                (
+                    (self.1.depth + 1) as f32,
+                    (),
+                    DrawGui(
+                        [
+                            base + gui.project(glyph.origin),
+                            base + gui.project(glyph.origin + vec2(glyph.size.x, 0.)),
+                            base + gui.project(glyph.origin + glyph.size),
+                            base + gui.project(glyph.origin + vec2(0., glyph.size.y)),
+                        ],
+                        GuiDepth {
+                            depth: self.1.depth + 1,
+                            total_depth: self.1.total_depth,
+                        },
+                    ),
+                )
+            })),
+        );
     }
 }
 
@@ -178,7 +197,7 @@ impl VertexCommand for DrawGui {
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
         let &Self([bottom_left, bottom_right, top_right, top_left], GuiDepth { depth, total_depth }) = self;
 
-        let depth = (depth as f32) / (total_depth as f32);
+        let depth = (depth as f32) / ((total_depth + 1) as f32);
         queuer.vertices([
             Vert::new(bottom_left.truncate(), depth),
             Vert::new(bottom_right.truncate(), depth),
@@ -247,8 +266,8 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                     Margin::all(10.),
                     Text {
                         text: "Hi, Hephae GUI!".into(),
-                        wrap: TextWrap::Glyph,
                         align: TextAlign::Center,
+                        ..default()
                     },
                     TextFont {
                         font: server.load("fonts/roboto.ttf"),

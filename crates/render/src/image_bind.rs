@@ -25,7 +25,7 @@ pub struct ImageBindGroups(HashMap<AssetId<Image>, BindGroup>);
 impl ImageBindGroups {
     /// Ensures a [`BindGroup`] for a given [`Image`] is created, returning `true` if it exists
     /// already. Should work in concert with
-    /// [`Vertex::create_batch`](hephae_render::vertex::Vertex::create_batch).
+    /// [`Vertex::create_batch`](crate::vertex::Vertex::create_batch).
     #[inline]
     pub fn create(
         &mut self,

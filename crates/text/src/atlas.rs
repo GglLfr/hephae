@@ -1,3 +1,5 @@
+//! Defines font atlas sets for rendering glyphs.
+
 use bevy_asset::{prelude::*, RenderAssetUsages};
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
@@ -46,6 +48,7 @@ pub(crate) struct FontAtlasKey {
     pub antialias: bool,
 }
 
+/// A texture atlas dynamically containing a font's glyphs.
 #[derive(Asset, TypePath)]
 pub struct FontAtlas {
     key: FontAtlasKey,
@@ -56,17 +59,20 @@ pub struct FontAtlas {
 }
 
 impl FontAtlas {
+    /// Gets the underlying images of this font atlas.
     #[inline]
     pub fn image(&self) -> AssetId<Image> {
         self.image.id()
     }
 
+    /// Gets the size of this font atlas.
     #[inline]
     pub fn size(&self) -> UVec2 {
         let size = self.alloc.size().cast::<u32>();
         uvec2(size.width, size.height)
     }
 
+    /// Gets the glyph information in a tuple of positional offset, size, and index.
     #[inline]
     pub fn get_info(&self, glyph: &LayoutGlyph) -> Option<(IVec2, URect, usize)> {
         self.map.get(&glyph.physical((0., 0.), 1.).cache_key).and_then(|&index| {
@@ -75,11 +81,13 @@ impl FontAtlas {
         })
     }
 
+    /// Gets the glyph information based on its index in a tuple of positional offset and size.
     #[inline]
     pub fn get_info_index(&self, index: usize) -> Option<(IVec2, URect)> {
         Some(*self.nodes.get(index)?)
     }
 
+    /// Gets or loads the glyph information.
     pub fn get_or_create_info(
         &mut self,
         sys: &mut FontSystem,
@@ -224,15 +232,18 @@ impl FontAtlas {
     }
 }
 
+/// Extracted glyph information for use in rendering.
 #[derive(Resource, Default)]
 pub struct ExtractedFontAtlases(HashMap<AssetId<FontAtlas>, ExtractedFontAtlas>);
 impl ExtractedFontAtlases {
+    /// Gets a [`ExtractedFontAtlas`] based on its asset ID.
     #[inline]
     pub fn get(&self, id: impl Into<AssetId<FontAtlas>>) -> Option<&ExtractedFontAtlas> {
         self.0.get(&id.into())
     }
 }
 
+/// Extracted glyph information for use in rendering.
 #[derive(Default)]
 pub struct ExtractedFontAtlas {
     image: AssetId<Image>,
@@ -241,22 +252,26 @@ pub struct ExtractedFontAtlas {
 }
 
 impl ExtractedFontAtlas {
+    /// Gets the underlying images of this font atlas.
     #[inline]
     pub fn image(&self) -> AssetId<Image> {
         self.image
     }
 
+    /// Gets the size of this font atlas.
     #[inline]
     pub fn size(&self) -> UVec2 {
         self.size
     }
 
+    /// Gets the glyph information based on its index in a tuple of positional offset and size.
     #[inline]
     pub fn get_info_index(&self, index: usize) -> Option<(IVec2, URect)> {
         Some(*self.nodes.get(index)?)
     }
 }
 
+/// Extracts font atlases into the render world.
 pub fn extract_font_atlases(
     mut extracted: ResMut<ExtractedFontAtlases>,
     atlases: Extract<Res<Assets<FontAtlas>>>,

@@ -1,3 +1,5 @@
+//! Defines common types of Hephae Text.
+
 use std::{io::Error as IoError, slice::Iter, sync::Mutex};
 
 use async_channel::Sender;
@@ -16,25 +18,36 @@ use thiserror::Error;
 
 use crate::atlas::FontAtlas;
 
+/// A TTF font asset.
 #[derive(Asset, TypePath, Clone)]
 pub struct Font {
+    /// The font ID in the database.
     pub id: FontId,
+    /// The family name of the font.
     pub name: String,
+    /// The font style.
     pub style: Style,
+    /// The font weight.
     pub weight: Weight,
+    /// The font stretch.
     pub stretch: Stretch,
 }
 
+/// Errors that may arise when loading a [`Font`].
 #[derive(Error, Debug)]
 pub enum FontError {
+    /// The async channel between the asset thread and main world thread has been closed.
     #[error("the async channel to add fonts to the database was closed")]
     ChannelClosed,
+    /// An IO error occurred.
     #[error(transparent)]
     Io(#[from] IoError),
+    /// Invalid asset bytes.
     #[error(transparent)]
     Face(#[from] FaceParsingError),
 }
 
+/// Asset loader for [`Font`]s.
 pub struct FontLoader {
     pub(crate) add_to_database: Sender<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>,
 }
@@ -69,16 +82,22 @@ impl AssetLoader for FontLoader {
     }
 }
 
+/// Main text component. May have children entities that have [`TextSpan`] and [`TextFont`]
+/// component.
 #[derive(Component, Reflect, Clone, Default)]
 #[reflect(Component, Default)]
 #[require(TextStructure, TextGlyphs)]
 pub struct Text {
+    /// The text span.
     pub text: String,
+    /// Defines how the text should wrap in case of insufficient space.
     pub wrap: TextWrap,
+    /// Defines how the text should align over extra horizontal space.
     pub align: TextAlign,
 }
 
 impl Text {
+    /// Convenience method to create a new text without wrapping and with left-align.
     #[inline]
     pub fn new(text: impl ToString) -> Self {
         Self {
@@ -88,13 +107,18 @@ impl Text {
     }
 }
 
+/// Defines how the text should wrap in case of insufficient space.
 #[derive(Reflect, Eq, PartialEq, Copy, Clone, Default)]
 #[reflect(Default)]
 pub enum TextWrap {
+    /// Don't wrap.
     #[default]
     None,
+    /// Individual letters may wrap, similar to the behavior seen in command-lines.
     Glyph,
+    /// Individual words may wrap, similar to the behavior seen in text documents.
     Word,
+    /// Words or letters may wrap, preferring the former.
     WordOrGlyph,
 }
 
@@ -110,14 +134,20 @@ impl From<TextWrap> for Wrap {
     }
 }
 
+/// Defines how the text should align over extra horizontal space.
 #[derive(Reflect, Default, Eq, PartialEq, Clone, Copy)]
 #[reflect(Default)]
 pub enum TextAlign {
+    /// Aligns the text left.
     #[default]
     Left,
+    /// Aligns the text right.
     Right,
+    /// Aligns the text at the center.
     Center,
+    /// Similar to left, but makes the left and right border of the text parallel.
     Justified,
+    /// Aligns right for left-to-right fonts, left otherwise.
     End,
 }
 
@@ -134,12 +164,17 @@ impl From<TextAlign> for Align {
     }
 }
 
+/// Defines the font of a [`Text`] or a [`TextSpan`].
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component, Default)]
 pub struct TextFont {
+    /// The font handle.
     pub font: Handle<Font>,
+    /// The font size. Note that frequently changing this will result in high memory usage.
     pub font_size: f32,
+    /// The relative line height of the font.
     pub line_height: f32,
+    /// Whether to antialias the font glyphs.
     pub antialias: bool,
 }
 
@@ -155,9 +190,12 @@ impl Default for TextFont {
     }
 }
 
+/// Contains entities that make up a full text buffer. Listen to [`Changed<TextStructure>`] if you
+/// want to recompute [`TextGlyphs`].
 #[derive(Component, Clone, Deref, DerefMut, Default)]
 pub struct TextStructure(SmallVec<[(Entity, usize); 1]>);
 impl TextStructure {
+    /// Iterates textual entities for use in [`FontLayout`](crate::layout::FontLayout).
     #[inline]
     pub fn iter<'w, 's, 'a, 'b, 'c>(
         &'w self,
@@ -171,13 +209,14 @@ impl TextStructure {
     }
 }
 
+/// Iterates textual entities for use in [`FontLayout`](crate::layout::FontLayout).
 pub struct TextStructureIter<'w, 's, 'a, 'b, 'c> {
     inner: Iter<'w, (Entity, usize)>,
     fonts: SmallVec<[(&'w TextFont, usize); 1]>,
     query: &'w Query<'w, 's, (Option<&'a Text>, Option<&'b TextSpan>, Option<&'c TextFont>)>,
 }
 
-impl<'w, 's, 'a, 'b, 'c> Iterator for TextStructureIter<'w, 's, 'a, 'b, 'c> {
+impl<'w> Iterator for TextStructureIter<'w, '_, '_, '_, '_> {
     type Item = (&'w str, &'w TextFont);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -212,9 +251,12 @@ impl<'w, 's, 'a, 'b, 'c> Iterator for TextStructureIter<'w, 's, 'a, 'b, 'c> {
     }
 }
 
+/// Contains the computed glyphs of a text entity.
 #[derive(Component)]
 pub struct TextGlyphs {
+    /// The glyphs, ready to be rendered.
     pub glyphs: Vec<TextGlyph>,
+    /// The size of the text.
     pub size: Vec2,
     pub(crate) buffer: Mutex<Buffer>,
 }
@@ -230,18 +272,26 @@ impl Default for TextGlyphs {
     }
 }
 
+/// A single information about how a glyph can be rendered.
 #[derive(Copy, Clone)]
 pub struct TextGlyph {
+    /// Positional offset of the glyph relative to the text box's bottom-left corner.
     pub origin: Vec2,
+    /// The size of this glyph.
     pub size: Vec2,
+    /// The atlas that this glyph uses.
     pub atlas: AssetId<FontAtlas>,
+    /// The index of this glyph information in its [`FontAtlas`].
     pub index: usize,
 }
 
+/// May be added to child entities of [`Text`].
 #[derive(Component, Reflect, Default)]
 #[reflect(Component, Default)]
 pub struct TextSpan(pub String);
 
+/// Computes and marks [`TextStructure`] as changed as necessary, for convenience of systems
+/// wishing to listen for change-detection.
 pub fn compute_structure(
     mut text_query: Query<(Entity, &mut TextStructure, Option<&Children>)>,
     recurse_query: Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
@@ -348,6 +398,8 @@ pub fn compute_structure(
     }
 }
 
+/// Computes and marks [`TextStructure`] as changed as necessary, for convenience of systems
+/// wishing to listen for change-detection.
 pub fn notify_structure(
     mut root_query: Query<&mut TextStructure>,
     changed_query: Query<
