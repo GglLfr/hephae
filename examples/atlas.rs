@@ -34,6 +34,7 @@ use hephae::{
         pipeline::{HephaeBatchSection, HephaePipeline},
     },
 };
+use hephae_render::drawer::DrawerExtract;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -164,7 +165,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     }
 }
 
-#[derive(TypePath, Component, Copy, Clone)]
+#[derive(TypePath, Component, Copy, Clone, Default)]
 struct DrawSprite {
     pos: Vec2,
     scl: Vec2,
@@ -183,24 +184,29 @@ impl Drawer for DrawSprite {
 
     #[inline]
     fn extract(
+        mut drawer: DrawerExtract<Self>,
         atlases: &SystemParamItem<Self::ExtractParam>,
-        (&trns, atlas, &index): QueryItem<Self::ExtractData>,
-    ) -> Option<Self> {
-        let atlas = atlases.get(&atlas.atlas)?;
-        let (page_index, rect_index) = index.indices()?;
+        (&trns, atlas, index): QueryItem<Self::ExtractData>,
+    ) {
+        (|| -> Option<()> {
+            let atlas = atlases.get(&atlas.atlas)?;
+            let (page_index, rect_index) = index.indices()?;
 
-        let (page, rect) = atlas
-            .pages
-            .get(page_index)
-            .and_then(|page| Some((page.image.id(), *page.sprites.get(rect_index)?)))?;
+            let (page, rect) = atlas
+                .pages
+                .get(page_index)
+                .and_then(|page| Some((page.image.id(), *page.sprites.get(rect_index)?)))?;
 
-        let (scale, .., translation) = trns.to_scale_rotation_translation();
-        Some(DrawSprite {
-            pos: translation.truncate(),
-            scl: scale.truncate(),
-            page,
-            rect,
-        })
+            let (scale, .., translation) = trns.to_scale_rotation_translation();
+            *drawer.get_or_default() = DrawSprite {
+                pos: translation.truncate(),
+                scl: scale.truncate(),
+                page,
+                rect,
+            };
+
+            None
+        })();
     }
 
     #[inline]

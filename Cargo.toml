@@ -37,7 +37,7 @@ rust-version = "1.83"
 categories = ["graphics", "rendering"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/GlennFolker/hephae"
-version = "0.4.0"
+version = "0.5.0"
 
 [workspace.lints.clippy]
 type_complexity = "allow"
@@ -70,10 +70,10 @@ smallvec = "1"
 sys-locale = "0.3"
 thiserror = "2"
 
-hephae-atlas = { version = "0.4.0", path = "crates/atlas" }
-hephae-gui = { version = "0.4.0", path = "crates/gui" }
-hephae-render = { version = "0.4.0", path = "crates/render" }
-hephae-text = { version = "0.4.0", path = "crates/text" }
+hephae-atlas = { version = "0.5.0", path = "crates/atlas" }
+hephae-gui = { version = "0.5.0", path = "crates/gui" }
+hephae-render = { version = "0.5.0", path = "crates/render" }
+hephae-text = { version = "0.5.0", path = "crates/text" }
 
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }

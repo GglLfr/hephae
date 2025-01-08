@@ -16,6 +16,7 @@ use bevy::{
 };
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
+use hephae_render::drawer::DrawerExtract;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -100,8 +101,8 @@ impl Drawer for Draw {
     type DrawParam = SRes<Time>;
 
     #[inline]
-    fn extract(_: &SystemParamItem<Self::ExtractParam>, _: QueryItem<Self::ExtractData>) -> Option<Self> {
-        Some(Self)
+    fn extract(mut drawer: DrawerExtract<Self>, _: &SystemParamItem<Self::ExtractParam>, _: QueryItem<Self::ExtractData>) {
+        *drawer.get_mut(|| Self) = Self;
     }
 
     #[inline]

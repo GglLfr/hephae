@@ -17,6 +17,7 @@ use bevy::{
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
 use hephae_gui::gui::{Gui, GuiDepth};
+use hephae_render::drawer::DrawerExtract;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -86,7 +87,7 @@ impl Vertex for Vert {
     fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}
 }
 
-#[derive(TypePath, Component, Copy, Clone)]
+#[derive(TypePath, Component, Copy, Clone, Default)]
 struct Draw(Gui, GuiDepth);
 impl Drawer for Draw {
     type Vertex = Vert;
@@ -98,8 +99,14 @@ impl Drawer for Draw {
     type DrawParam = ();
 
     #[inline]
-    fn extract(_: &SystemParamItem<Self::ExtractParam>, (&gui, &gui_depth): QueryItem<Self::ExtractData>) -> Option<Self> {
-        Some(Self(gui, gui_depth))
+    fn extract(
+        mut drawer: DrawerExtract<Self>,
+        _: &SystemParamItem<Self::ExtractParam>,
+        (&gui, &gui_depth): QueryItem<Self::ExtractData>,
+    ) {
+        let drawer = drawer.get_or_default();
+        drawer.0 = gui;
+        drawer.1 = gui_depth;
     }
 
     #[inline]
@@ -124,7 +131,7 @@ impl Drawer for Draw {
     }
 }
 
-#[derive(TypePath, Component, Clone)]
+#[derive(TypePath, Component, Clone, Default)]
 struct DrawText(Gui, GuiDepth, Vec<TextGlyph>);
 impl Drawer for DrawText {
     type Vertex = Vert;
@@ -137,10 +144,15 @@ impl Drawer for DrawText {
 
     #[inline]
     fn extract(
+        mut drawer: DrawerExtract<Self>,
         _: &SystemParamItem<Self::ExtractParam>,
         (&gui, &gui_depth, glyphs): QueryItem<Self::ExtractData>,
-    ) -> Option<Self> {
-        Some(Self(gui, gui_depth, glyphs.glyphs.clone()))
+    ) {
+        let drawer = drawer.get_or_default();
+        drawer.0 = gui;
+        drawer.1 = gui_depth;
+        drawer.2.clear();
+        drawer.2.extend_from_slice(&glyphs.glyphs);
     }
 
     #[inline]

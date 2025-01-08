@@ -35,6 +35,7 @@ use hephae::{
         pipeline::{HephaeBatchSection, HephaePipeline},
     },
 };
+use hephae_render::drawer::DrawerExtract;
 use hephae_text::atlas::FontAtlas;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -176,7 +177,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
     }
 }
 
-#[derive(TypePath, Component, Clone)]
+#[derive(TypePath, Component, Clone, Default)]
 struct DrawText {
     pos: Vec2,
     glyphs: Vec<TextGlyph>,
@@ -192,11 +193,15 @@ impl Drawer for DrawText {
     type DrawParam = SRes<ExtractedFontAtlases>;
 
     #[inline]
-    fn extract(_: &SystemParamItem<Self::ExtractParam>, (&trns, glyphs): QueryItem<Self::ExtractData>) -> Option<Self> {
-        Some(Self {
-            pos: trns.translation().truncate() - glyphs.size / 2.,
-            glyphs: glyphs.glyphs.clone(),
-        })
+    fn extract(
+        mut drawer: DrawerExtract<Self>,
+        _: &SystemParamItem<Self::ExtractParam>,
+        (&trns, glyphs): QueryItem<Self::ExtractData>,
+    ) {
+        let drawer = drawer.get_or_default();
+        drawer.pos = trns.translation().truncate() - glyphs.size / 2.;
+        drawer.glyphs.clear();
+        drawer.glyphs.extend_from_slice(&glyphs.glyphs);
     }
 
     #[inline]

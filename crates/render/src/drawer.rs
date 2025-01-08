@@ -72,7 +72,11 @@ pub trait Drawer: TypePath + Component + Sized {
     type DrawParam: ReadOnlySystemParam;
 
     /// Extracts an instance of this drawer from matching entities, if available.
-    fn extract(param: &SystemParamItem<Self::ExtractParam>, query: QueryItem<Self::ExtractData>) -> Option<Self>;
+    fn extract(
+        drawer: DrawerExtract<Self>,
+        param: &SystemParamItem<Self::ExtractParam>,
+        query: QueryItem<Self::ExtractData>,
+    );
 
     /// Issues [`VertexCommand`](crate::vertex::VertexCommand)s for rendering, in a form of Z-layer,
     /// [pipeline key](Vertex::PipelineKey), and [vertex command](Vertex::Command).
@@ -81,6 +85,34 @@ pub trait Drawer: TypePath + Component + Sized {
         param: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
     );
+}
+
+/// Specifies the behavior of [`Drawer::extract`].
+pub enum DrawerExtract<'a, T: Drawer> {
+    /// The render-world component exists, and may be used to optimize allocations.
+    Borrowed(&'a mut T),
+    /// The drawer needs to create a new instance of itself.
+    Spawn(&'a mut Option<T>),
+}
+
+impl<T: Drawer> DrawerExtract<'_, T> {
+    /// Gets a mutable reference to the underlying component, creating a new one if necessary.
+    #[inline]
+    pub fn get_mut(&mut self, new: impl FnOnce() -> T) -> &mut T {
+        match self {
+            Self::Borrowed(value) => value,
+            Self::Spawn(opt) => opt.insert(new()),
+        }
+    }
+
+    /// Gets a mutable reference to the underlying component, creating a new one if necessary.
+    #[inline]
+    pub fn get_or_default(&mut self) -> &mut T
+    where
+        T: Default,
+    {
+        self.get_mut(Default::default)
+    }
 }
 
 /// Marker component for entities that may extract out [`Drawer`]s to the render world. This *must*
@@ -111,13 +143,19 @@ pub fn extract_drawers<T: Drawer>(
     mut commands: Commands,
     param: Extract<T::ExtractParam>,
     query: Extract<Query<(RenderEntity, &ViewVisibility, T::ExtractData), (T::ExtractFilter, With<HasDrawer<T>>)>>,
+    mut target_query: Query<&mut T>,
 ) {
     for (e, &view, data) in &query {
         if view.get() {
-            if let Some(out) = T::extract(&param, data) {
-                commands.entity(e).insert(out);
+            if let Ok(mut dst) = target_query.get_mut(e) {
+                T::extract(DrawerExtract::Borrowed(&mut dst), &param, data)
             } else {
-                commands.entity(e).remove::<T>();
+                let mut extract = None;
+                T::extract(DrawerExtract::Spawn(&mut extract), &param, data);
+
+                if let Some(extract) = extract {
+                    commands.entity(e).insert(extract);
+                }
             }
         }
     }
