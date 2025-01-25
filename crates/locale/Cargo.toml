@@ -26,6 +26,7 @@ bevy_ecs.workspace = true
 bevy_reflect.workspace = true
 bevy_utils.workspace = true
 
+scopeguard.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true

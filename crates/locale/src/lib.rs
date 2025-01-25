@@ -17,7 +17,7 @@ pub mod plugin {
     use hephae_utils::derive::plugin_conf;
 
     use crate::{
-        def::{LocArg, LocSrc, Locale, LocaleFmt, Locales, Localize, LocalizeArgs},
+        def::{LocArg, LocSrc, Locale, LocaleChangeEvent, LocaleFmt, Locales, Localize, LocalizeArgs, LocalizeResult},
         loader::{LocaleLoader, LocalesLoader},
     };
 
@@ -37,13 +37,16 @@ pub mod plugin {
                         .add(|app: &mut App| {
                             app.register_type::<LocaleFmt>()
                                 .register_type::<Localize>()
+                                .register_type::<LocalizeResult>()
                                 .register_type::<LocalizeArgs>()
                                 .init_asset::<Locale>()
                                 .register_asset_reflect::<Locale>()
                                 .register_asset_loader(LocaleLoader)
                                 .init_asset::<Locales>()
                                 .register_asset_reflect::<Locales>()
-                                .register_asset_loader(LocalesLoader);
+                                .register_asset_loader(LocalesLoader)
+                                .add_event::<LocaleChangeEvent>()
+                                .register_type::<LocaleChangeEvent>();
                         })
                         .add(locale::<&'static str>())
                         .add(locale::<String>())

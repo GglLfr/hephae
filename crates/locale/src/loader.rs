@@ -7,6 +7,91 @@ use thiserror::Error;
 
 use crate::def::{Locale, LocaleFmt, Locales};
 
+impl FromStr for LocaleFmt {
+    type Err = usize;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars = s.chars().enumerate();
+
+        #[derive(Copy, Clone)]
+        enum State {
+            Unescaped,
+            PreEscaped(bool),
+            Index,
+        }
+
+        use State::*;
+
+        let mut format = String::new();
+        let mut args = Vec::new();
+        let mut range = 0..0;
+        let mut state = Unescaped;
+
+        let mut index = 0usize;
+        for (i, char) in chars {
+            match char {
+                '{' => {
+                    state = match state {
+                        Unescaped => PreEscaped(false),
+                        PreEscaped(false) => {
+                            format.push('{');
+                            range.end = format.len();
+
+                            Unescaped
+                        }
+                        PreEscaped(true) | Index => return Err(i),
+                    }
+                }
+                '}' => {
+                    state = match state {
+                        Unescaped => PreEscaped(true),
+                        PreEscaped(false) => return Err(i),
+                        PreEscaped(true) => {
+                            format.push('}');
+                            range.end = format.len();
+
+                            Unescaped
+                        }
+                        Index => {
+                            args.push((range.clone(), index));
+                            range.start = range.end;
+
+                            Unescaped
+                        }
+                    }
+                }
+                '0'..='9' => match state {
+                    Unescaped => {
+                        format.push(char);
+                        range.end = format.len();
+                    }
+                    PreEscaped(false) => state = Index,
+                    PreEscaped(true) => return Err(i),
+                    Index => {
+                        index = index
+                            .checked_mul(10)
+                            .and_then(|index| index.checked_add(char.to_digit(10)? as usize))
+                            .ok_or(i)?;
+                    }
+                },
+                _ => match state {
+                    Unescaped => {
+                        format.push(char);
+                        range.end = format.len();
+                    }
+                    _ => return Err(i),
+                },
+            }
+        }
+
+        Ok(if args.is_empty() {
+            Self::Unformatted(format)
+        } else {
+            Self::Formatted { format, args }
+        })
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum LocaleError {
     #[error(transparent)]

@@ -118,6 +118,5 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
         #base
         #unit
         #(#tuples)*
-    }
-    .into())
+    })
 }
