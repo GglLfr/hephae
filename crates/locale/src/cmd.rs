@@ -5,7 +5,7 @@ use bevy_ecs::prelude::*;
 use bevy_utils::all_tuples;
 use smallvec::{smallvec, SmallVec};
 
-use crate::def::{LocArg, LocCache, LocSrc, Locales, Localize, LocalizeArgs};
+use crate::def::{LocArg, LocArgs, LocCache, LocKey, LocSrc, Locales};
 
 pub trait LocBundle {
     fn spawn(this: Self, commands: Commands) -> SmallVec<[Entity; 4]>;
@@ -62,11 +62,11 @@ impl LocCommandsExt for Commands<'_, '_> {
         let args = L::spawn(loc, self.reborrow());
         self.spawn((
             bundle,
-            Localize {
+            LocKey {
                 key: key.into(),
                 collection: handle,
             },
-            LocalizeArgs(args),
+            LocArgs(args),
         ))
     }
 }
@@ -80,11 +80,11 @@ impl LocEntityCommandsExt for EntityCommands<'_> {
     fn localize<L: LocBundle>(&mut self, key: impl Into<Cow<'static, str>>, handle: Handle<Locales>, loc: L) -> &mut Self {
         let args = L::spawn(loc, self.commands());
         self.insert((
-            Localize {
+            LocKey {
                 key: key.into(),
                 collection: handle,
             },
-            LocalizeArgs(args),
+            LocArgs(args),
         ))
     }
 }

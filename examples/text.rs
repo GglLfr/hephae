@@ -35,6 +35,7 @@ use hephae::{
         pipeline::{HephaeBatchSection, HephaePipeline},
     },
 };
+use hephae_locale::def::LocaleChangeEvent;
 use hephae_render::drawer::DrawerExtract;
 use hephae_text::atlas::FontAtlas;
 
@@ -259,61 +260,82 @@ fn main() {
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             hephae::render::<Vert, DrawText>(),
             hephae::text(),
+            hephae::locales::<()>(),
         ))
         .add_systems(Startup, startup)
-        .add_systems(Update, update)
+        .add_systems(Update, (update, switch_locale))
         .run();
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
-    commands.spawn((
-        Transform::IDENTITY,
-        Text::new("Hi, Hephae!"),
-        TextFont {
-            font: server.load("fonts/roboto.ttf"),
-            font_size: 64.,
-            line_height: 1.,
-            antialias: true,
-        },
-        HasDrawer::<DrawText>::new(),
-    ));
+    commands.spawn_localized(
+        (
+            Transform::IDENTITY,
+            Text::default(),
+            TextFont {
+                font: server.load("fonts/roboto.ttf"),
+                font_size: 64.,
+                line_height: 1.,
+                antialias: true,
+            },
+            HasDrawer::<DrawText>::new(),
+        ),
+        "intro",
+        server.load("locales/locales.ron"),
+        (),
+    );
 }
 
 fn update(
     mut font_layout: ResMut<FontLayout>,
-    mut query: Query<(&mut TextGlyphs, &Text, &TextFont)>,
+    mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont, &LocResult)>,
     window: Query<&Window, With<PrimaryWindow>>,
     fonts: Res<Assets<Font>>,
     mut images: ResMut<Assets<Image>>,
     mut atlases: ResMut<Assets<FontAtlas>>,
-    mut updated: Local<bool>,
 ) {
-    if *updated {
-        return
-    }
-
     let Ok(window) = window.get_single() else { return };
     let scale = window.scale_factor();
 
-    for (mut glyphs, text, text_font) in &mut query {
-        if font_layout
-            .get_mut()
-            .compute_glyphs(
-                &mut glyphs,
-                (None, None),
-                default(),
-                default(),
-                scale,
-                &fonts,
-                &mut images,
-                &mut atlases,
-                [(&*text.text, text_font)].into_iter(),
-            )
-            .is_ok()
-        {
-            *updated = true;
-        }
+    for (mut glyphs, mut text, text_font, result) in &mut query {
+        text.text.clone_from(result);
+        _ = font_layout.get_mut().compute_glyphs(
+            &mut glyphs,
+            (None, None),
+            default(),
+            default(),
+            scale,
+            &fonts,
+            &mut images,
+            &mut atlases,
+            [(&*text.text, text_font)].into_iter(),
+        );
+    }
+}
+
+fn switch_locale(
+    mut events: EventWriter<LocaleChangeEvent>,
+    time: Res<Time>,
+    mut to_english: Local<bool>,
+    mut timer: Local<f64>,
+) {
+    *timer += time.delta_secs_f64();
+    if *timer >= 1. {
+        *timer %= 1.;
+        events.send(LocaleChangeEvent(
+            match *to_english {
+                false => {
+                    *to_english = true;
+                    "id-ID"
+                }
+                true => {
+                    *to_english = false;
+                    "en-US"
+                }
+            }
+            .into(),
+        ));
     }
 }

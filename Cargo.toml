@@ -116,4 +116,4 @@ required-features = ["gui", "text"]
 
 [[example]]
 name = "text"
-required-features = ["text"]
+required-features = ["text", "locale"]

@@ -127,18 +127,18 @@ impl LocArg for Cow<'static, str> {
 
 #[derive(Component, Reflect, Clone, Deref, DerefMut)]
 #[component(on_remove = remove_localize)]
-#[require(LocalizeResult)]
+#[require(LocResult)]
 #[reflect(Component)]
-pub struct Localize {
+pub struct LocKey {
     #[deref]
     pub key: Cow<'static, str>,
     pub collection: Handle<Locales>,
 }
 
 fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
-    let args = std::mem::take(&mut world.get_mut::<LocalizeArgs>(e).unwrap().0);
+    let args = std::mem::take(&mut world.get_mut::<LocArgs>(e).unwrap().0);
     world.commands().queue(move |world: &mut World| {
-        world.entity_mut(e).remove::<LocalizeArgs>();
+        world.entity_mut(e).remove::<LocArgs>();
         for arg in args {
             world.despawn(arg);
         }
@@ -147,7 +147,7 @@ fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
 
 #[derive(Component, Reflect, Clone, Default, Deref, DerefMut)]
 #[reflect(Component, Default)]
-pub struct LocalizeResult {
+pub struct LocResult {
     #[deref]
     pub result: String,
     #[reflect(ignore)]
@@ -158,8 +158,8 @@ pub struct LocalizeResult {
 
 #[derive(Component, Reflect, Clone, VisitEntitiesMut)]
 #[reflect(Component, MapEntities, VisitEntities, VisitEntitiesMut)]
-pub(crate) struct LocalizeArgs(pub SmallVec<[Entity; 4]>);
-impl<'a> IntoIterator for &'a LocalizeArgs {
+pub(crate) struct LocArgs(pub SmallVec<[Entity; 4]>);
+impl<'a> IntoIterator for &'a LocArgs {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = Iter<'a, Entity>;
 
@@ -186,7 +186,7 @@ pub(crate) fn update_locale_asset(
     mut locale_events: EventReader<AssetEvent<Locale>>,
     mut change_events: EventReader<LocaleChangeEvent>,
     locales: Res<Assets<Locales>>,
-    mut localize_query: Query<(Ref<Localize>, &mut LocalizeResult, &LocalizeArgs)>,
+    mut localize_query: Query<(Ref<LocKey>, &mut LocResult, &LocArgs)>,
     mut cache_query: Query<&mut LocCache>,
     mut last: Local<Option<String>>,
 ) {
@@ -278,7 +278,7 @@ pub(crate) fn update_locale_cache<T: LocArg>(locales: Res<Assets<Locale>>, mut s
 
 pub(crate) fn update_locale_result(
     locales: Res<Assets<Locale>>,
-    mut result: Query<(Entity, &Localize, &mut LocalizeResult, &LocalizeArgs)>,
+    mut result: Query<(Entity, &LocKey, &mut LocResult, &LocArgs)>,
     cache_query: Query<&LocCache>,
     mut arguments: Local<Vec<&'static str>>,
 ) {
@@ -303,6 +303,7 @@ pub(crate) fn update_locale_result(
             continue 'outer
         };
 
+        // Alert `Changed<T>` so systems can listen to it.
         let result = result.into_inner();
         result.changed = false;
 
