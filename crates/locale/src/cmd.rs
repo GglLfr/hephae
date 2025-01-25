@@ -19,6 +19,7 @@ impl<T: LocArg> LocBundle for T {
 
 macro_rules! impl_loc_bundle {
     ($(($T:ident, $t:ident)),*) => {
+        #[cfg_attr(docsrs, doc(fake_variadic))]
         impl<$($T: LocBundle),*> LocBundle for ($($T,)*) {
             #[allow(unused)]
             fn spawn(($($t,)*): Self, mut commands: Commands) -> SmallVec<[Entity; 4]> {

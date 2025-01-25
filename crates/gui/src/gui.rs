@@ -2,21 +2,18 @@
 
 use std::{any::type_name, marker::PhantomData};
 
-use bevy_app::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::ComponentId,
     prelude::*,
     query::{QueryData, QueryFilter, QueryItem, ReadOnlyQueryData},
     system::{ReadOnlySystemParam, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredEntityRef},
+    world::{unsafe_world_cell::UnsafeWorldCell, FilteredEntityRef},
 };
 use bevy_hierarchy::prelude::*;
 use bevy_math::{prelude::*, Affine2, Affine3A, Vec3A};
 use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
-
-use crate::{layout::calculate_root, HephaeGuiSystems};
 
 /// The heart of Hephae GUI. All GUI entities must have this component (which is usually done
 /// automatically by required components).

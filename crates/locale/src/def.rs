@@ -1,18 +1,12 @@
-use std::{
-    borrow::Cow,
-    ops::Range,
-    str::FromStr,
-    sync::{Arc, Weak},
-};
+use std::{borrow::Cow, ops::Range, slice::Iter, str::FromStr};
 
 use bevy_asset::{prelude::*, ReflectAsset, UntypedAssetId, VisitAssetDependencies};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
-    component::{ComponentHooks, ComponentId, Components, RequiredComponents, StorageType},
-    entity::{MapEntities, VisitEntities},
+    component::ComponentId,
+    entity::VisitEntitiesMut,
     prelude::*,
-    reflect::ReflectMapEntities,
-    storage::Storages,
+    reflect::{ReflectMapEntities, ReflectVisitEntities, ReflectVisitEntitiesMut},
     world::DeferredWorld,
 };
 use bevy_reflect::{prelude::*, Reflectable};
@@ -183,9 +177,18 @@ fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
     });
 }
 
-#[derive(Component, Reflect, Clone)]
-#[reflect(Component)]
+#[derive(Component, Reflect, Clone, VisitEntitiesMut)]
+#[reflect(Component, MapEntities, VisitEntities, VisitEntitiesMut)]
 pub(crate) struct LocalizeArgs(pub SmallVec<[Entity; 4]>);
+impl<'a> IntoIterator for &'a LocalizeArgs {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = Iter<'a, Entity>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
 
 #[derive(Component, Reflect, Deref)]
 #[require(LocCache)]
