@@ -25,8 +25,11 @@ resolver = "2"
 members = [
     "crates/atlas",
     "crates/gui",
+    "crates/locale",
     "crates/render",
     "crates/text",
+    "crates/utils",
+    "crates/utils/derive",
 ]
 
 [workspace.package]
@@ -51,6 +54,7 @@ bevy_derive = "0.15"
 bevy_ecs = "0.15"
 bevy_hierarchy = "0.15"
 bevy_image = "0.15"
+bevy_macro_utils = "0.15"
 bevy_math = "0.15"
 bevy_reflect = "0.15"
 bevy_render = "0.15"
@@ -64,22 +68,28 @@ dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 guillotiere = "0.6"
 nonmax = "0.5"
+quote = "1"
 scopeguard = "1"
 serde = { version = "1", features = ["derive"] }
 smallvec = "1"
+syn = { version = "2", features = ["full"] }
 sys-locale = "0.3"
 thiserror = "2"
 
 hephae-atlas = { version = "0.5.0", path = "crates/atlas" }
 hephae-gui = { version = "0.5.0", path = "crates/gui" }
+hephae-locale = { version = "0.5.0", path = "crates/locale" }
 hephae-render = { version = "0.5.0", path = "crates/render" }
 hephae-text = { version = "0.5.0", path = "crates/text" }
+hephae-utils = { version = "0.5.0", path = "crates/utils" }
 
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }
 hephae-gui = { optional = true, workspace = true }
+hephae-locale = { optional = true, workspace = true }
 hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
+hephae-utils.workspace = true
 
 [dev-dependencies]
 bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "png"] }
@@ -87,9 +97,10 @@ bevy = { version = "0.15", default-features = false, features = ["bevy_window", 
 bytemuck.workspace = true
 
 [features]
-default = ["atlas", "gui", "text"]
+default = ["atlas", "gui", "locale", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
+locale = ["dep:hephae-locale"]
 text = ["dep:hephae-text", "hephae-gui?/text"]
 
 [[example]]

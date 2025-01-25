@@ -2,7 +2,6 @@
 
 use std::{marker::PhantomData, sync::PoisonError};
 
-use bevy_app::prelude::*;
 use bevy_ecs::{
     prelude::*,
     query::{QueryFilter, QueryItem, ReadOnlyQueryData},
@@ -11,49 +10,13 @@ use bevy_ecs::{
 use bevy_reflect::prelude::*;
 use bevy_render::{
     prelude::*,
-    sync_component::SyncComponentPlugin,
     sync_world::RenderEntity,
     view::{ExtractedView, RenderVisibleEntities},
-    Extract, Render, RenderApp,
+    Extract,
 };
 use fixedbitset::FixedBitSet;
 
-use crate::{
-    vertex::{Vertex, VertexDrawers, VertexQueues},
-    HephaeRenderSystems,
-};
-
-/// Integrates [`Drawer`] into your application for entities to render into the Hephae rendering
-/// pipeline.
-pub struct DrawerPlugin<D: Drawer>(PhantomData<fn() -> D>);
-impl<T: Drawer> Default for DrawerPlugin<T> {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<D: Drawer> DrawerPlugin<D> {
-    /// Shortcut for `DrawerPlugin(PhantomData)`.
-    pub const fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T: Drawer> Plugin for DrawerPlugin<T> {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(SyncComponentPlugin::<HasDrawer<T>>::default())
-            .register_type::<HasDrawer<T>>()
-            .world_mut()
-            .resource_scope::<VertexDrawers<T::Vertex>, ()>(|world, mut drawers| drawers.add::<T>(world));
-
-        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
-            render_app
-                .add_systems(ExtractSchedule, extract_drawers::<T>)
-                .add_systems(Render, queue_drawers::<T>.in_set(HephaeRenderSystems::QueueDrawers));
-        }
-    }
-}
+use crate::vertex::{Vertex, VertexQueues};
 
 /// A render world [`Component`] extracted from the main world that will be used to issue
 /// [`VertexCommand`](crate::vertex::VertexCommand)s.

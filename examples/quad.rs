@@ -136,7 +136,7 @@ impl VertexCommand for Quad {
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, HephaeRenderPlugin::<Vert>::new(), DrawerPlugin::<Draw>::new()))
+        .add_plugins((DefaultPlugins, hephae::render::<Vert, Draw>()))
         .add_systems(Startup, startup)
         .run();
 }

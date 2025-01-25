@@ -257,9 +257,8 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
-            HephaeRenderPlugin::<Vert>::new(),
-            DrawerPlugin::<DrawText>::new(),
-            HephaeTextPlugin,
+            hephae::render::<Vert, DrawText>(),
+            hephae::text(),
         ))
         .add_systems(Startup, startup)
         .add_systems(Update, update)

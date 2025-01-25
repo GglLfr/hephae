@@ -436,50 +436,6 @@ impl<F: QueryFilter> ChangedQuery for QueryState<Entity, F> {
     }
 }
 
-/// Registers `T` GUI layout and all of the systems associates with it to the application.
-pub struct GuiLayoutPlugin<T: GuiLayout>(PhantomData<fn() -> T>);
-impl<T: GuiLayout> GuiLayoutPlugin<T> {
-    /// Creates a new [`GuiLayoutPlugin`].
-    #[inline]
-    pub const fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T: GuiLayout> Default for GuiLayoutPlugin<T> {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: GuiLayout> Clone for GuiLayoutPlugin<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: GuiLayout> Copy for GuiLayoutPlugin<T> {}
-
-impl<T: GuiLayout> Plugin for GuiLayoutPlugin<T> {
-    fn build(&self, app: &mut App) {
-        fn hook(mut world: DeferredWorld, e: Entity, _: ComponentId) {
-            let mut e = world.entity_mut(e);
-
-            // The `unwrap()` never fails here because `T` requires `LayoutCache`.
-            let mut cache = e.get_mut::<LayoutCache>().unwrap();
-            **cache = None
-        }
-
-        app.register_required_components::<T, LayoutCache>();
-
-        let world = app.world_mut();
-        world.register_component_hooks::<T>().on_add(hook).on_remove(hook);
-        world.resource_scope(|world, mut layouts: Mut<GuiLayouts>| layouts.register::<T>(world))
-    }
-}
-
 /// A GUI root component, responsible for how its children are recursively projected into the 3D
 /// space for the camera to pick up. A GUI root component may not have a parent with a [`Gui`]
 /// component.
@@ -500,41 +456,5 @@ impl GuiRoots {
     #[inline]
     pub fn register<T: GuiRoot>(&mut self, world: &mut World) {
         self.0.push(world.register_component::<T>())
-    }
-}
-
-/// Registers `T` GUI root and all of the systems associates with it to the application.
-pub struct GuiRootPlugin<T: GuiRoot>(PhantomData<fn() -> T>);
-impl<T: GuiRoot> GuiRootPlugin<T> {
-    /// Creates a new [`GuiRootPlugin`].
-    #[inline]
-    pub const fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T: GuiRoot> Default for GuiRootPlugin<T> {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: GuiRoot> Clone for GuiRootPlugin<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: GuiRoot> Copy for GuiRootPlugin<T> {}
-
-impl<T: GuiRoot> Plugin for GuiRootPlugin<T> {
-    fn build(&self, app: &mut App) {
-        app.register_required_components::<T, GuiRootTransform>()
-            .register_required_components::<T, GuiRootSpace>()
-            .add_systems(PostUpdate, calculate_root::<T>.in_set(HephaeGuiSystems::CalculateRoot))
-            .world_mut()
-            .resource_scope(|world, mut roots: Mut<GuiRoots>| roots.register::<T>(world))
     }
 }

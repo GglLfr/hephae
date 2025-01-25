@@ -1,0 +1,23 @@
+[package]
+name = "hephae-utils"
+description = "Hephae's generic utility module."
+authors.workspace = true
+edition.workspace = true
+keywords.workspace = true
+rust-version.workspace = true
+categories.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+bevy_app.workspace = true
+bevy_utils.workspace = true
+
+hephae-utils-derive = { version = "0.5", path = "derive" }

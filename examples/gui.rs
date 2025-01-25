@@ -228,11 +228,9 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            HephaeRenderPlugin::<Vert>::new(),
-            DrawerPlugin::<Draw>::new(),
-            DrawerPlugin::<DrawText>::new(),
-            HephaeTextPlugin,
-            HephaeGuiPlugin,
+            hephae::render::<Vert, (Draw, DrawText)>(),
+            hephae::text(),
+            hephae::gui::<(), ()>(),
         ))
         .add_systems(Startup, startup)
         .add_systems(Update, rotate)

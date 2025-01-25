@@ -8,6 +8,7 @@ pub use hephae_gui as gui;
 pub use hephae_render as render;
 #[cfg(feature = "text")]
 pub use hephae_text as text;
+pub use hephae_utils as utils;
 
 /// Common imports for [`hephae`](crate).
 pub mod prelude {
@@ -15,7 +16,15 @@ pub mod prelude {
     pub use crate::atlas::prelude::*;
     #[cfg(feature = "gui")]
     pub use crate::gui::prelude::*;
-    pub use crate::render::prelude::*;
     #[cfg(feature = "text")]
     pub use crate::text::prelude::*;
+    pub use crate::{render::prelude::*, utils::prelude::*};
 }
+
+#[cfg(feature = "atlas")]
+pub use crate::atlas::plugin::*;
+#[cfg(feature = "gui")]
+pub use crate::gui::plugin::*;
+pub use crate::render::plugin::*;
+#[cfg(feature = "text")]
+pub use crate::text::plugin::*;

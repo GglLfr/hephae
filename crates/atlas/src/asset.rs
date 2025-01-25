@@ -246,8 +246,8 @@ pub enum TextureAtlasError {
 ///
 /// This asset loader also adds [`pages[i].image`](AtlasPage::image) as a labelled asset with label
 /// `"page-{i}"` (without the brackets). Therefore, doing (for example)
-/// `server.load::<Image>("sprites.atlas#page-0")` is possible and will return the 0th page image of
-/// the atlas, provided the atlas actually has a 0th page.
+/// `server.load::<Image>("sprites.atlas.ron#page-0")` is possible and will return the 0th page
+/// image of the atlas, provided the atlas actually has a 0th page.
 pub struct TextureAtlasLoader;
 impl AssetLoader for TextureAtlasLoader {
     type Asset = TextureAtlas;
@@ -512,6 +512,6 @@ impl AssetLoader for TextureAtlasLoader {
 
     #[inline]
     fn extensions(&self) -> &[&str] {
-        &["atlas"]
+        &["atlas.ron"]
     }
 }

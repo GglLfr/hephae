@@ -10,7 +10,7 @@ use bevy_ecs::{
     entity::{EntityHash, EntityHashMap},
     prelude::*,
     storage::SparseSet,
-    system::{lifetimeless::Read, SystemParam, SystemParamItem, SystemState},
+    system::{lifetimeless::Read, ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
     world::FilteredEntityRef,
 };
 use bevy_render::{
@@ -69,7 +69,7 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// Additional GPU render commands to invoke before actually drawing the vertex and index
     /// buffers. For example, this may be used to set the texture-sampling bind group provided by
     /// [`BatchProp`](Vertex::BatchProp).
-    type RenderCommand: RenderCommand<Self::Item> + Send + Sync;
+    type RenderCommand: RenderCommand<Self::Item, Param: ReadOnlySystemParam> + Send + Sync;
 
     /// Path to the shader rendering vertex attributes of this type. Entry points should be
     /// `vertex(...)` and `fragment(...)`.

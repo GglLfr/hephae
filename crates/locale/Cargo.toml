@@ -1,6 +1,6 @@
 [package]
-name = "hephae-render"
-description = "Hephae's core rendering module."
+name = "hephae-locale"
+description = "Hephae's localization module."
 authors.workspace = true
 edition.workspace = true
 keywords.workspace = true
@@ -21,14 +21,11 @@ hephae-utils.workspace = true
 
 bevy_app.workspace = true
 bevy_asset.workspace = true
-bevy_core_pipeline.workspace = true
+bevy_derive.workspace = true
 bevy_ecs.workspace = true
-bevy_image.workspace = true
 bevy_reflect.workspace = true
-bevy_render.workspace = true
-bevy_transform.workspace = true
 bevy_utils.workspace = true
 
-bytemuck.workspace = true
-dashmap.workspace = true
-fixedbitset.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+thiserror.workspace = true

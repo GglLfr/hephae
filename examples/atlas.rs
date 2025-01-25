@@ -278,9 +278,8 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
-            HephaeRenderPlugin::<SpriteVertex>::new(),
-            AtlasPlugin,
-            DrawerPlugin::<DrawSprite>::new(),
+            hephae::render::<SpriteVertex, DrawSprite>(),
+            hephae::atlas(),
         ))
         .add_systems(Startup, startup)
         .run();
@@ -302,7 +301,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                 ..default()
             },
             AtlasEntry {
-                atlas: server.load::<TextureAtlas>("sprites/sprites.atlas"),
+                atlas: server.load::<TextureAtlas>("sprites/sprites.atlas.ron"),
                 key: "cix".into(),
             },
             HasDrawer::<DrawSprite>::new(),
