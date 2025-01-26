@@ -100,7 +100,7 @@ bytemuck.workspace = true
 default = ["atlas", "gui", "locale", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
-locale = ["dep:hephae-locale"]
+locale = ["dep:hephae-locale", "hephae-text?/locale"]
 text = ["dep:hephae-text", "hephae-gui?/text"]
 
 [[example]]

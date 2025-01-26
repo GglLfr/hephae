@@ -13,6 +13,8 @@ use cosmic_text::{
     fontdb::ID as FontId, ttf_parser::FaceParsingError, Align, Buffer, Metrics, Stretch, Style, Weight, Wrap,
 };
 use fixedbitset::FixedBitSet;
+#[cfg(feature = "locale")]
+use hephae_locale::prelude::*;
 use smallvec::SmallVec;
 use thiserror::Error;
 
@@ -104,6 +106,14 @@ impl Text {
             text: text.to_string(),
             ..Self::default()
         }
+    }
+}
+
+#[cfg(feature = "locale")]
+impl LocaleTarget for Text {
+    #[inline]
+    fn update(&mut self, src: &str) {
+        src.clone_into(&mut self.text);
     }
 }
 

@@ -24,7 +24,7 @@ pub mod prelude {
 pub mod plugin {
     use std::sync::Mutex;
 
-    use bevy_app::prelude::*;
+    use bevy_app::{prelude::*, PluginGroupBuilder};
     use bevy_asset::AssetApp;
     use bevy_ecs::prelude::IntoSystemConfigs;
     use bevy_render::{ExtractSchedule, RenderApp};
@@ -37,38 +37,53 @@ pub mod plugin {
     };
 
     /// Provides text-rendering functionality into the app.
-    pub fn text() -> impl Plugin {
-        |app: &mut App| {
-            let (sender, receiver) = async_channel::bounded(4);
-            app.init_asset::<Font>()
-                .init_asset::<FontAtlas>()
-                .register_asset_loader(FontLoader { add_to_database: sender })
-                .insert_resource(FontLayout(Mutex::new(FontLayoutInner::new(receiver))))
-                .register_type::<Text>()
-                .register_type::<TextWrap>()
-                .register_type::<TextAlign>()
-                .register_type::<TextFont>()
-                .register_type::<TextSpan>()
-                .configure_sets(Update, HephaeTextSystems::LoadFontsToDatabase)
-                .configure_sets(PostUpdate, HephaeTextSystems::ComputeStructure)
-                .add_systems(Update, load_fonts_to_database.in_set(HephaeTextSystems::LoadFontsToDatabase))
-                .add_systems(
-                    PostUpdate,
-                    (compute_structure, notify_structure)
-                        .chain()
-                        .in_set(HephaeTextSystems::ComputeStructure),
-                );
+    pub fn text() -> impl PluginGroup {
+        struct TextGroup;
+        impl PluginGroup for TextGroup {
+            fn build(self) -> PluginGroupBuilder {
+                #[allow(unused_mut)]
+                let mut builder = PluginGroupBuilder::start::<Self>().add(|app: &mut App| {
+                    let (sender, receiver) = async_channel::bounded(4);
+                    app.init_asset::<Font>()
+                        .init_asset::<FontAtlas>()
+                        .register_asset_loader(FontLoader { add_to_database: sender })
+                        .insert_resource(FontLayout(Mutex::new(FontLayoutInner::new(receiver))))
+                        .register_type::<Text>()
+                        .register_type::<TextWrap>()
+                        .register_type::<TextAlign>()
+                        .register_type::<TextFont>()
+                        .register_type::<TextSpan>()
+                        .configure_sets(Update, HephaeTextSystems::LoadFontsToDatabase)
+                        .configure_sets(PostUpdate, HephaeTextSystems::ComputeStructure)
+                        .add_systems(Update, load_fonts_to_database.in_set(HephaeTextSystems::LoadFontsToDatabase))
+                        .add_systems(
+                            PostUpdate,
+                            (compute_structure, notify_structure)
+                                .chain()
+                                .in_set(HephaeTextSystems::ComputeStructure),
+                        );
 
-            if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
-                render_app
-                    .init_resource::<ExtractedFontAtlases>()
-                    .configure_sets(ExtractSchedule, HephaeTextSystems::ExtractFontAtlases)
-                    .add_systems(
-                        ExtractSchedule,
-                        extract_font_atlases.in_set(HephaeTextSystems::ExtractFontAtlases),
-                    );
+                    if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+                        render_app
+                            .init_resource::<ExtractedFontAtlases>()
+                            .configure_sets(ExtractSchedule, HephaeTextSystems::ExtractFontAtlases)
+                            .add_systems(
+                                ExtractSchedule,
+                                extract_font_atlases.in_set(HephaeTextSystems::ExtractFontAtlases),
+                            );
+                    }
+                });
+
+                #[cfg(feature = "locale")]
+                {
+                    builder = builder.add(hephae_locale::plugin::locale_target::<Text>());
+                }
+
+                builder
             }
         }
+
+        TextGroup
     }
 }
 

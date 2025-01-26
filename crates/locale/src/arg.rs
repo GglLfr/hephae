@@ -4,10 +4,16 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
 use bevy_reflect::{prelude::*, Reflectable};
 
-use crate::def::{Locale, LocaleFmt};
+use crate::def::{Locale, LocaleFmt, LocaleResult};
 
 pub trait LocaleTarget: Component {
     fn update(&mut self, src: &str);
+}
+
+pub(crate) fn localize_target<T: LocaleTarget>(mut query: Query<(&mut T, &LocaleResult), Changed<LocaleResult>>) {
+    for (mut target, src) in &mut query {
+        target.update(src);
+    }
 }
 
 pub trait LocaleArg: 'static + FromReflect + Reflectable + Send + Sync {

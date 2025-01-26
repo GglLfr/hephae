@@ -12,7 +12,7 @@ pub mod loader;
 
 pub mod prelude {
     pub use crate::{
-        arg::LocalizeBy,
+        arg::{LocaleTarget, LocalizeBy},
         cmd::{LocBundle as _, LocCommandsExt as _, LocEntityCommandsExt as _},
         def::{Locale, LocaleCollection, LocaleKey, LocaleResult},
     };
@@ -27,7 +27,7 @@ pub mod plugin {
     use hephae_utils::derive::plugin_conf;
 
     use crate::{
-        arg::{LocaleArg, LocaleTarget, LocalizeBy},
+        arg::{localize_target, LocaleArg, LocaleTarget, LocalizeBy},
         def::{
             update_locale_asset, update_locale_cache, update_locale_result, Locale, LocaleArgs, LocaleChangeEvent,
             LocaleCollection, LocaleFmt, LocaleKey, LocaleResult, LocaleSrc,
@@ -43,7 +43,7 @@ pub mod plugin {
 
     plugin_conf! {
         /// [`LocaleTarget`]s you can pass to [`locales`] to conveniently configure them in one go.
-        pub trait TargetConf for LocaleTarget, T => locale_dst::<T>()
+        pub trait TargetConf for LocaleTarget, T => locale_target::<T>()
     }
 
     #[inline]
@@ -72,6 +72,7 @@ pub mod plugin {
                                     HephaeLocaleSystems::UpdateLocaleAsset,
                                     HephaeLocaleSystems::UpdateLocaleCache,
                                     HephaeLocaleSystems::UpdateLocaleResult,
+                                    HephaeLocaleSystems::LocalizeTarget,
                                 )
                                     .chain(),
                             )
@@ -107,8 +108,10 @@ pub mod plugin {
     }
 
     #[inline]
-    pub fn locale_dst<T: LocaleTarget>() -> impl Plugin {
-        |app: &mut App| {}
+    pub fn locale_target<T: LocaleTarget>() -> impl Plugin {
+        |app: &mut App| {
+            app.add_systems(PostUpdate, localize_target::<T>.in_set(HephaeLocaleSystems::LocalizeTarget));
+        }
     }
 }
 
@@ -119,4 +122,5 @@ pub enum HephaeLocaleSystems {
     UpdateLocaleAsset,
     UpdateLocaleCache,
     UpdateLocaleResult,
+    LocalizeTarget,
 }

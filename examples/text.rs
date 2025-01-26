@@ -262,10 +262,6 @@ impl VertexCommand for Glyph {
     }
 }
 
-const HANDLE: Handle<LocaleCollection> = Handle::Weak(AssetId::Uuid {
-    uuid: AssetId::<LocaleCollection>::DEFAULT_UUID,
-});
-
 fn main() {
     App::new()
         .add_plugins((
@@ -276,25 +272,7 @@ fn main() {
         ))
         .add_systems(Startup, startup)
         .add_systems(Update, (move_camera, update, switch_locale))
-        .add_systems(Last, load_font)
         .run();
-}
-
-fn load_font(
-    server: Res<AssetServer>,
-    mut collections: ResMut<Assets<LocaleCollection>>,
-    mut state: Local<Option<Handle<LocaleCollection>>>,
-    mut done: Local<bool>,
-) {
-    if *done {
-        return
-    }
-
-    let id = state.get_or_insert_with(|| server.load("locales/locales.ron")).id();
-    if let Some(collection) = collections.remove(id) {
-        collections.insert(&HANDLE, collection);
-        *done = true;
-    }
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
@@ -313,7 +291,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
             HasDrawer::<DrawText>::new(),
         ),
         "intro",
-        HANDLE,
+        server.load("locales/locales.ron"),
         LocalizeBy("user".into()),
     );
 }
@@ -334,7 +312,7 @@ fn move_camera(time: Res<Time>, input: Res<ButtonInput<KeyCode>>, mut camera: Qu
 
 fn update(
     mut font_layout: ResMut<FontLayout>,
-    mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont, &LocaleResult)>,
+    mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont), Changed<TextStructure>>,
     window: Query<&Window, With<PrimaryWindow>>,
     fonts: Res<Assets<Font>>,
     mut images: ResMut<Assets<Image>>,
@@ -343,9 +321,8 @@ fn update(
     let Ok(window) = window.get_single() else { return };
     let scale = window.scale_factor();
 
-    for (mut glyphs, mut text, text_font, result) in &mut query {
-        text.text.clone_from(result);
-        _ = font_layout.get_mut().compute_glyphs(
+    for (mut glyphs, mut text, text_font) in &mut query {
+        if let Err(e) = font_layout.get_mut().compute_glyphs(
             &mut glyphs,
             (None, None),
             default(),
@@ -355,7 +332,12 @@ fn update(
             &mut images,
             &mut atlases,
             [(&*text.text, text_font)].into_iter(),
-        );
+        ) {
+            warn!("Scheduling text for update again due to: {e}");
+            text.set_changed();
+        } else {
+            info!("Text updated successfully!");
+        }
     }
 }
 
