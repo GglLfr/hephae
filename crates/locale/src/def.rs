@@ -11,6 +11,7 @@ use bevy_ecs::{
 };
 use bevy_reflect::{prelude::*, Reflectable};
 use bevy_utils::{warn_once, HashMap};
+use scopeguard::{Always, ScopeGuard};
 use smallvec::SmallVec;
 use thiserror::Error;
 
@@ -202,17 +203,8 @@ pub(crate) fn update_locale_asset(
     });
 
     let mut all_change = if let Some(new_id) = new_id {
-        if let Some(ref mut last) = *last {
-            if &*last == new_id {
-                false
-            } else {
-                last.clone_from(new_id);
-                true
-            }
-        } else {
-            *last = Some(new_id.clone());
-            true
-        }
+        last.get_or_insert_default().clone_from(new_id);
+        true
     } else {
         false
     };
@@ -282,22 +274,25 @@ pub(crate) fn update_locale_result(
     cache_query: Query<&LocCache>,
     mut arguments: Local<Vec<&'static str>>,
 ) {
-    // Safety:
-    // - We only change the lifetime, so the value is valid for both types.
-    // - `scopeguard` guarantees that any element in this vector is dropped when this function
-    // finishes, so the local anonymous references aren't leaked out.
-    // - The scope guard is guaranteed not to be dropped early since it's immediately dereferenced.
-    let arguments = &mut **scopeguard::guard(
-        unsafe {
-            std::mem::transmute::<
-                // Write out the input type here to guard against accidental unsynchronized type change.
-                &mut Vec<&'static str>,
-                &mut Vec<&str>,
-            >(&mut arguments)
-        },
-        Vec::clear,
-    );
+    /// Delegates [`std::mem::transmute`] to shrink the vector element's lifetime, but with
+    /// invariant mutable reference lifetime to the vector so it may not be accessed while the
+    /// guard is active.
+    ///
+    /// # Safety:
+    /// - The guard must **not** be passed anywhere else. Ideally, you'd want to immediately
+    ///   dereference it just to make sure.
+    /// - The drop glue of the guard must be called, i.e., [`std::mem::forget`] may not be called.
+    ///   This is to ensure the `'a` lifetime objects are cleared out.
+    #[inline]
+    unsafe fn guard<'a, 'this: 'a>(
+        spans: &'this mut Vec<&'static str>,
+    ) -> ScopeGuard<&'this mut Vec<&'a str>, fn(&mut Vec<&'a str>), Always> {
+        // Safety: We only change the lifetime, so the value is valid for both types.
+        ScopeGuard::with_strategy(std::mem::transmute(spans), Vec::clear)
+    }
 
+    // Safety: The guard is guaranteed not to be dropped early since it's immediately dereferenced.
+    let arguments = &mut **unsafe { guard(&mut arguments) };
     'outer: for (e, loc, result, args) in &mut result {
         if !result.changed {
             continue 'outer
@@ -307,9 +302,8 @@ pub(crate) fn update_locale_result(
         let result = result.into_inner();
         result.changed = false;
 
+        // Don't `warn!`; assume the locale asset hasn't loaded yet.
         let Some(locale) = locales.get(result.locale) else {
-            warn_once!("Locale {} missing for entity {e}!", result.locale);
-
             result.clear();
             continue 'outer
         };

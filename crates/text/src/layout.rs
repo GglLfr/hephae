@@ -13,6 +13,7 @@ use cosmic_text::{
     ttf_parser::{Face, FaceParsingError},
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
+use scopeguard::{Always, ScopeGuard};
 use thiserror::Error;
 
 use crate::{
@@ -227,22 +228,25 @@ impl FontLayoutInner {
         fonts: &Assets<Font>,
         spans: impl Iterator<Item = (&'a str, &'a TextFont)>,
     ) -> Result<(), FontLayoutError> {
-        // Safety:
-        // - We only change the lifetime, so the value is valid for both types.
-        // - `scopeguard` guarantees that any element in this vector is dropped when this function
-        // finishes, so the 'a references aren't leaked out.
-        // - The scope guard is guaranteed not to be dropped early since it's immediately dereferenced.
-        let spans_vec = &mut **scopeguard::guard(
-            unsafe {
-                std::mem::transmute::<
-                    // Write out the input type here so that if the field type is changed and this one isn't, it errors.
-                    &mut Vec<(&'static str, &'static TextFont)>,
-                    &mut Vec<(&'a str, &'a TextFont)>,
-                >(&mut self.spans)
-            },
-            Vec::clear,
-        );
+        /// Delegates [`std::mem::transmute`] to shrink the vector element's lifetime, but with
+        /// invariant mutable reference lifetime to the vector so it may not be accessed while the
+        /// guard is active.
+        ///
+        /// # Safety:
+        /// - The guard must **not** be passed anywhere else. Ideally, you'd want to immediately
+        ///   dereference it just to make sure.
+        /// - The drop glue of the guard must be called, i.e., [`std::mem::forget`] may not be
+        ///   called. This is to ensure the `'a` lifetime objects are cleared out.
+        #[inline]
+        unsafe fn guard<'a, 'this: 'a>(
+            spans: &'this mut Vec<(&'static str, &'static TextFont)>,
+        ) -> ScopeGuard<&'this mut Vec<(&'a str, &'a TextFont)>, fn(&mut Vec<(&'a str, &'a TextFont)>), Always> {
+            // Safety: We only change the lifetime, so the value is valid for both types.
+            ScopeGuard::with_strategy(std::mem::transmute(spans), Vec::clear)
+        }
 
+        // Safety: The guard is guaranteed not to be dropped early since it's immediately dereferenced.
+        let spans_vec = &mut **unsafe { guard(&mut self.spans) };
         let sys = &mut self.sys;
 
         let mut font_size = f32::MIN_POSITIVE;

@@ -9,7 +9,7 @@ use bevy::{
             SystemParamItem,
         },
     },
-    math::{vec2, FloatOrd},
+    math::{vec2, vec3, FloatOrd},
     prelude::*,
     render::{
         render_asset::RenderAssets,
@@ -237,10 +237,18 @@ impl VertexCommand for Glyph {
     #[inline]
     fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self { pos, rect, atlas } = *self;
-        let bottom_left = (pos, vec2(rect.min.x, rect.max.y) / atlas);
-        let bottom_right = (pos + vec2(rect.width(), 0.), rect.max / atlas);
-        let top_right = (pos + vec2(rect.width(), rect.height()), vec2(rect.max.x, rect.min.y) / atlas);
-        let top_left = (pos + vec2(0., rect.height()), rect.min / atlas);
+        let (w, h) = (rect.width(), rect.height());
+        let (u, v, u2, v2) = (
+            rect.min.x / atlas.x,
+            rect.max.y / atlas.y,
+            rect.max.x / atlas.x,
+            rect.min.y / atlas.y,
+        );
+
+        let bottom_left = (pos, vec2(u, v));
+        let bottom_right = (pos + vec2(w, 0.), vec2(u2, v));
+        let top_right = (pos + vec2(w, h), vec2(u2, v2));
+        let top_left = (pos + vec2(0., h), vec2(u, v2));
 
         let col = [127, 255, 100, 255];
         queuer.vertices([
@@ -254,17 +262,39 @@ impl VertexCommand for Glyph {
     }
 }
 
+const HANDLE: Handle<Locales> = Handle::Weak(AssetId::Uuid {
+    uuid: AssetId::<Locales>::DEFAULT_UUID,
+});
+
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             hephae::render::<Vert, DrawText>(),
-            hephae::text(),
             hephae::locales::<()>(),
+            hephae::text(),
         ))
         .add_systems(Startup, startup)
-        .add_systems(Update, (update, switch_locale))
+        .add_systems(Update, (move_camera, update, switch_locale))
+        .add_systems(Last, load_font)
         .run();
+}
+
+fn load_font(
+    server: Res<AssetServer>,
+    mut collections: ResMut<Assets<Locales>>,
+    mut state: Local<Option<Handle<Locales>>>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return
+    }
+
+    let id = state.get_or_insert_with(|| server.load("locales/locales.ron")).id();
+    if let Some(collection) = collections.remove(id) {
+        collections.insert(&HANDLE, collection);
+        *done = true;
+    }
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
@@ -276,16 +306,30 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
             Text::default(),
             TextFont {
                 font: server.load("fonts/roboto.ttf"),
-                font_size: 64.,
+                font_size: 80.,
                 line_height: 1.,
                 antialias: true,
             },
             HasDrawer::<DrawText>::new(),
         ),
         "intro",
-        server.load("locales/locales.ron"),
+        HANDLE,
         (),
     );
+}
+
+fn move_camera(time: Res<Time>, input: Res<ButtonInput<KeyCode>>, mut camera: Query<&mut Transform, With<Camera>>) {
+    let [up, down, left, right] = [
+        input.pressed(KeyCode::KeyW),
+        input.pressed(KeyCode::KeyS),
+        input.pressed(KeyCode::KeyA),
+        input.pressed(KeyCode::KeyD),
+    ]
+    .map(|pressed| if pressed { 1f32 } else { 0. });
+
+    for mut trns in &mut camera {
+        trns.translation += vec3(right - left, up - down, 0.) * time.delta_secs() * 120.;
+    }
 }
 
 fn update(
