@@ -262,8 +262,8 @@ impl VertexCommand for Glyph {
     }
 }
 
-const HANDLE: Handle<Locales> = Handle::Weak(AssetId::Uuid {
-    uuid: AssetId::<Locales>::DEFAULT_UUID,
+const HANDLE: Handle<LocaleCollection> = Handle::Weak(AssetId::Uuid {
+    uuid: AssetId::<LocaleCollection>::DEFAULT_UUID,
 });
 
 fn main() {
@@ -271,7 +271,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             hephae::render::<Vert, DrawText>(),
-            hephae::locales::<()>(),
+            hephae::locales::<(), ()>(),
             hephae::text(),
         ))
         .add_systems(Startup, startup)
@@ -282,8 +282,8 @@ fn main() {
 
 fn load_font(
     server: Res<AssetServer>,
-    mut collections: ResMut<Assets<Locales>>,
-    mut state: Local<Option<Handle<Locales>>>,
+    mut collections: ResMut<Assets<LocaleCollection>>,
+    mut state: Local<Option<Handle<LocaleCollection>>>,
     mut done: Local<bool>,
 ) {
     if *done {
@@ -306,7 +306,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
             Text::default(),
             TextFont {
                 font: server.load("fonts/roboto.ttf"),
-                font_size: 80.,
+                font_size: 64.,
                 line_height: 1.,
                 antialias: true,
             },
@@ -314,7 +314,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
         ),
         "intro",
         HANDLE,
-        (),
+        LocalizeBy("user".into()),
     );
 }
 
@@ -334,7 +334,7 @@ fn move_camera(time: Res<Time>, input: Res<ButtonInput<KeyCode>>, mut camera: Qu
 
 fn update(
     mut font_layout: ResMut<FontLayout>,
-    mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont, &LocResult)>,
+    mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont, &LocaleResult)>,
     window: Query<&Window, With<PrimaryWindow>>,
     fonts: Res<Assets<Font>>,
     mut images: ResMut<Assets<Image>>,

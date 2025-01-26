@@ -1,3 +1,4 @@
 {
-    "intro": "Hi, Hephae Text and Localization!",
+    "intro": "Hi '{0}', welcome to Hephae Text and Localization!",
+    "user": "User",
 }

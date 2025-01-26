@@ -1,3 +1,4 @@
 {
-    "intro": "Halo, Hephae Teks dan Lokalisasi!",
+    "intro": "Halo '{0}', selamat datang di Hephae Teks dan Lokalisasi!",
+    "user": "Pengguna",
 }

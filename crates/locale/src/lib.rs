@@ -5,14 +5,16 @@
 
 use bevy_ecs::prelude::*;
 
+pub mod arg;
 pub mod cmd;
 pub mod def;
 pub mod loader;
 
 pub mod prelude {
     pub use crate::{
+        arg::LocalizeBy,
         cmd::{LocBundle as _, LocCommandsExt as _, LocEntityCommandsExt as _},
-        def::{LocArg, LocKey, LocResult, Locale, Locales},
+        def::{Locale, LocaleCollection, LocaleKey, LocaleResult},
     };
 }
 
@@ -25,75 +27,88 @@ pub mod plugin {
     use hephae_utils::derive::plugin_conf;
 
     use crate::{
+        arg::{LocaleArg, LocaleTarget, LocalizeBy},
         def::{
-            update_locale_asset, update_locale_cache, update_locale_result, LocArg, LocArgs, LocKey, LocResult, LocSrc,
-            Locale, LocaleChangeEvent, LocaleFmt, Locales,
+            update_locale_asset, update_locale_cache, update_locale_result, Locale, LocaleArgs, LocaleChangeEvent,
+            LocaleCollection, LocaleFmt, LocaleKey, LocaleResult, LocaleSrc,
         },
-        loader::{LocaleLoader, LocalesLoader},
+        loader::{LocaleCollectionLoader, LocaleLoader},
         HephaeLocaleSystems,
     };
 
     plugin_conf! {
-        /// [`LocArg`]s you can pass to [`locales`] to conveniently configure them in one go.
-        pub trait LocConf for LocArg, T => locale::<T>()
+        /// [`LocaleArg`]s you can pass to [`locales`] to conveniently configure them in one go.
+        pub trait ArgConf for LocaleArg, T => locale_arg::<T>()
+    }
+
+    plugin_conf! {
+        /// [`LocaleTarget`]s you can pass to [`locales`] to conveniently configure them in one go.
+        pub trait TargetConf for LocaleTarget, T => locale_dst::<T>()
     }
 
     #[inline]
-    pub fn locales<T: LocConf>() -> impl PluginGroup {
-        struct LocaleGroup<T: LocConf>(PhantomData<T>);
-        impl<T: LocConf> PluginGroup for LocaleGroup<T> {
+    pub fn locales<C: ArgConf, L: TargetConf>() -> impl PluginGroup {
+        struct LocaleGroup<C: ArgConf, L: TargetConf>(PhantomData<(C, L)>);
+        impl<C: ArgConf, L: TargetConf> PluginGroup for LocaleGroup<C, L> {
             #[inline]
             fn build(self) -> PluginGroupBuilder {
-                T::build(
-                    PluginGroupBuilder::start::<Self>()
-                        .add(|app: &mut App| {
-                            app.register_type::<LocaleFmt>()
-                                .register_type::<LocKey>()
-                                .register_type::<LocResult>()
-                                .register_type::<LocArgs>()
-                                .init_asset::<Locale>()
-                                .register_asset_reflect::<Locale>()
-                                .register_asset_loader(LocaleLoader)
-                                .init_asset::<Locales>()
-                                .register_asset_reflect::<Locales>()
-                                .register_asset_loader(LocalesLoader)
-                                .add_event::<LocaleChangeEvent>()
-                                .register_type::<LocaleChangeEvent>()
-                                .configure_sets(
-                                    PostUpdate,
-                                    (
-                                        HephaeLocaleSystems::UpdateLocaleAsset,
-                                        HephaeLocaleSystems::UpdateLocaleCache,
-                                        HephaeLocaleSystems::UpdateLocaleResult,
-                                    )
-                                        .chain(),
+                let mut builder = PluginGroupBuilder::start::<Self>()
+                    .add(|app: &mut App| {
+                        app.register_type::<LocaleFmt>()
+                            .register_type::<LocaleKey>()
+                            .register_type::<LocaleResult>()
+                            .register_type::<LocaleArgs>()
+                            .init_asset::<Locale>()
+                            .register_asset_reflect::<Locale>()
+                            .register_asset_loader(LocaleLoader)
+                            .init_asset::<LocaleCollection>()
+                            .register_asset_reflect::<LocaleCollection>()
+                            .register_asset_loader(LocaleCollectionLoader)
+                            .add_event::<LocaleChangeEvent>()
+                            .register_type::<LocaleChangeEvent>()
+                            .configure_sets(
+                                PostUpdate,
+                                (
+                                    HephaeLocaleSystems::UpdateLocaleAsset,
+                                    HephaeLocaleSystems::UpdateLocaleCache,
+                                    HephaeLocaleSystems::UpdateLocaleResult,
                                 )
-                                .add_systems(
-                                    PostUpdate,
-                                    (
-                                        update_locale_asset.in_set(HephaeLocaleSystems::UpdateLocaleAsset),
-                                        update_locale_result.in_set(HephaeLocaleSystems::UpdateLocaleResult),
-                                    ),
-                                );
-                        })
-                        .add(locale::<&'static str>())
-                        .add(locale::<String>())
-                        .add(locale::<Cow<'static, str>>()),
-                )
+                                    .chain(),
+                            )
+                            .add_systems(
+                                PostUpdate,
+                                (
+                                    update_locale_asset.in_set(HephaeLocaleSystems::UpdateLocaleAsset),
+                                    update_locale_result.in_set(HephaeLocaleSystems::UpdateLocaleResult),
+                                ),
+                            );
+                    })
+                    .add(locale_arg::<&'static str>())
+                    .add(locale_arg::<String>())
+                    .add(locale_arg::<Cow<'static, str>>())
+                    .add(locale_arg::<LocalizeBy>());
+
+                builder = C::build(builder);
+                L::build(builder)
             }
         }
 
-        LocaleGroup::<T>(PhantomData)
+        LocaleGroup::<C, L>(PhantomData)
     }
 
     #[inline]
-    pub fn locale<T: LocArg>() -> impl Plugin {
+    pub fn locale_arg<T: LocaleArg>() -> impl Plugin {
         |app: &mut App| {
-            app.register_type::<LocSrc<T>>().add_systems(
+            app.register_type::<LocaleSrc<T>>().add_systems(
                 PostUpdate,
                 update_locale_cache::<T>.in_set(HephaeLocaleSystems::UpdateLocaleCache),
             );
         }
+    }
+
+    #[inline]
+    pub fn locale_dst<T: LocaleTarget>() -> impl Plugin {
+        |app: &mut App| {}
     }
 }
 

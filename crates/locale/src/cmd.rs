@@ -5,17 +5,20 @@ use bevy_ecs::prelude::*;
 use bevy_utils::all_tuples;
 use smallvec::{smallvec, SmallVec};
 
-use crate::def::{LocArg, LocArgs, LocCache, LocKey, LocSrc, Locales};
+use crate::{
+    arg::LocaleArg,
+    def::{LocaleArgs, LocaleCache, LocaleCollection, LocaleKey, LocaleSrc},
+};
 
 pub trait LocBundle {
     fn spawn(this: Self, commands: Commands) -> SmallVec<[Entity; 4]>;
 }
 
-impl<T: LocArg> LocBundle for T {
+impl<T: LocaleArg> LocBundle for T {
     #[inline]
     fn spawn(this: Self, mut commands: Commands) -> SmallVec<[Entity; 4]> {
         smallvec![commands
-            .spawn((LocSrc(this), LocCache {
+            .spawn((LocaleSrc(this), LocaleCache {
                 result: None,
                 locale: AssetId::default(),
                 changed: false,
@@ -45,7 +48,7 @@ pub trait LocCommandsExt {
         &mut self,
         bundle: impl Bundle,
         key: impl Into<Cow<'static, str>>,
-        handle: Handle<Locales>,
+        handle: Handle<LocaleCollection>,
         loc: L,
     ) -> EntityCommands;
 }
@@ -56,35 +59,45 @@ impl LocCommandsExt for Commands<'_, '_> {
         &mut self,
         bundle: impl Bundle,
         key: impl Into<Cow<'static, str>>,
-        handle: Handle<Locales>,
+        handle: Handle<LocaleCollection>,
         loc: L,
     ) -> EntityCommands {
         let args = L::spawn(loc, self.reborrow());
         self.spawn((
             bundle,
-            LocKey {
+            LocaleKey {
                 key: key.into(),
                 collection: handle,
             },
-            LocArgs(args),
+            LocaleArgs(args),
         ))
     }
 }
 
 pub trait LocEntityCommandsExt {
-    fn localize<L: LocBundle>(&mut self, key: impl Into<Cow<'static, str>>, handle: Handle<Locales>, loc: L) -> &mut Self;
+    fn localize<L: LocBundle>(
+        &mut self,
+        key: impl Into<Cow<'static, str>>,
+        handle: Handle<LocaleCollection>,
+        loc: L,
+    ) -> &mut Self;
 }
 
 impl LocEntityCommandsExt for EntityCommands<'_> {
     #[inline]
-    fn localize<L: LocBundle>(&mut self, key: impl Into<Cow<'static, str>>, handle: Handle<Locales>, loc: L) -> &mut Self {
+    fn localize<L: LocBundle>(
+        &mut self,
+        key: impl Into<Cow<'static, str>>,
+        handle: Handle<LocaleCollection>,
+        loc: L,
+    ) -> &mut Self {
         let args = L::spawn(loc, self.commands());
         self.insert((
-            LocKey {
+            LocaleKey {
                 key: key.into(),
                 collection: handle,
             },
-            LocArgs(args),
+            LocaleArgs(args),
         ))
     }
 }

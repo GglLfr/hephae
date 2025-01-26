@@ -9,11 +9,13 @@ use bevy_ecs::{
     reflect::{ReflectMapEntities, ReflectVisitEntities, ReflectVisitEntitiesMut},
     world::DeferredWorld,
 };
-use bevy_reflect::{prelude::*, Reflectable};
+use bevy_reflect::prelude::*;
 use bevy_utils::{warn_once, HashMap};
 use scopeguard::{Always, ScopeGuard};
 use smallvec::SmallVec;
 use thiserror::Error;
+
+use crate::arg::LocaleArg;
 
 #[derive(Asset, Reflect, Deref, DerefMut)]
 #[reflect(Asset)]
@@ -32,15 +34,18 @@ impl Locale {
                 out.clear();
                 out.reserve_exact(len);
 
+                let mut last = 0;
                 for &(ref range, i) in args {
                     // Some sanity checks in case some users for some reason modify the locales manually.
                     let start = range.start.min(format.len());
                     let end = range.end.min(format.len());
+                    last = last.max(end);
 
                     // All these unwraps shouldn't panic.
                     out.push_str(&format[start..end]);
                     out.push_str(args_src[i]);
                 }
+                out.push_str(&format[last..]);
 
                 Ok(())
             }
@@ -74,72 +79,36 @@ pub enum LocaleFmt {
 
 #[derive(Reflect)]
 #[reflect(Asset)]
-pub struct Locales {
+pub struct LocaleCollection {
     pub default: String,
-    pub locales: HashMap<String, Handle<Locale>>,
+    pub languages: HashMap<String, Handle<Locale>>,
 }
 
-impl Asset for Locales {}
-impl VisitAssetDependencies for Locales {
+impl Asset for LocaleCollection {}
+impl VisitAssetDependencies for LocaleCollection {
     #[inline]
     fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
-        self.locales.values().for_each(|handle| visit(handle.id().untyped()))
+        self.languages.values().for_each(|handle| visit(handle.id().untyped()))
     }
 }
 
 #[derive(Event, Reflect, Clone)]
 pub struct LocaleChangeEvent(pub String);
 
-pub trait LocArg: 'static + FromReflect + Reflectable + Send + Sync {
-    fn localize_into(&self, locale: &Locale, out: &mut String) -> Option<()>;
-
-    #[inline]
-    fn localize(&self, locale: &Locale) -> Option<String> {
-        let mut out = String::new();
-        self.localize_into(locale, &mut out)?;
-
-        Some(out)
-    }
-}
-
-impl LocArg for &'static str {
-    #[inline]
-    fn localize_into(&self, _: &Locale, out: &mut String) -> Option<()> {
-        out.push_str(self);
-        Some(())
-    }
-}
-
-impl LocArg for String {
-    #[inline]
-    fn localize_into(&self, _: &Locale, out: &mut String) -> Option<()> {
-        out.push_str(self);
-        Some(())
-    }
-}
-
-impl LocArg for Cow<'static, str> {
-    #[inline]
-    fn localize_into(&self, _: &Locale, out: &mut String) -> Option<()> {
-        out.push_str(self);
-        Some(())
-    }
-}
-
 #[derive(Component, Reflect, Clone, Deref, DerefMut)]
 #[component(on_remove = remove_localize)]
-#[require(LocResult)]
+#[require(LocaleResult)]
 #[reflect(Component)]
-pub struct LocKey {
+pub struct LocaleKey {
     #[deref]
     pub key: Cow<'static, str>,
-    pub collection: Handle<Locales>,
+    pub collection: Handle<LocaleCollection>,
 }
 
 fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
-    let args = std::mem::take(&mut world.get_mut::<LocArgs>(e).unwrap().0);
+    let args = std::mem::take(&mut world.get_mut::<LocaleArgs>(e).unwrap().0);
     world.commands().queue(move |world: &mut World| {
-        world.entity_mut(e).remove::<LocArgs>();
+        world.entity_mut(e).remove::<LocaleArgs>();
         for arg in args {
             world.despawn(arg);
         }
@@ -148,7 +117,7 @@ fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
 
 #[derive(Component, Reflect, Clone, Default, Deref, DerefMut)]
 #[reflect(Component, Default)]
-pub struct LocResult {
+pub struct LocaleResult {
     #[deref]
     pub result: String,
     #[reflect(ignore)]
@@ -159,8 +128,8 @@ pub struct LocResult {
 
 #[derive(Component, Reflect, Clone, VisitEntitiesMut)]
 #[reflect(Component, MapEntities, VisitEntities, VisitEntitiesMut)]
-pub(crate) struct LocArgs(pub SmallVec<[Entity; 4]>);
-impl<'a> IntoIterator for &'a LocArgs {
+pub(crate) struct LocaleArgs(pub SmallVec<[Entity; 4]>);
+impl<'a> IntoIterator for &'a LocaleArgs {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = Iter<'a, Entity>;
 
@@ -171,24 +140,24 @@ impl<'a> IntoIterator for &'a LocArgs {
 }
 
 #[derive(Component, Reflect, Deref)]
-#[require(LocCache)]
+#[require(LocaleCache)]
 #[reflect(Component)]
-pub(crate) struct LocSrc<T: LocArg>(pub T);
+pub(crate) struct LocaleSrc<T: LocaleArg>(pub T);
 
 #[derive(Component, Default)]
-pub(crate) struct LocCache {
+pub(crate) struct LocaleCache {
     pub result: Option<String>,
     pub locale: AssetId<Locale>,
     pub changed: bool,
 }
 
 pub(crate) fn update_locale_asset(
-    mut collection_events: EventReader<AssetEvent<Locales>>,
+    mut collection_events: EventReader<AssetEvent<LocaleCollection>>,
     mut locale_events: EventReader<AssetEvent<Locale>>,
     mut change_events: EventReader<LocaleChangeEvent>,
-    locales: Res<Assets<Locales>>,
-    mut localize_query: Query<(Ref<LocKey>, &mut LocResult, &LocArgs)>,
-    mut cache_query: Query<&mut LocCache>,
+    locales: Res<Assets<LocaleCollection>>,
+    mut localize_query: Query<(Ref<LocaleKey>, &mut LocaleResult, &LocaleArgs)>,
+    mut cache_query: Query<&mut LocaleCache>,
     mut last: Local<Option<String>>,
 ) {
     let new_id = (!change_events.is_empty()).then(|| {
@@ -223,7 +192,7 @@ pub(crate) fn update_locale_asset(
                 .get(&loc.collection)
                 .and_then(|collection| {
                     collection
-                        .locales
+                        .languages
                         .get(new_id.unwrap_or(last.as_ref().unwrap_or(&collection.default)))
                 })
                 .map(Handle::id)
@@ -250,7 +219,10 @@ pub(crate) fn update_locale_asset(
     }
 }
 
-pub(crate) fn update_locale_cache<T: LocArg>(locales: Res<Assets<Locale>>, mut sources: Query<(&LocSrc<T>, &mut LocCache)>) {
+pub(crate) fn update_locale_cache<T: LocaleArg>(
+    locales: Res<Assets<Locale>>,
+    mut sources: Query<(&LocaleSrc<T>, &mut LocaleCache)>,
+) {
     for (src, mut cache) in &mut sources {
         let cache = cache.bypass_change_detection();
         if !cache.changed {
@@ -270,8 +242,8 @@ pub(crate) fn update_locale_cache<T: LocArg>(locales: Res<Assets<Locale>>, mut s
 
 pub(crate) fn update_locale_result(
     locales: Res<Assets<Locale>>,
-    mut result: Query<(Entity, &LocKey, &mut LocResult, &LocArgs)>,
-    cache_query: Query<&LocCache>,
+    mut result: Query<(Entity, &LocaleKey, &mut LocaleResult, &LocaleArgs)>,
+    cache_query: Query<&LocaleCache>,
     mut arguments: Local<Vec<&'static str>>,
 ) {
     /// Delegates [`std::mem::transmute`] to shrink the vector element's lifetime, but with
@@ -312,7 +284,7 @@ pub(crate) fn update_locale_result(
         for &arg in args {
             // Don't use `Query::iter_many_mut` here to preserve argument index.
             // The aforementioned method will skip despawned entities which is unfavorable.
-            let Ok(cache) = cache_query.get(e) else {
+            let Ok(cache) = cache_query.get(arg) else {
                 warn_once!("Locale argument {arg} missing for entity {e}");
 
                 result.clear();

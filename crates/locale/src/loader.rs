@@ -5,7 +5,7 @@ use bevy_utils::HashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::def::{Locale, LocaleFmt, Locales};
+use crate::def::{Locale, LocaleCollection, LocaleFmt};
 
 impl FromStr for LocaleFmt {
     type Err = usize;
@@ -141,7 +141,7 @@ impl AssetLoader for LocaleLoader {
 }
 
 #[derive(Error, Debug)]
-pub enum LocalesError {
+pub enum LocaleCollectionError {
     #[error(transparent)]
     Io(#[from] IoError),
     #[error(transparent)]
@@ -153,16 +153,16 @@ pub enum LocalesError {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct LocalesFile {
+pub struct LocaleCollectionFile {
     pub default: String,
-    pub locales: Vec<String>,
+    pub languages: Vec<String>,
 }
 
-pub struct LocalesLoader;
-impl AssetLoader for LocalesLoader {
-    type Asset = Locales;
+pub struct LocaleCollectionLoader;
+impl AssetLoader for LocaleCollectionLoader {
+    type Asset = LocaleCollection;
     type Settings = ();
-    type Error = LocalesError;
+    type Error = LocaleCollectionError;
 
     async fn load(
         &self,
@@ -170,25 +170,25 @@ impl AssetLoader for LocalesLoader {
         _: &Self::Settings,
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        let file = ron::de::from_bytes::<LocalesFile>(&{
+        let file = ron::de::from_bytes::<LocaleCollectionFile>(&{
             let mut bytes = Vec::new();
             reader.read_to_end(&mut bytes).await?;
 
             bytes
         })?;
 
-        let mut asset = Locales {
+        let mut asset = LocaleCollection {
             default: file.default,
-            locales: HashMap::with_capacity(file.locales.len()),
+            languages: HashMap::with_capacity(file.languages.len()),
         };
 
-        for key in file.locales {
+        for key in file.languages {
             let path = load_context.asset_path().resolve_embed(&format!("locale_{key}.locale.ron"))?;
-            asset.locales.insert(key, load_context.load(path));
+            asset.languages.insert(key, load_context.load(path));
         }
 
-        if !asset.locales.contains_key(&asset.default) {
-            return Err(LocalesError::MissingDefault(asset.default))
+        if !asset.languages.contains_key(&asset.default) {
+            return Err(LocaleCollectionError::MissingDefault(asset.default))
         }
 
         Ok(asset)
