@@ -26,6 +26,8 @@ bevy_ecs.workspace = true
 bevy_reflect.workspace = true
 bevy_utils.workspace = true
 
+nom.workspace = true
+nom-language.workspace = true
 scopeguard.workspace = true
 serde.workspace = true
 smallvec.workspace = true

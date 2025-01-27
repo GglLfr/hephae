@@ -67,6 +67,8 @@ cosmic-text = { version = "0.12", default-features = false, features = ["std", "
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 guillotiere = "0.6"
+nom = "8"
+nom-language = "0.1"
 nonmax = "0.5"
 quote = "1"
 scopeguard = "1"

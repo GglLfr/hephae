@@ -178,7 +178,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
     }
 }
 
-#[derive(TypePath, Component, Clone, Default)]
+#[derive(TypePath, Component, Default)]
 struct DrawText {
     pos: Vec2,
     glyphs: Vec<TextGlyph>,
@@ -201,8 +201,7 @@ impl Drawer for DrawText {
     ) {
         let drawer = drawer.get_or_default();
         drawer.pos = trns.translation().truncate() - glyphs.size / 2.;
-        drawer.glyphs.clear();
-        drawer.glyphs.extend_from_slice(&glyphs.glyphs);
+        drawer.glyphs.clone_from(&glyphs.glyphs);
     }
 
     #[inline]
@@ -281,7 +280,11 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
     commands.spawn_localized(
         (
             Transform::IDENTITY,
-            Text::default(),
+            Text {
+                wrap: TextWrap::Word,
+                align: TextAlign::Center,
+                ..default()
+            },
             TextFont {
                 font: server.load("fonts/roboto.ttf"),
                 font_size: 64.,
@@ -324,9 +327,9 @@ fn update(
     for (mut glyphs, mut text, text_font) in &mut query {
         if let Err(e) = font_layout.get_mut().compute_glyphs(
             &mut glyphs,
-            (None, None),
-            default(),
-            default(),
+            (Some(800.), None),
+            text.wrap,
+            text.align,
             scale,
             &fonts,
             &mut images,

@@ -151,8 +151,7 @@ impl Drawer for DrawText {
         let drawer = drawer.get_or_default();
         drawer.0 = gui;
         drawer.1 = gui_depth;
-        drawer.2.clear();
-        drawer.2.extend_from_slice(&glyphs.glyphs);
+        drawer.2.clone_from(&glyphs.glyphs);
     }
 
     #[inline]

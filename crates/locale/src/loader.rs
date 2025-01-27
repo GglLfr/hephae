@@ -1,94 +1,211 @@
-use std::{io::Error as IoError, str::FromStr};
+use std::{fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError, str::FromStr};
 
 use bevy_asset::{io::Reader, ron, ron::de::SpannedError, AssetLoader, LoadContext, ParseAssetPathError};
 use bevy_utils::HashMap;
-use serde::{Deserialize, Serialize};
+use nom::{
+    branch::alt,
+    bytes::complete::{is_not, tag, take_while, take_while_m_n},
+    character::complete::char,
+    combinator::{map_opt, map_res, value, verify},
+    error::{FromExternalError, ParseError},
+    multi::fold,
+    sequence::{delimited, preceded},
+    Err as NomErr, IResult, Parser,
+};
+use nom_language::error::{convert_error, VerboseError};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 use thiserror::Error;
 
 use crate::def::{Locale, LocaleCollection, LocaleFmt};
 
-impl FromStr for LocaleFmt {
-    type Err = usize;
+enum FmtFrag<'a> {
+    Literal(&'a str),
+    Escaped(char),
+    Index(usize),
+}
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let chars = s.chars().enumerate();
+/// Parses `\u{xxxxxx}` escaped unicode character.
+#[inline]
+fn parse_unicode<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
+    input: &'a str,
+) -> IResult<&'a str, char, E> {
+    map_opt(
+        map_res(
+            preceded(
+                char('u'),
+                delimited(char('{'), take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit()), char('}')),
+            ),
+            |hex| u32::from_str_radix(hex, 16),
+        ),
+        char::from_u32,
+    )
+    .parse(input)
+}
 
-        #[derive(Copy, Clone)]
-        enum State {
-            Unescaped,
-            PreEscaped(bool),
-            Index,
+/// Parses `\...` escaped character.
+#[inline]
+fn parse_escaped<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
+    input: &'a str,
+) -> IResult<&'a str, FmtFrag<'a>, E> {
+    preceded(
+        char('\\'),
+        alt((
+            parse_unicode,
+            value('\n', char('n')),
+            value('\r', char('r')),
+            value('\t', char('t')),
+            value('\u{08}', char('b')),
+            value('\u{0C}', char('f')),
+            value('\\', char('\\')),
+            value('/', char('/')),
+            value('"', char('"')),
+        )),
+    )
+    .map(FmtFrag::Escaped)
+    .parse(input)
+}
+
+/// Parses `{index}` and extracts the index as positional argument.
+#[inline]
+fn parse_index<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
+    input: &'a str,
+) -> IResult<&'a str, FmtFrag<'a>, E> {
+    map_res(
+        delimited(char('{'), take_while(|c: char| c.is_ascii_digit()), char('}')),
+        usize::from_str,
+    )
+    .map(FmtFrag::Index)
+    .parse(input)
+}
+
+/// Parses escaped `{{` and `}}`.
+#[inline]
+fn parse_brace<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, FmtFrag<'a>, E> {
+    alt((tag("{{"), tag("}}"))).map(FmtFrag::Literal).parse(input)
+}
+
+/// Parses any characters preceding a backslash or a brace, leaving `{{` and `}}` as special cases.
+#[inline]
+fn parse_literal<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, FmtFrag<'a>, E> {
+    verify(is_not("\\{}"), |s: &str| !s.is_empty())
+        .map(FmtFrag::Literal)
+        .parse(input)
+}
+
+fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
+    input: &'a str,
+) -> IResult<&'a str, LocaleFmt, E> {
+    fold(
+        0..,
+        alt((parse_literal, parse_brace, parse_index, parse_escaped)),
+        || (0, LocaleFmt::Unformatted(String::new())),
+        |(start, mut fmt), frag| match frag {
+            FmtFrag::Literal(lit) => match &mut fmt {
+                LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
+                    format.push_str(lit);
+                    (start, fmt)
+                }
+            },
+            FmtFrag::Escaped(c) => match &mut fmt {
+                LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
+                    format.push(c);
+                    (start, fmt)
+                }
+            },
+            FmtFrag::Index(i) => {
+                let (end, args) = match fmt {
+                    LocaleFmt::Unformatted(format) => {
+                        fmt = LocaleFmt::Formatted {
+                            format,
+                            args: Vec::new(),
+                        };
+
+                        // Safety: We just set `fmt` to variant `Formatted` above.
+                        let LocaleFmt::Formatted { format, args } = &mut fmt else {
+                            unsafe { unreachable_unchecked() }
+                        };
+                        (format.len(), args)
+                    }
+                    LocaleFmt::Formatted {
+                        ref format,
+                        ref mut args,
+                    } => (format.len(), args),
+                };
+
+                args.push((start..end, i));
+                (end, fmt)
+            }
+        },
+    )
+    .map(|(.., fmt)| fmt)
+    .parse(input)
+}
+
+impl Serialize for LocaleFmt {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Unformatted(raw) => serializer.serialize_str(raw),
+            Self::Formatted { format, args } => {
+                let mut out = String::new();
+
+                let mut last = 0;
+                for &(ref range, i) in args {
+                    // Some sanity checks in case some users for some reason modify the locales manually.
+                    let start = range.start.min(format.len());
+                    let end = range.end.min(format.len());
+                    last = last.max(end);
+
+                    // All these unwraps shouldn't panic.
+                    out.push_str(&format[start..end]);
+                    out.push('{');
+                    out.push_str(&i.to_string());
+                    out.push('}');
+                }
+                out.push_str(&format[last..]);
+
+                serializer.serialize_str(&out)
+            }
         }
+    }
+}
 
-        use State::*;
+impl<'de> Deserialize<'de> for LocaleFmt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Parser;
+        impl<'de> Visitor<'de> for Parser {
+            type Value = LocaleFmt;
 
-        let mut format = String::new();
-        let mut args = Vec::new();
-        let mut range = 0..0;
-        let mut state = Unescaped;
+            #[inline]
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                write!(formatter, "a valid UTF-8 string")
+            }
 
-        let mut index = 0usize;
-        for (i, char) in chars {
-            match char {
-                '{' => {
-                    state = match state {
-                        Unescaped => PreEscaped(false),
-                        PreEscaped(false) => {
-                            format.push('{');
-                            range.end = format.len();
-
-                            Unescaped
-                        }
-                        PreEscaped(true) | Index => return Err(i),
-                    }
+            #[inline]
+            fn visit_str<E>(self, input: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match parse::<VerboseError<&str>>(input) {
+                    Ok(("", fmt)) => Ok(fmt),
+                    Ok((leftover, ..)) => Err(E::custom(format!("leftover format string: {leftover}"))),
+                    Err(e) => Err(match e {
+                        NomErr::Error(e) | NomErr::Failure(e) => E::custom(convert_error(input, e)),
+                        NomErr::Incomplete(..) => unreachable!("only complete operations are used"),
+                    }),
                 }
-                '}' => {
-                    state = match state {
-                        Unescaped => PreEscaped(true),
-                        PreEscaped(false) => return Err(i),
-                        PreEscaped(true) => {
-                            format.push('}');
-                            range.end = format.len();
-
-                            Unescaped
-                        }
-                        Index => {
-                            args.push((range.clone(), index));
-                            range.start = range.end;
-
-                            Unescaped
-                        }
-                    }
-                }
-                '0'..='9' => match state {
-                    Unescaped => {
-                        format.push(char);
-                        range.end = format.len();
-                    }
-                    PreEscaped(false) => state = Index,
-                    PreEscaped(true) => return Err(i),
-                    Index => {
-                        index = index
-                            .checked_mul(10)
-                            .and_then(|index| index.checked_add(char.to_digit(10)? as usize))
-                            .ok_or(i)?;
-                    }
-                },
-                _ => match state {
-                    Unescaped => {
-                        format.push(char);
-                        range.end = format.len();
-                    }
-                    _ => return Err(i),
-                },
             }
         }
 
-        Ok(if args.is_empty() {
-            Self::Unformatted(format)
-        } else {
-            Self::Formatted { format, args }
-        })
+        deserializer.deserialize_str(Parser)
     }
 }
 
@@ -114,24 +231,12 @@ impl AssetLoader for LocaleLoader {
         _: &Self::Settings,
         _: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        let file = ron::de::from_bytes::<HashMap<String, String>>(&{
+        Ok(Locale(ron::de::from_bytes::<HashMap<String, LocaleFmt>>(&{
             let mut bytes = Vec::new();
             reader.read_to_end(&mut bytes).await?;
 
             bytes
-        })?;
-
-        let mut asset = HashMap::<String, LocaleFmt>::with_capacity(file.len());
-        for (key, value) in file {
-            match LocaleFmt::from_str(&value) {
-                Ok(fmt) => {
-                    asset.insert_unique_unchecked(key, fmt);
-                }
-                Err(position) => return Err(LocaleError::SyntaxError { key, position }),
-            }
-        }
-
-        Ok(Locale(asset))
+        })?))
     }
 
     #[inline]
