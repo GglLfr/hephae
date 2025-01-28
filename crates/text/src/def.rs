@@ -86,11 +86,12 @@ impl AssetLoader for FontLoader {
 
 /// Main text component. May have children entities that have [`TextSpan`] and [`TextFont`]
 /// component.
-#[derive(Component, Reflect, Clone, Default)]
+#[derive(Component, Reflect, Clone, Default, Deref, DerefMut)]
 #[reflect(Component, Default)]
 #[require(TextStructure, TextGlyphs)]
 pub struct Text {
     /// The text span.
+    #[deref]
     pub text: String,
     /// Defines how the text should wrap in case of insufficient space.
     pub wrap: TextWrap,
@@ -113,7 +114,7 @@ impl Text {
 impl LocaleTarget for Text {
     #[inline]
     fn update(&mut self, src: &str) {
-        src.clone_into(&mut self.text);
+        src.clone_into(self);
     }
 }
 
@@ -230,7 +231,7 @@ impl<'w> Iterator for TextStructureIter<'w, '_, '_, '_, '_> {
     type Item = (&'w str, &'w TextFont);
 
     fn next(&mut self) -> Option<Self::Item> {
-        static DEFAULT_FONT: TextFont = TextFont {
+        const DEFAULT_FONT: TextFont = TextFont {
             font: Handle::Weak(AssetId::Uuid {
                 uuid: AssetId::<Font>::DEFAULT_UUID,
             }),
@@ -242,8 +243,8 @@ impl<'w> Iterator for TextStructureIter<'w, '_, '_, '_, '_> {
         let &(e, depth) = self.inner.next()?;
         let (text, span, font) = self.query.get(e).ok()?;
         let str = match (text, span) {
-            (Some(text), ..) => text.text.as_str(),
-            (None, Some(span)) => span.0.as_str(),
+            (Some(text), ..) => text.as_str(),
+            (None, Some(span)) => span.as_str(),
             (None, None) => return None,
         };
 
@@ -296,9 +297,17 @@ pub struct TextGlyph {
 }
 
 /// May be added to child entities of [`Text`].
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Reflect, Default, Deref, DerefMut)]
 #[reflect(Component, Default)]
 pub struct TextSpan(pub String);
+
+#[cfg(feature = "locale")]
+impl LocaleTarget for TextSpan {
+    #[inline]
+    fn update(&mut self, src: &str) {
+        src.clone_into(self);
+    }
+}
 
 /// Computes and marks [`TextStructure`] as changed as necessary, for convenience of systems
 /// wishing to listen for change-detection.

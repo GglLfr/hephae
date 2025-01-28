@@ -4,9 +4,9 @@ use bevy_asset::{io::Reader, ron, ron::de::SpannedError, AssetLoader, LoadContex
 use bevy_utils::HashMap;
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_while, take_while_m_n},
+    bytes::complete::{is_not, tag, take_while1, take_while_m_n},
     character::complete::char,
-    combinator::{map_opt, map_res, value, verify},
+    combinator::{cut, map_opt, map_res, value, verify},
     error::{FromExternalError, ParseError},
     multi::fold,
     sequence::{delimited, preceded},
@@ -36,7 +36,11 @@ fn parse_unicode<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIn
         map_res(
             preceded(
                 char('u'),
-                delimited(char('{'), take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit()), char('}')),
+                cut(delimited(
+                    char('{'),
+                    take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit()),
+                    char('}'),
+                )),
             ),
             |hex| u32::from_str_radix(hex, 16),
         ),
@@ -52,7 +56,7 @@ fn parse_escaped<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIn
 ) -> IResult<&'a str, FmtFrag<'a>, E> {
     preceded(
         char('\\'),
-        alt((
+        cut(alt((
             parse_unicode,
             value('\n', char('n')),
             value('\r', char('r')),
@@ -62,7 +66,7 @@ fn parse_escaped<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIn
             value('\\', char('\\')),
             value('/', char('/')),
             value('"', char('"')),
-        )),
+        ))),
     )
     .map(FmtFrag::Escaped)
     .parse(input)
@@ -74,7 +78,7 @@ fn parse_index<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntE
     input: &'a str,
 ) -> IResult<&'a str, FmtFrag<'a>, E> {
     map_res(
-        delimited(char('{'), take_while(|c: char| c.is_ascii_digit()), char('}')),
+        delimited(char('{'), cut(take_while1(|c: char| c.is_ascii_digit())), char('}')),
         usize::from_str,
     )
     .map(FmtFrag::Index)
@@ -98,7 +102,7 @@ fn parse_literal<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
     input: &'a str,
 ) -> IResult<&'a str, LocaleFmt, E> {
-    fold(
+    cut(fold(
         0..,
         alt((parse_literal, parse_brace, parse_index, parse_escaped)),
         || (0, LocaleFmt::Unformatted(String::new())),
@@ -139,7 +143,7 @@ fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>
                 (end, fmt)
             }
         },
-    )
+    ))
     .map(|(.., fmt)| fmt)
     .parse(input)
 }
@@ -215,8 +219,6 @@ pub enum LocaleError {
     Io(#[from] IoError),
     #[error(transparent)]
     InvalidFile(#[from] SpannedError),
-    #[error("syntax error at key '{key}' on char {position}")]
-    SyntaxError { key: String, position: usize },
 }
 
 pub struct LocaleLoader;

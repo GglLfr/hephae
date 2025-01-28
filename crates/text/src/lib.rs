@@ -76,7 +76,9 @@ pub mod plugin {
 
                 #[cfg(feature = "locale")]
                 {
-                    builder = builder.add(hephae_locale::plugin::locale_target::<Text>());
+                    builder = builder
+                        .add(hephae_locale::plugin::locale_target::<Text>())
+                        .add(hephae_locale::plugin::locale_target::<TextSpan>());
                 }
 
                 builder
