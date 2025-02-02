@@ -242,7 +242,13 @@ impl FontLayoutInner {
             spans: &'this mut Vec<(&'static str, &'static TextFont)>,
         ) -> ScopeGuard<&'this mut Vec<(&'a str, &'a TextFont)>, fn(&mut Vec<(&'a str, &'a TextFont)>), Always> {
             // Safety: We only change the lifetime, so the value is valid for both types.
-            ScopeGuard::with_strategy(std::mem::transmute(spans), Vec::clear)
+            ScopeGuard::with_strategy(
+                std::mem::transmute::<
+                    &'this mut Vec<(&'static str, &'static TextFont)>,
+                    &'this mut Vec<(&'a str, &'a TextFont)>,
+                >(spans),
+                Vec::clear,
+            )
         }
 
         // Safety: The guard is guaranteed not to be dropped early since it's immediately dereferenced.

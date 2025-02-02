@@ -34,7 +34,10 @@ impl Locale {
     /// Formats a localization string with the provided arguments into an output [`String`].
     pub fn localize_into(&self, key: impl AsRef<str>, args_src: &[&str], out: &mut String) -> Result<(), LocalizeError> {
         match self.get(key.as_ref()).ok_or(LocalizeError::MissingKey)? {
-            LocaleFmt::Unformatted(res) => Ok(out.clone_from(res)),
+            LocaleFmt::Unformatted(res) => {
+                out.clone_from(res);
+                Ok(())
+            }
             LocaleFmt::Formatted { format, args } => {
                 let len = args.iter().try_fold(0, |mut len, &(ref range, i)| {
                     len += range.end - range.start;
@@ -357,7 +360,10 @@ pub(crate) fn update_locale_result(
         spans: &'this mut Vec<&'static str>,
     ) -> ScopeGuard<&'this mut Vec<&'a str>, fn(&mut Vec<&'a str>), Always> {
         // Safety: We only change the lifetime, so the value is valid for both types.
-        ScopeGuard::with_strategy(std::mem::transmute(spans), Vec::clear)
+        ScopeGuard::with_strategy(
+            std::mem::transmute::<&'this mut Vec<&'static str>, &'this mut Vec<&'a str>>(spans),
+            Vec::clear,
+        )
     }
 
     // Safety: The guard is guaranteed not to be dropped early since it's immediately dereferenced.

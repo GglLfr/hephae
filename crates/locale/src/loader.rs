@@ -192,7 +192,7 @@ impl<'de> Deserialize<'de> for LocaleFmt {
         D: Deserializer<'de>,
     {
         struct Parser;
-        impl<'de> Visitor<'de> for Parser {
+        impl Visitor<'_> for Parser {
             type Value = LocaleFmt;
 
             #[inline]
