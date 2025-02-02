@@ -101,8 +101,7 @@ impl<T: Drawer> HasDrawer<T> {
     }
 }
 
-/// Extracts an instance of `T` from matching entities.
-pub fn extract_drawers<T: Drawer>(
+pub(crate) fn extract_drawers<T: Drawer>(
     mut commands: Commands,
     param: Extract<T::ExtractParam>,
     query: Extract<Query<(RenderEntity, &ViewVisibility, T::ExtractData), (T::ExtractFilter, With<HasDrawer<T>>)>>,
@@ -124,9 +123,7 @@ pub fn extract_drawers<T: Drawer>(
     }
 }
 
-/// Collects [`VertexCommand`](crate::vertex::VertexCommand)s from drawers to be sorted by the
-/// pipeline.
-pub fn queue_drawers<T: Drawer>(
+pub(crate) fn queue_drawers<T: Drawer>(
     param: StaticSystemParam<T::DrawParam>,
     query: Query<&T>,
     views: Query<(Entity, &RenderVisibleEntities), With<ExtractedView>>,

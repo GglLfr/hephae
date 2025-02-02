@@ -1,4 +1,12 @@
-use std::{borrow::Cow, ops::Range, slice::Iter};
+//! Defines all the necessary components for localization to work, namely:
+//!
+//! - [`Locale`], maps locale keys with (potentially formatted) localized strings.
+//! - [`LocaleCollection`], maps locale codes (e.g., `en-US`, `id-ID`) with [`Locale`] asset
+//!   handles.
+//! - [`LocaleKey`], holds a reference to a locale collection and locale key.
+//! - [`LocaleResult`], caches the localized result.
+
+use std::{any::type_name, borrow::Cow, ops::Range, slice::Iter};
 
 use bevy_asset::{prelude::*, ReflectAsset, UntypedAssetId, VisitAssetDependencies};
 use bevy_derive::{Deref, DerefMut};
@@ -17,10 +25,13 @@ use thiserror::Error;
 
 use crate::arg::LocaleArg;
 
-#[derive(Asset, Reflect, Deref, DerefMut)]
-#[reflect(Asset)]
+/// Maps locale keys with (potentially formatted) localized strings. See [`LocaleFmt`] for the
+/// syntax.
+#[derive(Asset, Reflect, Deref, DerefMut, Debug)]
+#[reflect(Asset, Debug)]
 pub struct Locale(pub HashMap<String, LocaleFmt>);
 impl Locale {
+    /// Formats a localization string with the provided arguments into an output [`String`].
     pub fn localize_into(&self, key: impl AsRef<str>, args_src: &[&str], out: &mut String) -> Result<(), LocalizeError> {
         match self.get(key.as_ref()).ok_or(LocalizeError::MissingKey)? {
             LocaleFmt::Unformatted(res) => Ok(out.clone_from(res)),
@@ -52,6 +63,8 @@ impl Locale {
         }
     }
 
+    /// Convenient shortcut for [`localize_into`](Self::localize_into) that allocates a new
+    /// [`String`].
     #[inline]
     pub fn localize(&self, key: impl AsRef<str>, args_src: &[&str]) -> Result<String, LocalizeError> {
         let mut out = String::new();
@@ -60,27 +73,92 @@ impl Locale {
     }
 }
 
-#[derive(Error, Debug, Copy, Clone)]
+/// Errors that may arise from [`Locale::localize_into`].
+#[derive(Error, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LocalizeError {
+    /// The locale doesn't contain the localization for the supplied key.
     #[error("The locale doesn't contain the localization for the supplied key.")]
     MissingKey,
+    /// Missing argument at the given index.
     #[error("Missing argument at index {0}.")]
     MissingArgument(usize),
 }
 
-#[derive(Clone, Reflect)]
+/// A locale string, either unformatted or formatted.
+///
+/// # Syntax
+///
+/// The syntax is similar to a subset of [`format!`]; everything is the same, except that in
+/// arguments, only explicitly-indexed positional arguments are supported.
+///
+/// ```
+/// use std::str::FromStr;
+///
+/// use bevy_utils::HashMap;
+/// use hephae_locale::{
+///     def::{LocaleFmt, LocalizeError},
+///     prelude::*,
+/// };
+///
+/// let a = LocaleFmt::from_str("Hi {0}, this is {1}. {5}...").unwrap();
+/// let b = LocaleFmt::from_str("It's nice to meet you {{inside these braces for no reason}}.")
+///     .unwrap();
+/// LocaleFmt::from_str("Can't use {this}, can't use {that:?}, can't use {} either!").unwrap_err();
+///
+/// let loc = Locale(HashMap::from_iter([
+///     (String::from("greet"), a),
+///     (String::from("chitchat"), b),
+/// ]));
+///
+/// // Format the arguments with `Locale::localize`. Unnecessary arguments are ignored.
+/// assert_eq!(
+///     loc.localize("greet", &[
+///         "Joe", "Jane", "these", "are", "ignored", "Hehehe"
+///     ])
+///     .unwrap(),
+///     "Hi Joe, this is Jane. Hehehe..."
+/// );
+///
+/// // Double braces are escaped into single braces.
+/// assert_eq!(
+///     loc.localize("chitchat", &[]).unwrap(),
+///     "It's nice to meet you {inside these braces for no reason}."
+/// );
+///
+/// // Missing key will not panic.
+/// assert_eq!(
+///     loc.localize("missing", &[]).unwrap_err(),
+///     LocalizeError::MissingKey
+/// );
+///
+/// // Neither will missing arguments.
+/// assert_eq!(
+///     loc.localize("greet", &[]).unwrap_err(),
+///     LocalizeError::MissingArgument(0),
+/// );
+/// ```
+#[derive(Reflect, Clone, Debug)]
+#[reflect(Debug)]
 pub enum LocaleFmt {
+    /// Locale string with no arguments.
     Unformatted(String),
+    /// Locale string with arguments. It is advisable to use
+    /// [`LocaleFmt::from_str`](std::str::FromStr::from_str) to create instead of doing so manually.
     Formatted {
+        /// The locale string format, without the positional argument markers.
         format: String,
+        /// The pairs of format span and index of the argument to be appended.
         args: Vec<(Range<usize>, usize)>,
     },
 }
 
-#[derive(Reflect)]
-#[reflect(Asset)]
+/// Collection of [`Locale`]s, mapped by their locale codes.
+#[derive(Reflect, Debug)]
+#[reflect(Asset, Debug)]
 pub struct LocaleCollection {
+    /// The default locale code to use.
     pub default: String,
+    /// The [`Locale`] map.
     pub languages: HashMap<String, Handle<Locale>>,
 }
 
@@ -92,22 +170,30 @@ impl VisitAssetDependencies for LocaleCollection {
     }
 }
 
-#[derive(Event, Reflect, Clone)]
+/// Firing this event will cause all [`LocaleKey`]s to update their results for the new locale code.
+#[derive(Event, Reflect, Clone, Debug)]
 pub struct LocaleChangeEvent(pub String);
 
-#[derive(Component, Reflect, Clone, Deref, DerefMut)]
+/// Stores the locale key and the handle to a [`LocaleCollection`] as a component to be processed in
+/// the pipeline.
+///
+/// Using [`Commands::spawn_localized`](crate::cmd::LocCommandsExt::spawn_localized) is advisable.
+#[derive(Component, Reflect, Clone, Deref, DerefMut, Debug)]
 #[component(on_remove = remove_localize)]
 #[require(LocaleResult)]
-#[reflect(Component)]
+#[reflect(Component, Debug)]
 pub struct LocaleKey {
+    /// The locale key to fetch and format from. In case of a missing key, [`LocaleResult::result`]
+    /// will be empty and a warning will be printed.
     #[deref]
     pub key: Cow<'static, str>,
+    /// The handle to the [`LocaleCollection`].
     pub collection: Handle<LocaleCollection>,
 }
 
 fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
     let args = std::mem::take(&mut world.get_mut::<LocaleArgs>(e).unwrap().0);
-    world.commands().queue(move |world: &mut World| {
+    world.commands().entity(e).queue(move |e: Entity, world: &mut World| {
         world.entity_mut(e).remove::<LocaleArgs>();
         for arg in args {
             world.despawn(arg);
@@ -115,9 +201,14 @@ fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
     });
 }
 
-#[derive(Component, Reflect, Clone, Default, Deref, DerefMut)]
-#[reflect(Component, Default)]
+/// Formatted localized string, ready to be used.
+///
+/// Using [`Commands::spawn_localized`](crate::cmd::LocCommandsExt::spawn_localized) is advisable.
+#[derive(Component, Reflect, Clone, Default, Deref, DerefMut, Debug)]
+#[reflect(Component, Default, Debug)]
 pub struct LocaleResult {
+    /// The result string fetched from the [collection](LocaleKey::collection) by a
+    /// [key](LocaleKey::key).
     #[deref]
     pub result: String,
     #[reflect(ignore)]
@@ -221,9 +312,9 @@ pub(crate) fn update_locale_asset(
 
 pub(crate) fn update_locale_cache<T: LocaleArg>(
     locales: Res<Assets<Locale>>,
-    mut sources: Query<(&LocaleSrc<T>, &mut LocaleCache)>,
+    mut sources: Query<(Entity, &LocaleSrc<T>, &mut LocaleCache)>,
 ) {
-    for (src, mut cache) in &mut sources {
+    for (e, src, mut cache) in &mut sources {
         let cache = cache.bypass_change_detection();
         if !cache.changed {
             continue
@@ -236,7 +327,13 @@ pub(crate) fn update_locale_cache<T: LocaleArg>(
             continue
         };
 
-        src.localize_into(locale, cache.result.get_or_insert_default());
+        let result = cache.result.get_or_insert_default();
+        result.clear();
+
+        if src.localize_into(locale, result).is_err() {
+            result.clear();
+            warn_once!("An error occurred while trying to format {} in {e}", type_name::<T>());
+        }
     }
 }
 

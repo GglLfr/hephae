@@ -1,3 +1,5 @@
+//! Defines asset loaders for [`Locale`] and [`LocaleLoader`].
+
 use std::{fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError, str::FromStr};
 
 use bevy_asset::{io::Reader, ron, ron::de::SpannedError, AssetLoader, LoadContext, ParseAssetPathError};
@@ -6,7 +8,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_while1, take_while_m_n},
     character::complete::char,
-    combinator::{cut, map_opt, map_res, value, verify},
+    combinator::{cut, eof, map_opt, map_res, value, verify},
     error::{FromExternalError, ParseError},
     multi::fold,
     sequence::{delimited, preceded},
@@ -88,7 +90,9 @@ fn parse_index<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntE
 /// Parses escaped `{{` and `}}`.
 #[inline]
 fn parse_brace<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, FmtFrag<'a>, E> {
-    alt((tag("{{"), tag("}}"))).map(FmtFrag::Literal).parse(input)
+    alt((value('{', tag("{{")), value('}', tag("}}"))))
+        .map(FmtFrag::Escaped)
+        .parse(input)
 }
 
 /// Parses any characters preceding a backslash or a brace, leaving `{{` and `}}` as special cases.
@@ -102,49 +106,52 @@ fn parse_literal<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str,
 fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>(
     input: &'a str,
 ) -> IResult<&'a str, LocaleFmt, E> {
-    cut(fold(
-        0..,
-        alt((parse_literal, parse_brace, parse_index, parse_escaped)),
-        || (0, LocaleFmt::Unformatted(String::new())),
-        |(start, mut fmt), frag| match frag {
-            FmtFrag::Literal(lit) => match &mut fmt {
-                LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
-                    format.push_str(lit);
-                    (start, fmt)
-                }
-            },
-            FmtFrag::Escaped(c) => match &mut fmt {
-                LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
-                    format.push(c);
-                    (start, fmt)
-                }
-            },
-            FmtFrag::Index(i) => {
-                let (end, args) = match fmt {
-                    LocaleFmt::Unformatted(format) => {
-                        fmt = LocaleFmt::Formatted {
-                            format,
-                            args: Vec::new(),
-                        };
-
-                        // Safety: We just set `fmt` to variant `Formatted` above.
-                        let LocaleFmt::Formatted { format, args } = &mut fmt else {
-                            unsafe { unreachable_unchecked() }
-                        };
-                        (format.len(), args)
+    cut((
+        fold(
+            0..,
+            alt((parse_literal, parse_brace, parse_index, parse_escaped)),
+            || (0, LocaleFmt::Unformatted(String::new())),
+            |(start, mut fmt), frag| match frag {
+                FmtFrag::Literal(lit) => match &mut fmt {
+                    LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
+                        format.push_str(lit);
+                        (start, fmt)
                     }
-                    LocaleFmt::Formatted {
-                        ref format,
-                        ref mut args,
-                    } => (format.len(), args),
-                };
+                },
+                FmtFrag::Escaped(c) => match &mut fmt {
+                    LocaleFmt::Unformatted(format) | LocaleFmt::Formatted { format, .. } => {
+                        format.push(c);
+                        (start, fmt)
+                    }
+                },
+                FmtFrag::Index(i) => {
+                    let (end, args) = match fmt {
+                        LocaleFmt::Unformatted(format) => {
+                            fmt = LocaleFmt::Formatted {
+                                format,
+                                args: Vec::new(),
+                            };
 
-                args.push((start..end, i));
-                (end, fmt)
-            }
-        },
+                            // Safety: We just set `fmt` to variant `Formatted` above.
+                            let LocaleFmt::Formatted { format, args } = &mut fmt else {
+                                unsafe { unreachable_unchecked() }
+                            };
+                            (format.len(), args)
+                        }
+                        LocaleFmt::Formatted {
+                            ref format,
+                            ref mut args,
+                        } => (format.len(), args),
+                    };
+
+                    args.push((start..end, i));
+                    (end, fmt)
+                }
+            },
+        ),
+        eof,
     ))
-    .map(|(.., fmt)| fmt)
+    .map(|((.., fmt), ..)| fmt)
     .parse(input)
 }
 
@@ -200,7 +207,7 @@ impl<'de> Deserialize<'de> for LocaleFmt {
             {
                 match parse::<VerboseError<&str>>(input) {
                     Ok(("", fmt)) => Ok(fmt),
-                    Ok((leftover, ..)) => Err(E::custom(format!("leftover format string: {leftover}"))),
+                    Ok(..) => unreachable!("`cut(eof)` should've ruled out leftover data"),
                     Err(e) => Err(match e {
                         NomErr::Error(e) | NomErr::Failure(e) => E::custom(convert_error(input, e)),
                         NomErr::Incomplete(..) => unreachable!("only complete operations are used"),
@@ -213,14 +220,34 @@ impl<'de> Deserialize<'de> for LocaleFmt {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum LocaleError {
-    #[error(transparent)]
-    Io(#[from] IoError),
-    #[error(transparent)]
-    InvalidFile(#[from] SpannedError),
+impl FromStr for LocaleFmt {
+    type Err = VerboseError<String>;
+
+    #[inline]
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match parse::<VerboseError<&str>>(input) {
+            Ok(("", fmt)) => Ok(fmt),
+            Ok(..) => unreachable!("`cut(eof)` should've ruled out leftover data"),
+            Err(e) => Err(match e {
+                NomErr::Error(e) | NomErr::Failure(e) => e.into(),
+                NomErr::Incomplete(..) => unreachable!("only complete operations are used"),
+            }),
+        }
+    }
 }
 
+/// Errors that may arise when loading [`Locale`]s using [`LocaleLoader`].
+#[derive(Error, Debug)]
+pub enum LocaleError {
+    /// An IO error occurred.
+    #[error(transparent)]
+    Io(#[from] IoError),
+    /// A syntax error occurred.
+    #[error(transparent)]
+    Ron(#[from] SpannedError),
+}
+
+/// Dedicated [`AssetLoader`] for loading [`Locale`]s.
 pub struct LocaleLoader;
 impl AssetLoader for LocaleLoader {
     type Asset = Locale;
@@ -247,24 +274,30 @@ impl AssetLoader for LocaleLoader {
     }
 }
 
+/// Errors that may arise when loading [`LocaleCollection`]s using [`LocaleCollectionLoader`].
 #[derive(Error, Debug)]
 pub enum LocaleCollectionError {
+    /// An IO error occurred.
     #[error(transparent)]
     Io(#[from] IoError),
+    /// A syntax error occurred.
     #[error(transparent)]
-    InvalidFile(#[from] SpannedError),
+    Ron(#[from] SpannedError),
+    /// Invalid sub-asset path.
     #[error(transparent)]
     InvalidPath(#[from] ParseAssetPathError),
+    /// A default locale is defined, but is not available.
     #[error("locale default '{0}' is defined, but is not available in `locales`")]
     MissingDefault(String),
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LocaleCollectionFile {
-    pub default: String,
-    pub languages: Vec<String>,
+#[derive(Deserialize)]
+struct LocaleCollectionFile {
+    default: String,
+    languages: Vec<String>,
 }
 
+/// Dedicated [`AssetLoader`] for loading [`LocaleCollection`]s.
 pub struct LocaleCollectionLoader;
 impl AssetLoader for LocaleCollectionLoader {
     type Asset = LocaleCollection;

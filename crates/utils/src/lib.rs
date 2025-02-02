@@ -5,6 +5,7 @@
 
 pub use hephae_utils_derive as derive;
 
+/// Common imports for [`hephae_utils`](crate).
 pub mod prelude {
     pub use crate::derive::plugin_conf;
 }

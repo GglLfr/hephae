@@ -175,7 +175,7 @@ impl<T: Vertex> Default for VertexQueues<T> {
 ///
 /// Similar to [`check_visibility`](bevy_render::view::check_visibility) that is generic over
 /// [`HasDrawer`], except the filters are configured dynamically by
-/// [`DrawerPlugin`](crate::drawer::DrawerPlugin). This makes it so that all drawers that share the
+/// [`drawer`](crate::plugin::drawer). This makes it so that all drawers that share the
 /// same [`Vertex`] type also share the same visibility system.
 pub fn check_visibilities<T: Vertex>(
     world: &mut World,

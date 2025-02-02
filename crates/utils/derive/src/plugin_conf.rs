@@ -73,6 +73,7 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
 
     let base = quote! {
         #(#new_attrs)* #vis trait #name {
+            #[doc = "Configures the plugin group builder for the types contained in this parameter type."]
             fn build(builder: #bevy_app::PluginGroupBuilder) -> #bevy_app::PluginGroupBuilder;
         }
 
@@ -87,7 +88,6 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
     };
 
     let unit = quote! {
-        #[cfg_attr(docsrs, doc(fake_variadic))]
         impl #name for () {
             #[inline]
             fn build(builder: #bevy_app::PluginGroupBuilder) -> #bevy_app::PluginGroupBuilder {
@@ -96,14 +96,24 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
         }
     };
 
-    let tuples: Vec<TokenStream> = (1usize..=15).fold(Vec::with_capacity(15), |mut out, end| {
+    let tuples = (1usize..=15).fold(Vec::with_capacity(15), |mut out, end| {
         let params = (1..=end).fold(Vec::with_capacity(end), |mut params, i| {
             params.push(Ident::new(&format!("T{i}"), name.span()));
             params
         });
 
+        let meta = if end == 1 {
+            quote! {
+                #[cfg_attr(docsrs, doc(fake_variadic))]
+            }
+        } else {
+            quote! {
+                #[doc(hidden)]
+            }
+        };
+
         out.push(quote! {
-            #[cfg_attr(docsrs, doc(fake_variadic))]
+            #meta
             impl<#(#params: #name,)*> #name for (#(#params,)*) {
                 fn build(mut builder: #bevy_app::PluginGroupBuilder) -> #bevy_app::PluginGroupBuilder {
                     #(builder = #params::build(builder);)*
@@ -116,7 +126,7 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         #base
-        #unit
         #(#tuples)*
+        #unit
     })
 }

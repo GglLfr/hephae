@@ -172,13 +172,13 @@ pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = Handle::weak_from_u128(2
 /// Labels assigned to Hephae systems that are added to [`bevy_render::Render`].
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeRenderSystems {
-    /// Label for [`clear_batches`], in [`bevy_render::RenderSet::Queue`].
+    /// Label for clearing batches, in [`bevy_render::RenderSet::Queue`].
     ClearBatches,
-    /// Label for [`queue_drawers`](drawer::queue_drawers), in [`bevy_render::RenderSet::Queue`].
+    /// Label for queueing drawers, in [`bevy_render::RenderSet::Queue`].
     QueueDrawers,
-    /// Label for [`queue_vertices`], in [`bevy_render::RenderSet::Queue`].
+    /// Label for queueing vertices, in [`bevy_render::RenderSet::Queue`].
     QueueVertices,
-    /// Label for [`prepare_batch`] and [`prepare_view_bind_groups`], in
+    /// Label for prepating batches and view bind groups, in
     /// [`bevy_render::RenderSet::PrepareBindGroups`].
     PrepareBindGroups,
 }

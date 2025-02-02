@@ -10,14 +10,16 @@ pub mod cmd;
 pub mod def;
 pub mod loader;
 
+/// Common imports for [`hephae_locale`](crate).
 pub mod prelude {
     pub use crate::{
         arg::{LocaleTarget, LocalizeBy},
-        cmd::{LocBundle as _, LocCommandsExt as _, LocEntityCommandsExt as _},
+        cmd::{LocBundle as _, LocCommandsExt as _, LocEntityExt as _},
         def::{Locale, LocaleCollection, LocaleKey, LocaleResult},
     };
 }
 
+/// App plugins for [`hephae_locale`](crate).
 pub mod plugin {
     use std::{borrow::Cow, marker::PhantomData};
 
@@ -46,6 +48,8 @@ pub mod plugin {
         pub trait TargetConf for LocaleTarget, T => locale_target::<T>()
     }
 
+    /// Entry point for Hephae's localization plugin, configurable with additional localization
+    /// argument types and target localized receivers.
     #[inline]
     pub fn locales<C: ArgConf, L: TargetConf>() -> impl PluginGroup {
         struct LocaleGroup<C: ArgConf, L: TargetConf>(PhantomData<(C, L)>);
@@ -70,7 +74,8 @@ pub mod plugin {
                                 PostUpdate,
                                 (
                                     HephaeLocaleSystems::UpdateLocaleAsset,
-                                    HephaeLocaleSystems::UpdateLocaleCache,
+                                    HephaeLocaleSystems::UpdateLocaleCache
+                                        .ambiguous_with(HephaeLocaleSystems::UpdateLocaleCache),
                                     HephaeLocaleSystems::UpdateLocaleResult,
                                     HephaeLocaleSystems::LocalizeTarget,
                                 )
@@ -87,7 +92,19 @@ pub mod plugin {
                     .add(locale_arg::<&'static str>())
                     .add(locale_arg::<String>())
                     .add(locale_arg::<Cow<'static, str>>())
-                    .add(locale_arg::<LocalizeBy>());
+                    .add(locale_arg::<LocalizeBy>())
+                    .add(locale_arg::<u8>())
+                    .add(locale_arg::<u16>())
+                    .add(locale_arg::<u32>())
+                    .add(locale_arg::<u64>())
+                    .add(locale_arg::<u128>())
+                    .add(locale_arg::<i8>())
+                    .add(locale_arg::<i16>())
+                    .add(locale_arg::<i32>())
+                    .add(locale_arg::<i64>())
+                    .add(locale_arg::<i128>())
+                    .add(locale_arg::<f32>())
+                    .add(locale_arg::<f64>());
 
                 builder = C::build(builder);
                 L::build(builder)
@@ -97,6 +114,7 @@ pub mod plugin {
         LocaleGroup::<C, L>(PhantomData)
     }
 
+    /// Configures a custom [`LocaleArg`].
     #[inline]
     pub fn locale_arg<T: LocaleArg>() -> impl Plugin {
         |app: &mut App| {
@@ -107,6 +125,7 @@ pub mod plugin {
         }
     }
 
+    /// Configures a custom [`LocaleTarget`].
     #[inline]
     pub fn locale_target<T: LocaleTarget>() -> impl Plugin {
         |app: &mut App| {
@@ -115,12 +134,17 @@ pub mod plugin {
     }
 }
 
-/// Labels assigned to Hephae systems that are added to [`PostUpdate`], responsible over all
-/// localizations.
+/// Labels assigned to Hephae systems that are added to [`PostUpdate`](bevy_app::PostUpdate),
+/// responsible over all localizations.
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeLocaleSystems {
+    /// Detects locale asset changes (among other things) to notify for cache refreshing.
     UpdateLocaleAsset,
+    /// Updates each [`LocaleArg`](crate::arg::LocaleArg)s and caches their result.
     UpdateLocaleCache,
+    /// Combines each [`LocaleArg`](crate::arg::LocaleArg)s into the locale format.
     UpdateLocaleResult,
+    /// Brings over the results from [`UpdateLocaleResult`](HephaeLocaleSystems::UpdateLocaleResult)
+    /// to the associated [`LocaleTarget`](crate::arg::LocaleTarget) within the [`Entity`].
     LocalizeTarget,
 }

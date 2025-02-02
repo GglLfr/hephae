@@ -20,7 +20,7 @@ use nonmax::NonMaxUsize;
 ///
 /// Values stored in this component are the four rectangle corners projected into 3D world-space,
 /// ready to be rendered as-is. They're calculated in
-/// [HephaeGuiSystems::CalculateCorners].
+/// [HephaeGuiSystems::CalculateCorners](crate::HephaeGuiSystems::CalculateCorners).
 #[derive(Component, Copy, Clone, PartialEq, Default, Debug)]
 #[require(Transform, GuiSize, GuiDepth, InitialLayoutSize, DistributedSpace)]
 pub struct Gui {

@@ -104,6 +104,7 @@ pub mod plugin {
         GuiGroup::<L, R>(PhantomData)
     }
 
+    /// Registers a [`GuiLayout`] for custom UI layout mechanism.
     pub fn gui_layout<T: GuiLayout>() -> impl Plugin {
         |app: &mut App| {
             fn hook(mut world: DeferredWorld, e: Entity, _: ComponentId) {
@@ -122,6 +123,7 @@ pub mod plugin {
         }
     }
 
+    /// Registers a [`GuiRoot`] for custom UI available space and projection.
     pub fn gui_root<T: GuiRoot>() -> impl Plugin {
         |app: &mut App| {
             app.register_required_components::<T, GuiRootTransform>()
@@ -133,8 +135,8 @@ pub mod plugin {
     }
 }
 
-/// Labels assigned to Hephae systems that are added to [`PostUpdate`], responsible over all GUI
-/// layout calculations.
+/// Labels assigned to Hephae systems that are added to [`PostUpdate`](bevy_app::PostUpdate),
+/// responsible over all GUI layout calculations.
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeGuiSystems {
     /// Calculates [`GuiRootTransform`](gui::GuiRootTransform) based on implementations of

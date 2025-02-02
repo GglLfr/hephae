@@ -1,6 +1,4 @@
-//! Provides all the necessary resources for a working base rendering pipeline. Note that
-//! drawer-specific pipeline integration is provided by
-//! [`DrawerPlugin`](crate::drawer::DrawerPlugin).
+//! Provides all the necessary resources for a working base rendering pipeline.
 //!
 //! The procedures are as following:
 //! - During [extraction](ExtractSchedule), the [pipeline shader](Vertex::SHADER) [id](AssetId) is
