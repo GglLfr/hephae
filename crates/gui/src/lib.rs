@@ -29,9 +29,9 @@ pub mod plugin {
     use hephae_utils::prelude::*;
 
     #[cfg(feature = "text")]
-    use crate::def::UiText;
+    use crate::def::{update_text_widget, UiText};
     use crate::{
-        def::{update_text_widget, FromCamera2d, UiCont},
+        def::{FromCamera2d, UiCont},
         gui::{GuiLayout, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform, GuiRoots, LayoutCache},
         layout::{calculate_corners, calculate_root, propagate_layout, validate_root},
         HephaeGuiSystems,
