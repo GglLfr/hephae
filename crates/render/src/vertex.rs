@@ -2,12 +2,12 @@
 //!
 //! See the documentation of [Vertex] for more information.
 
-use std::{any::TypeId, hash::Hash, marker::PhantomData, sync::RwLock};
+use std::{any::TypeId, hash::Hash, marker::PhantomData};
 
 use bevy_app::prelude::*;
 use bevy_ecs::{
     component::ComponentId,
-    entity::{EntityHash, EntityHashMap},
+    entity::EntityHashMap,
     prelude::*,
     storage::SparseSet,
     system::{lifetimeless::Read, ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
@@ -22,10 +22,8 @@ use bevy_render::{
     view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
 };
 use bevy_transform::prelude::*;
-use bevy_utils::{prelude::*, HashSet, Parallel, TypeIdMap};
+use bevy_utils::{Parallel, TypeIdMap};
 use bytemuck::NoUninit;
-use dashmap::DashMap;
-use fixedbitset::FixedBitSet;
 
 use crate::drawer::{Drawer, HasDrawer};
 
@@ -49,10 +47,6 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// Defaults to [`Some(TextureFormat::Depth32Float)`], which is the default for 2D core pipeline
     /// depth-stencil format. [`None`] means the pipeline will not have a depth-stencil state.
     const DEPTH_FORMAT: Option<TextureFormat> = Some(TextureFormat::Depth32Float);
-
-    /// The vertex command that [`Drawer<Vertex = Self>`] may output. These commands will be sorted
-    /// according to their Z-layers and then [extracted out](VertexCommand::draw) into the batches.
-    type Command: VertexCommand<Vertex = Self>;
 
     /// System parameter to fetch when [creating the batch](Vertex::create_batch).
     type BatchParam: SystemParam;
@@ -106,31 +100,6 @@ pub trait Vertex: Send + Sync + NoUninit {
     fn create_batch(param: &mut SystemParamItem<Self::BatchParam>, key: Self::PipelineKey) -> Self::BatchProp;
 }
 
-/// Commands issued by [Drawer]s that will flush out vertices and indices into buffers later.
-pub trait VertexCommand: Send + Sync {
-    /// The type of vertex this command works with.
-    type Vertex: Vertex;
-
-    /// Push vertices and indices to be rendered. For example, drawing a triangle would be calling
-    /// `vertices([A, B, C])` and `indices([0, 1, 2])`.
-    fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>);
-}
-
-/// Similar to [`Extend`], except it works with both vertex and index buffers.
-///
-/// Ideally it also adjusts the index offset to the length of the current vertex buffer so
-/// primitives would have the correct shapes.
-pub trait VertexQueuer {
-    /// The type of vertex this queuer works with.
-    type Vertex: Vertex;
-
-    /// Extends the vertex buffer with the supplied iterator.
-    fn vertices(&mut self, vertices: impl IntoIterator<Item = Self::Vertex>);
-
-    /// Extends the index buffer with the supplied iterator.
-    fn indices(&mut self, indices: impl IntoIterator<Item = u32>);
-}
-
 /// Stores the runtime-only type information of [`Drawer`] that is associated with a [`Vertex`] for
 /// use in [`check_visibilities`].
 #[derive(Resource)]
@@ -151,7 +120,7 @@ impl<T: Vertex> VertexDrawers<T> {
     }
 }
 
-/// Stores intermediate vertex commands queued by entity [drawers](crate::vertex::Drawer) to be
+/*/// Stores intermediate vertex commands queued by entity [drawers](crate::vertex::Drawer) to be
 /// added into the render phase of each views for sorting and batching.
 #[derive(Resource)]
 pub struct VertexQueues<T: Vertex> {
@@ -169,7 +138,7 @@ impl<T: Vertex> Default for VertexQueues<T> {
             entity_bits: default(),
         }
     }
-}
+}*/
 
 /// Calculates [`ViewVisibility`] of [drawable](Drawer) entities.
 ///

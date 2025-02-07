@@ -205,7 +205,7 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn enqueue(
+    fn draw(
         &self,
         atlases: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,

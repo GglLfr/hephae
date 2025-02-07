@@ -37,11 +37,11 @@ members = [
 authors = ["GlFolker"]
 edition = "2021"
 keywords = ["bevy", "graphics", "render", "vertex", "batch"]
-rust-version = "1.83"
+rust-version = "1.84"
 categories = ["graphics", "rendering"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/GlennFolker/hephae"
-version = "0.5.0"
+version = "0.6.0"
 
 [workspace.lints.clippy]
 type_complexity = "allow"
@@ -65,9 +65,11 @@ bevy_utils = "0.15"
 async-channel = "2"
 bytemuck = { version = "1", features = ["derive"] }
 cosmic-text = { version = "0.12", default-features = false, features = ["std", "swash"] }
+crossbeam-utils = "0.8"
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
 guillotiere = "0.6"
+loom = { version = "0.7", features = ["checkpoint"] }
 nom = "8"
 nom-language = "0.1"
 nonmax = "0.5"
@@ -79,12 +81,12 @@ syn = { version = "2", features = ["full"] }
 sys-locale = "0.3"
 thiserror = "2"
 
-hephae-atlas = { version = "0.5.0", path = "crates/atlas" }
-hephae-gui = { version = "0.5.0", path = "crates/gui" }
-hephae-locale = { version = "0.5.0", path = "crates/locale" }
-hephae-render = { version = "0.5.0", path = "crates/render" }
-hephae-text = { version = "0.5.0", path = "crates/text" }
-hephae-utils = { version = "0.5.0", path = "crates/utils" }
+hephae-atlas = { version = "0.6.0", path = "crates/atlas" }
+hephae-gui = { version = "0.6.0", path = "crates/gui" }
+hephae-locale = { version = "0.6.0", path = "crates/locale" }
+hephae-render = { version = "0.6.0", path = "crates/render" }
+hephae-text = { version = "0.6.0", path = "crates/text" }
+hephae-utils = { version = "0.6.0", path = "crates/utils" }
 
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }
@@ -104,6 +106,7 @@ default = ["atlas", "gui", "locale", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
+loom = ["hephae-utils/loom"]
 text = ["dep:hephae-text", "hephae-gui?/text"]
 
 [[example]]

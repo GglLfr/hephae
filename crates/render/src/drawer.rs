@@ -1,6 +1,6 @@
 //! Defines base drawers that work with vertices and supply various vertex commands.
 
-use std::{marker::PhantomData, sync::PoisonError};
+use std::marker::PhantomData;
 
 use bevy_ecs::{
     prelude::*,
@@ -9,14 +9,14 @@ use bevy_ecs::{
 };
 use bevy_reflect::prelude::*;
 use bevy_render::{
+    self,
     prelude::*,
     sync_world::RenderEntity,
     view::{ExtractedView, RenderVisibleEntities},
     Extract,
 };
-use fixedbitset::FixedBitSet;
 
-use crate::vertex::{Vertex, VertexQueues};
+use crate::vertex::Vertex;
 
 /// A render world [`Component`] extracted from the main world that will be used to issue
 /// [`VertexCommand`](crate::vertex::VertexCommand)s.
@@ -41,13 +41,24 @@ pub trait Drawer: TypePath + Component + Sized {
         query: QueryItem<Self::ExtractData>,
     );
 
-    /// Issues [`VertexCommand`](crate::vertex::VertexCommand)s for rendering, in a form of Z-layer,
-    /// [pipeline key](Vertex::PipelineKey), and [vertex command](Vertex::Command).
-    fn enqueue(
-        &self,
-        param: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    );
+    /// Issues vertex data and draw requests for the data.
+    fn draw(&self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
+}
+
+/// Similar to [`Extend`], except it works with both vertex and index buffers.
+///
+/// Ideally it also adjusts the index offset to the length of the current vertex buffer so
+/// primitives would have the correct shapes.
+pub trait VertexQueuer {
+    /// The type of vertex this queuer works with.
+    type Vertex: Vertex;
+
+    /// Extends the vertex buffer with the supplied iterator. Returns the base index that should be
+    /// used for [`request`](VertexQueuer::request).
+    fn data(&self, vertices: impl AsRef<[Self::Vertex]>) -> usize;
+
+    /// Extends the index buffer with the supplied iterator.
+    fn request(&self, prop: <Self::Vertex as Vertex>::PipelineProp, base_index: usize, indices: impl AsRef<[u32]>);
 }
 
 /// Specifies the behavior of [`Drawer::extract`].
@@ -74,7 +85,7 @@ impl<T: Drawer> DrawerExtract<'_, T> {
     where
         T: Default,
     {
-        self.get_mut(Default::default)
+        self.get_mut(T::default)
     }
 }
 
@@ -127,6 +138,20 @@ pub(crate) fn queue_drawers<T: Drawer>(
     param: StaticSystemParam<T::DrawParam>,
     query: Query<&T>,
     views: Query<(Entity, &RenderVisibleEntities), With<ExtractedView>>,
+) {
+    for (view_entity, visible_entities) in &views {
+        for &(e, main_e) in visible_entities.iter::<With<HasDrawer<T>>>() {
+            let Ok(drawer) = query.get(e) else { continue };
+
+            drawer.draw(&param, queuer);
+        }
+    }
+}
+
+/*pub(crate) fn queue_drawers<T: Drawer>(
+    param: StaticSystemParam<T::DrawParam>,
+    query: Query<&T>,
+    views: Query<(Entity, &RenderVisibleEntities), With<ExtractedView>>,
     queues: Res<VertexQueues<T::Vertex>>,
     mut iterated: Local<FixedBitSet>,
 ) {
@@ -152,4 +177,4 @@ pub(crate) fn queue_drawers<T: Drawer>(
         .write()
         .unwrap_or_else(PoisonError::into_inner)
         .union_with(&iterated);
-}
+}*/

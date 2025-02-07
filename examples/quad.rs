@@ -106,7 +106,7 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn enqueue(
+    fn draw(
         &self,
         time: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,

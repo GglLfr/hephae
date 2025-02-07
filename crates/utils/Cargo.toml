@@ -18,7 +18,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hephae-utils-derive = { version = "0.5", path = "derive" }
+hephae-utils-derive = { version = "0.6", path = "derive" }
 
 bevy_app.workspace = true
 bevy_utils.workspace = true
+
+crossbeam-utils.workspace = true
+loom = { workspace = true, optional = true }
+
+[features]
+default = []
+loom = ["dep:loom", "crossbeam-utils/loom"]

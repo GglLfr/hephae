@@ -210,7 +210,7 @@ impl Drawer for DrawSprite {
     }
 
     #[inline]
-    fn enqueue(
+    fn draw(
         &self,
         images: &SystemParamItem<Self::DrawParam>,
         queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,

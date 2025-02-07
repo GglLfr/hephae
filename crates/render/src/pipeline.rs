@@ -33,20 +33,21 @@ use bevy_render::{
         TrackedRenderPass, ViewSortedRenderPhases,
     },
     render_resource::{
-        binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState,
-        BufferAddress, BufferUsages, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
-        FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache, PolygonMode, PrimitiveState,
-        PrimitiveTopology, RawBufferVec, RenderPipelineDescriptor, ShaderDefVal, ShaderStages, SpecializedRenderPipeline,
-        SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat, VertexBufferLayout, VertexState,
-        VertexStepMode,
+        binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer,
+        BufferAddress, BufferDescriptor, BufferUsages, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState,
+        DepthStencilState, FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache, PolygonMode,
+        PrimitiveState, PrimitiveTopology, RawBufferVec, RenderPipelineDescriptor, ShaderDefVal, ShaderStages,
+        SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat,
+        VertexBufferLayout, VertexState, VertexStepMode,
     },
     renderer::{RenderDevice, RenderQueue},
     texture::{FallbackImage, GpuImage},
     view::{ExtractedView, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
     Extract,
 };
+use hephae_utils::vec_belt::VecBelt;
 
-use crate::vertex::{Vertex, VertexCommand, VertexQueuer, VertexQueues};
+use crate::vertex::Vertex;
 
 /// Common pipeline descriptor for use in [specialization](Vertex::specialize_pipeline). See the
 /// module-level documentation.
@@ -279,6 +280,40 @@ impl<T: Vertex> Default for HephaeBatchEntities<T> {
             entities: Vec::new(),
             _marker: PhantomData,
         }
+    }
+}
+
+/// Vertex and index buffers associated with each extracted views.
+#[derive(Component)]
+pub struct Batch<T: Vertex> {
+    vertices: VecBelt<T>,
+    indices: VecBelt<u32>,
+    vertex_buffer: Buffer,
+    index_buffer: Buffer,
+}
+
+pub fn assign_batches<T: Vertex>(
+    mut commands: Commands,
+    device: Res<RenderDevice>,
+    view_query: Query<Entity, (With<ExtractedView>, Without<Batch<T>>)>,
+) {
+    for e in &view_query {
+        commands.entity(e).insert(Batch::<T> {
+            vertices: VecBelt::new(4096),
+            indices: VecBelt::new(6144),
+            vertex_buffer: device.create_buffer(&BufferDescriptor {
+                label: Some("hephae_pipeline_vertex_buffer"),
+                size: 4096 * size_of::<T>(),
+                usage: BufferUsages::VERTEX,
+                mapped_at_creation: false,
+            }),
+            index_buffer: device.create_buffer(&BufferDescriptor {
+                label: Some("hephae_pipeline_index_buffer"),
+                size: 6144 * size_of::<u32>(),
+                usage: BufferUsages::INDEX,
+                mapped_at_creation: false,
+            }),
+        });
     }
 }
 

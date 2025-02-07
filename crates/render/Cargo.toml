@@ -31,5 +31,4 @@ bevy_transform.workspace = true
 bevy_utils.workspace = true
 
 bytemuck.workspace = true
-dashmap.workspace = true
 fixedbitset.workspace = true
