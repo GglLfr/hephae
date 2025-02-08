@@ -65,6 +65,8 @@ bevy_utils = "0.15"
 async-channel = "2"
 bytemuck = { version = "1", features = ["derive"] }
 cosmic-text = { version = "0.12", default-features = false, features = ["std", "swash"] }
+core_affinity = "0.8"
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support", "plotters"] }
 crossbeam-utils = "0.8"
 dashmap = { version = "6", features = ["inline"] }
 fixedbitset = "0.5"
@@ -106,7 +108,6 @@ default = ["atlas", "gui", "locale", "text"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
-loom = ["hephae-utils/loom"]
 text = ["dep:hephae-text", "hephae-gui?/text"]
 
 [[example]]

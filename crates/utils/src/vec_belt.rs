@@ -68,6 +68,11 @@ impl<T> VecBelt<T> {
         }
     }
 
+    #[inline]
+    pub fn len(&mut self) -> usize {
+        *self.total_len.get_mut()
+    }
+
     fn append_raw_erased(&self, additional: usize) -> (*mut [T], *mut T, usize) {
         let backoff = Backoff::new();
 
@@ -75,20 +80,22 @@ impl<T> VecBelt<T> {
         let total_len = self.total_len.get();
         let tail = self.tail.get();
 
-        let mut len_flagged = self.len.load(Relaxed);
+        //let mut len_flagged = self.len.load(Relaxed);
         loop {
-            let len = len_flagged & MASK;
-            let new_len = len.checked_add(additional).expect("too many elements");
+            //let len = len_flagged & MASK;
+            let len = self.len.load(Relaxed) & MASK;
+            let new_len = (len as isize).checked_add(additional as isize).expect("too many elements") as usize;
 
-            if new_len & FLAG == FLAG {
-                panic!("too many elements")
+            if self.len.compare_exchange(len, new_len | FLAG, Acquire, Relaxed).is_err() {
+                backoff.snooze();
+                continue
             }
 
-            if let Err(actual) = self.len.compare_exchange_weak(len, new_len | FLAG, Acquire, Relaxed) {
+            /*if let Err(actual) = self.len.compare_exchange_weak(len, new_len | FLAG, Acquire, Relaxed) {
                 backoff.snooze();
                 len_flagged = actual;
                 continue
-            }
+            }*/
 
             let index = unsafe {
                 total_len.replace(match (*total_len).checked_add(additional) {
@@ -110,19 +117,19 @@ impl<T> VecBelt<T> {
                 )
             } else {
                 #[cold]
-                #[inline(never)]
                 unsafe fn new_fragment<'a, T>(
                     len: usize,
                     new_len: usize,
                     chunk_len: usize,
                     this_len: &AtomicUsize,
                     this_tail: *mut NonNull<Fragment<T>>,
-                ) -> (*mut [T], *mut T) {
+                    index: usize,
+                ) -> (*mut [T], *mut T, usize) {
                     let tail = unsafe { (*this_tail).as_ptr() };
                     let data = unsafe { &raw mut (*tail).data } as *mut [T];
 
                     let cut = new_len - data.len();
-                    let (new_tail, new_data) = match Fragment::<T>::new(chunk_len.max(cut)) {
+                    let (new_tail, new_data) = match Fragment::<T>::new(chunk_len.max(index + (new_len - len)).max(cut)) {
                         Ok(frag) => frag,
                         Err(..) => {
                             this_len.store(len, Release);
@@ -137,11 +144,11 @@ impl<T> VecBelt<T> {
                     (
                         slice_from_raw_parts_mut((data as *mut T).add(len), data.len() - len),
                         new_data,
+                        index,
                     )
                 }
 
-                let (data, new_data) = unsafe { new_fragment(len, new_len, chunk_len, &self.len, tail) };
-                (data, new_data, index)
+                unsafe { new_fragment(len, new_len, chunk_len, &self.len, tail, index) }
             }
         }
     }
@@ -155,7 +162,7 @@ impl<T> VecBelt<T> {
     }
 
     #[inline]
-    pub fn append(&self, transfer: impl TransferBelt<T>) -> usize {
+    pub fn append(&self, transfer: impl TransferBelt<Item = T>) -> usize {
         let len = transfer.len();
         unsafe {
             self.append_raw(len, move |left, right| {
@@ -249,22 +256,26 @@ impl<T> Drop for VecBelt<T> {
     }
 }
 
-pub unsafe trait TransferBelt<T> {
+pub unsafe trait TransferBelt {
+    type Item;
+
     fn len(&self) -> usize;
 
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T);
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item);
 
     unsafe fn finish(self);
 }
 
-unsafe impl<T, const LEN: usize> TransferBelt<T> for [T; LEN] {
+unsafe impl<T, const LEN: usize> TransferBelt for [T; LEN] {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         LEN
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -275,14 +286,16 @@ unsafe impl<T, const LEN: usize> TransferBelt<T> for [T; LEN] {
     }
 }
 
-unsafe impl<T, const LEN: usize> TransferBelt<T> for std::array::IntoIter<T, LEN> {
+unsafe impl<T, const LEN: usize> TransferBelt for std::array::IntoIter<T, LEN> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         LEN
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_slice().as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -293,14 +306,16 @@ unsafe impl<T, const LEN: usize> TransferBelt<T> for std::array::IntoIter<T, LEN
     }
 }
 
-unsafe impl<T> TransferBelt<T> for Box<[T]> {
+unsafe impl<T> TransferBelt for Box<[T]> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         <[T]>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -311,14 +326,16 @@ unsafe impl<T> TransferBelt<T> for Box<[T]> {
     }
 }
 
-unsafe impl<T> TransferBelt<T> for Vec<T> {
+unsafe impl<T> TransferBelt for Vec<T> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         <Vec<T>>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -329,14 +346,16 @@ unsafe impl<T> TransferBelt<T> for Vec<T> {
     }
 }
 
-unsafe impl<T> TransferBelt<T> for std::vec::IntoIter<T> {
+unsafe impl<T> TransferBelt for std::vec::IntoIter<T> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         self.as_slice().len()
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_slice().as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -347,14 +366,16 @@ unsafe impl<T> TransferBelt<T> for std::vec::IntoIter<T> {
     }
 }
 
-unsafe impl<T: Copy> TransferBelt<T> for &[T] {
+unsafe impl<T: Copy> TransferBelt for &[T] {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         <[T]>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -363,14 +384,16 @@ unsafe impl<T: Copy> TransferBelt<T> for &[T] {
     unsafe fn finish(self) {}
 }
 
-unsafe impl<T: Copy> TransferBelt<T> for &mut [T] {
+unsafe impl<T: Copy> TransferBelt for &mut [T] {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         <[T]>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -379,14 +402,16 @@ unsafe impl<T: Copy> TransferBelt<T> for &mut [T] {
     unsafe fn finish(self) {}
 }
 
-unsafe impl<T: Copy> TransferBelt<T> for std::slice::Iter<'_, T> {
+unsafe impl<T: Copy> TransferBelt for std::slice::Iter<'_, T> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         self.as_slice().len()
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_slice().as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -395,14 +420,16 @@ unsafe impl<T: Copy> TransferBelt<T> for std::slice::Iter<'_, T> {
     unsafe fn finish(self) {}
 }
 
-unsafe impl<T: Copy> TransferBelt<T> for std::slice::IterMut<'_, T> {
+unsafe impl<T: Copy> TransferBelt for std::slice::IterMut<'_, T> {
+    type Item = T;
+
     #[inline]
     fn len(&self) -> usize {
         self.as_slice().len()
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut T) {
+    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
         let ptr = self.as_slice().as_ptr();
         dst.copy_from_nonoverlapping(ptr.add(offset), len);
     }
@@ -552,34 +579,25 @@ mod tests {
 
     #[test]
     fn test_vec_belt() {
-        #[inline]
-        fn run() {
-            let append = [0, 1, 2, 3, 4];
-            let thread_count = 8;
+        let append = [0, 1, 2, 3, 4];
+        let thread_count = 8;
 
-            let vec = Arc::new(VecBelt::new(1));
-            let threads = (0..thread_count)
-                .zip(repeat_with(|| vec.clone()))
-                .map(|(i, vec)| thread::spawn(move || vec.append(append.map(|num| num + i * append.len()))))
-                .collect::<Box<_>>();
+        let vec = Arc::new(VecBelt::new(1));
+        let threads = (0..thread_count)
+            .zip(repeat_with(|| vec.clone()))
+            .map(|(i, vec)| thread::spawn(move || vec.append(append.map(|num| num + i * append.len()))))
+            .collect::<Box<_>>();
 
-            for thread in threads {
-                thread.join().unwrap();
-            }
-
-            Arc::into_inner(vec).unwrap().clear(|slice| {
-                assert_eq!(slice.len(), append.len() * thread_count);
-                for i in 0..thread_count {
-                    let slice = &slice[i * append.len()..(i + 1) * append.len()];
-                    assert_eq!(slice, append.map(|num| num + slice[0]));
-                }
-            })
+        for thread in threads {
+            thread.join().unwrap();
         }
 
-        #[cfg(feature = "loom")]
-        loom::model(run);
-
-        #[cfg(not(feature = "loom"))]
-        run();
+        Arc::into_inner(vec).unwrap().clear(|slice| {
+            assert_eq!(slice.len(), append.len() * thread_count);
+            for i in 0..thread_count {
+                let slice = &slice[i * append.len()..(i + 1) * append.len()];
+                assert_eq!(slice, append.map(|num| num + slice[0]));
+            }
+        })
     }
 }

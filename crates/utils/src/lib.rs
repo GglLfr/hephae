@@ -24,24 +24,8 @@ pub trait UnsafeCellExt {
     fn with_mut<R>(&self, accept: impl FnOnce(*mut Self::T) -> R) -> R;
 }
 
-#[cfg(not(feature = "loom"))]
 pub mod sync {
     pub use std::{
-        hint::spin_loop as busy_wait,
-        sync::{
-            atomic::{
-                fence as atomic_fence, AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicPtr,
-                AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering::*,
-            },
-            Arc, Barrier, Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, WaitTimeoutResult,
-        },
-        thread,
-    };
-}
-
-#[cfg(feature = "loom")]
-pub mod sync {
-    pub use loom::{
         hint::spin_loop as busy_wait,
         sync::{
             atomic::{
