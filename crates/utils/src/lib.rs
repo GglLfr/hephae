@@ -12,18 +12,6 @@ pub mod prelude {
     pub use crate::{derive::plugin_conf, sync};
 }
 
-/// Provides `with` and `with_mut`, mainly to cooperate with Loom's mock [`UnsafeCell`].
-pub trait UnsafeCellExt {
-    /// The `T` in [`UnsafeCell<T>`].
-    type T: ?Sized;
-
-    /// Gets an immutable pointer to the wrapped value, applying a closure to it.
-    fn with<R>(&self, accept: impl FnOnce(*const Self::T) -> R) -> R;
-
-    /// Gets a mutable pointer to the wrapped value, applying a closure to it.
-    fn with_mut<R>(&self, accept: impl FnOnce(*mut Self::T) -> R) -> R;
-}
-
 pub mod sync {
     pub use std::{
         hint::spin_loop as busy_wait,
@@ -36,4 +24,48 @@ pub mod sync {
         },
         thread,
     };
+}
+
+/// Stable version of [`std::hint::likely`].
+#[inline(always)]
+pub const fn likely(cond: bool) -> bool {
+    1u8.checked_div(if cond { 1 } else { 0 }).is_some()
+}
+
+/// Stable version of [`std::hint::unlikely`].
+#[inline(always)]
+pub const fn unlikely(cond: bool) -> bool {
+    1u8.checked_div(if cond { 0 } else { 1 }).is_none()
+}
+
+pub trait LikelyResult {
+    type Ok;
+    type Err;
+
+    fn likely_ok<R>(self, ok: impl FnOnce(Self::Ok) -> R, err: impl FnOnce(Self::Err) -> R) -> R;
+
+    fn likely_err<R>(self, ok: impl FnOnce(Self::Ok) -> R, err: impl FnOnce(Self::Err) -> R) -> R;
+}
+
+impl<T, E> LikelyResult for Result<T, E> {
+    type Ok = T;
+    type Err = E;
+
+    #[inline(always)]
+    fn likely_ok<R>(self, ok: impl FnOnce(T) -> R, err: impl FnOnce(E) -> R) -> R {
+        if likely(matches!(self, Ok(..))) {
+            ok(unsafe { self.unwrap_unchecked() })
+        } else {
+            err(unsafe { self.unwrap_err_unchecked() })
+        }
+    }
+
+    #[inline(always)]
+    fn likely_err<R>(self, ok: impl FnOnce(T) -> R, err: impl FnOnce(E) -> R) -> R {
+        if likely(matches!(self, Err(..))) {
+            err(unsafe { self.unwrap_err_unchecked() })
+        } else {
+            ok(unsafe { self.unwrap_unchecked() })
+        }
+    }
 }

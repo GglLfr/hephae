@@ -1,7 +1,7 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout, LayoutError},
     cell::UnsafeCell,
-    hint::assert_unchecked,
+    convert::identity,
     marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -10,7 +10,7 @@ use std::{
 
 use crossbeam_utils::{Backoff, CachePadded};
 
-use crate::sync::*;
+use crate::{likely, sync::*, unlikely, LikelyResult};
 
 const FLAG: usize = 1 << (usize::BITS - 1);
 const MASK: usize = !FLAG;
@@ -18,13 +18,15 @@ const MASK: usize = !FLAG;
 #[repr(C)]
 struct Fragment<T> {
     next: *mut Self,
+    len: usize,
     data: [MaybeUninit<T>],
 }
 
 impl<T> Fragment<T> {
     #[inline]
     fn layout(capacity: usize) -> Result<Layout, LayoutError> {
-        let (layout, ..) = Layout::new::<*mut Self>().extend(Layout::array::<MaybeUninit<T>>(capacity)?)?;
+        let (layout, ..) = Layout::new::<*mut Self>().extend(Layout::new::<usize>())?;
+        let (layout, ..) = layout.extend(Layout::array::<MaybeUninit<T>>(capacity)?)?;
         Ok(layout.pad_to_align())
     }
 
@@ -38,6 +40,7 @@ impl<T> Fragment<T> {
 
         unsafe {
             (&raw mut (*ptr).next).write(slice_from_raw_parts_mut(null_mut::<()>(), 0) as *mut Self);
+            (&raw mut (*ptr).len).write(0);
         }
 
         Ok(unsafe { (NonNull::new_unchecked(ptr), &raw mut (*ptr).data as *mut T) })
@@ -45,8 +48,7 @@ impl<T> Fragment<T> {
 }
 
 pub struct VecBelt<T> {
-    chunk_len: usize,
-    total_len: UnsafeCell<usize>,
+    preceeding_len: UnsafeCell<usize>,
     len: CachePadded<AtomicUsize>,
     head: NonNull<Fragment<T>>,
     tail: UnsafeCell<NonNull<Fragment<T>>>,
@@ -57,11 +59,10 @@ unsafe impl<T: Send> Sync for VecBelt<T> {}
 
 impl<T> VecBelt<T> {
     #[inline]
-    pub fn new(chunk_len: usize) -> Self {
-        let (head, ..) = Fragment::new(chunk_len).expect("couldn't allocate a fragment");
+    pub fn new(initial_size: usize) -> Self {
+        let (head, ..) = Fragment::new(initial_size).expect("couldn't allocate a fragment");
         Self {
-            chunk_len,
-            total_len: UnsafeCell::new(0),
+            preceeding_len: UnsafeCell::new(0),
             len: CachePadded::new(AtomicUsize::new(0)),
             head,
             tail: UnsafeCell::new(head),
@@ -69,159 +70,129 @@ impl<T> VecBelt<T> {
     }
 
     #[inline]
-    pub fn len(&mut self) -> usize {
-        *self.total_len.get_mut()
+    pub fn len(&self) -> usize {
+        self.len.load(Relaxed)
     }
 
-    fn append_raw_erased(&self, additional: usize) -> (*mut [T], *mut T, usize) {
-        let backoff = Backoff::new();
+    #[inline]
+    pub fn len_mut(&mut self) -> usize {
+        *self.len.get_mut()
+    }
 
-        let chunk_len = self.chunk_len;
-        let total_len = self.total_len.get();
+    unsafe fn append_raw_erased(&self, additional: usize) -> (*mut T, usize) {
+        let backoff = Backoff::new();
+        let preceeding_len = self.preceeding_len.get();
         let tail = self.tail.get();
 
-        //let mut len_flagged = self.len.load(Relaxed);
         loop {
-            //let len = len_flagged & MASK;
             let len = self.len.load(Relaxed) & MASK;
-            let new_len = (len as isize).checked_add(additional as isize).expect("too many elements") as usize;
+            let new_len = len + additional;
+
+            if unlikely(new_len & FLAG == FLAG) {
+                panic!("too many elements")
+            }
 
             if self.len.compare_exchange(len, new_len | FLAG, Acquire, Relaxed).is_err() {
                 backoff.snooze();
                 continue
             }
 
-            /*if let Err(actual) = self.len.compare_exchange_weak(len, new_len | FLAG, Acquire, Relaxed) {
-                backoff.snooze();
-                len_flagged = actual;
-                continue
-            }*/
+            let preceeding = *preceeding_len;
+            let data = &raw mut (*(*tail).as_ptr()).data;
 
-            let index = unsafe {
-                total_len.replace(match (*total_len).checked_add(additional) {
-                    Some(new_total_len) => new_total_len,
-                    None => {
-                        self.len.store(len, Release);
-                        panic!("too many elements")
-                    }
-                })
-            };
-
-            let data = unsafe { &raw mut (*(*tail).as_ptr()).data } as *mut [T];
-            break if data.len() >= new_len {
+            break if likely(data.len() >= new_len - preceeding) {
                 self.len.store(new_len, Release);
-                (
-                    unsafe { slice_from_raw_parts_mut((data as *mut T).add(len), new_len - len) },
-                    null_mut(),
-                    index,
-                )
+                ((data as *mut T).add(len - preceeding), len)
             } else {
                 #[cold]
-                unsafe fn new_fragment<'a, T>(
+                unsafe fn new_fragment<T>(
                     len: usize,
-                    new_len: usize,
-                    chunk_len: usize,
+                    additional: usize,
+                    preceeding: usize,
+                    this_preceeding_len: *mut usize,
                     this_len: &AtomicUsize,
                     this_tail: *mut NonNull<Fragment<T>>,
-                    index: usize,
-                ) -> (*mut [T], *mut T, usize) {
-                    let tail = unsafe { (*this_tail).as_ptr() };
-                    let data = unsafe { &raw mut (*tail).data } as *mut [T];
+                ) -> (*mut T, usize) {
+                    let (new_tail, new_data) = Fragment::<T>::new(len + additional).likely_ok(identity, |_| {
+                        this_len.store(len, Release);
+                        panic!("couldn't allocate a fragment");
+                    });
 
-                    let cut = new_len - data.len();
-                    let (new_tail, new_data) = match Fragment::<T>::new(chunk_len.max(index + (new_len - len)).max(cut)) {
-                        Ok(frag) => frag,
-                        Err(..) => {
-                            this_len.store(len, Release);
-                            panic!("couldn't allocate a fragment")
-                        }
-                    };
-
-                    this_tail.write(new_tail);
-                    this_len.store(cut, Release);
+                    this_preceeding_len.replace(len);
+                    let tail = this_tail.replace(new_tail).as_ptr();
+                    this_len.store(len + additional, Release);
 
                     (&raw mut (*tail).next).write(new_tail.as_ptr());
-                    (
-                        slice_from_raw_parts_mut((data as *mut T).add(len), data.len() - len),
-                        new_data,
-                        index,
-                    )
+                    (&raw mut (*tail).len).write(len - preceeding);
+
+                    (new_data as *mut T, len)
                 }
 
-                unsafe { new_fragment(len, new_len, chunk_len, &self.len, tail, index) }
+                new_fragment(len, additional, preceeding, preceeding_len, &self.len, tail)
             }
         }
     }
 
     #[inline]
-    pub unsafe fn append_raw(&self, additional: usize, acceptor: impl FnOnce(*mut [T], *mut T)) -> usize {
-        let (left, right, index) = self.append_raw_erased(additional);
+    pub unsafe fn append_raw(&self, additional: usize, acceptor: impl FnOnce(*mut T)) -> usize {
+        let (data, index) = self.append_raw_erased(additional);
 
-        acceptor(left, right);
+        acceptor(data);
         index
     }
 
     #[inline]
-    pub fn append(&self, transfer: impl TransferBelt<Item = T>) -> usize {
+    pub fn append(&self, transfer: impl TransferBelt<T>) -> usize {
         let len = transfer.len();
-        unsafe {
-            self.append_raw(len, move |left, right| {
-                let fit = left.len();
-                transfer.transfer(0, fit, left as *mut T);
-                if !right.is_null() {
-                    transfer.transfer(fit, len - fit, right);
-                }
-
-                transfer.finish();
-            })
+        if unlikely(len & FLAG == FLAG) {
+            panic!("too many elements")
         }
+
+        unsafe { self.append_raw(len, |ptr| transfer.transfer(len, ptr)) }
     }
 
     #[inline]
     pub fn clear<'a, R>(&'a mut self, consumer: impl FnOnce(ConsumeSlice<'a, T>) -> R) -> R {
         #[cold]
-        #[inline(never)]
-        fn merge<T>(head: *mut Fragment<T>, total_len: usize) -> (NonNull<Fragment<T>>, *mut [T]) {
-            let (new_head, mut new_data) = Fragment::<T>::new(total_len).expect("couldn't allocate a fragment");
+        unsafe fn merge<T>(
+            head: &mut NonNull<Fragment<T>>,
+            tail: &mut NonNull<Fragment<T>>,
+            preceeding: usize,
+            current: usize,
+        ) -> *mut [T] {
+            let (new_head, mut new_data) =
+                Fragment::<T>::new(current).likely_ok(identity, |_| panic!("couldn't allocate a fragment"));
 
             let start_data = new_data;
-            let mut node = head;
-            let mut remaining = total_len;
+            let mut node = std::mem::replace(head, new_head).as_ptr();
 
-            while !node.is_null() {
-                let next = unsafe { (*node).next };
+            loop {
+                let next = (*node).next;
+                let data = &raw const (*node).data;
+                let len = if next.is_null() { current - preceeding } else { (*node).len };
 
-                let data = unsafe { &raw mut (*node).data };
-                let capacity = data.len();
-                let taken = remaining.min(capacity);
+                new_data.copy_from_nonoverlapping(data as *const T, len);
+                new_data = new_data.add(len);
+                dealloc(node as *mut u8, Fragment::<T>::layout(data.len()).unwrap_unchecked());
 
-                unsafe {
-                    new_data.copy_from_nonoverlapping(data as *const T, taken);
-                    new_data = new_data.add(taken);
-
-                    dealloc(node as *mut u8, Fragment::<T>::layout(capacity).unwrap_unchecked());
-                }
-
-                remaining -= taken;
-                node = next;
+                node = match next {
+                    ptr if ptr.is_null() => {
+                        *tail = new_head;
+                        break slice_from_raw_parts_mut(start_data as *mut T, current)
+                    }
+                    ptr => ptr,
+                };
             }
-
-            unsafe { assert_unchecked(remaining == 0) }
-            (new_head, slice_from_raw_parts_mut(start_data, total_len))
         }
 
-        let total_len = std::mem::replace(self.total_len.get_mut(), 0);
+        let preceeding = std::mem::replace(self.preceeding_len.get_mut(), 0);
+        let current = std::mem::replace(self.len.get_mut(), 0);
 
         let head = self.head.as_ptr();
-        let slice = if addr_eq(head, self.tail.get_mut().as_ptr()) {
-            slice_from_raw_parts_mut(unsafe { &raw mut (*head).data as *mut T }, total_len)
+        let slice = if likely(addr_eq(head, self.tail.get_mut().as_ptr())) {
+            slice_from_raw_parts_mut(unsafe { &raw mut (*head).data as *mut T }, current)
         } else {
-            let (new_head, slice) = merge(head, total_len);
-
-            self.head = new_head;
-            *self.tail.get_mut() = new_head;
-
-            slice
+            unsafe { merge(&mut self.head, self.tail.get_mut(), preceeding, current) }
         };
 
         consumer(ConsumeSlice {
@@ -233,209 +204,140 @@ impl<T> VecBelt<T> {
 
 impl<T> Drop for VecBelt<T> {
     fn drop(&mut self) {
+        let preceeding = *self.preceeding_len.get_mut();
+        let current = *self.len.get_mut();
         let mut node = self.head.as_ptr();
-        let mut remaining = *self.total_len.get_mut();
 
-        while !node.is_null() {
+        loop {
             let next = unsafe { (*node).next };
-
             let data = unsafe { &raw mut (*node).data };
-            let capacity = data.len();
-            let taken = remaining.min(capacity);
+            let taken = if next.is_null() {
+                current - preceeding
+            } else {
+                unsafe { (*node).len }
+            };
 
             unsafe {
                 slice_from_raw_parts_mut(data as *mut T, taken).drop_in_place();
-                dealloc(node as *mut u8, Fragment::<T>::layout(capacity).unwrap_unchecked());
+                dealloc(node as *mut u8, Fragment::<T>::layout(data.len()).unwrap_unchecked());
             }
 
-            remaining -= taken;
-            node = next;
+            node = match next {
+                ptr if ptr.is_null() => break,
+                ptr => ptr,
+            };
         }
-
-        unsafe { assert_unchecked(remaining == 0) }
     }
 }
 
-pub unsafe trait TransferBelt {
-    type Item;
-
+pub unsafe trait TransferBelt<T> {
     fn len(&self) -> usize;
 
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item);
-
-    unsafe fn finish(self);
+    unsafe fn transfer(self, len: usize, dst: *mut T);
 }
 
-unsafe impl<T, const LEN: usize> TransferBelt for [T; LEN] {
-    type Item = T;
-
+unsafe impl<T, const LEN: usize> TransferBelt<T> for [T; LEN] {
     #[inline]
     fn len(&self) -> usize {
         LEN
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(self) {
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_ptr() as *const T, len);
         std::mem::forget(self);
     }
 }
 
-unsafe impl<T, const LEN: usize> TransferBelt for std::array::IntoIter<T, LEN> {
-    type Item = T;
-
+unsafe impl<T, const LEN: usize> TransferBelt<T> for std::array::IntoIter<T, LEN> {
     #[inline]
     fn len(&self) -> usize {
         LEN
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_slice().as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(self) {
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_slice().as_ptr() as *const T, len);
         self.for_each(std::mem::forget);
     }
 }
 
-unsafe impl<T> TransferBelt for Box<[T]> {
-    type Item = T;
-
+unsafe impl<T> TransferBelt<T> for Box<[T]> {
     #[inline]
     fn len(&self) -> usize {
         <[T]>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        let ptr = Box::into_raw(self);
+        dst.copy_from_nonoverlapping(ptr as *const T, len);
 
-    #[inline]
-    unsafe fn finish(self) {
-        drop(Box::from_raw(Box::into_raw(self) as *mut [MaybeUninit<T>]));
+        drop(Box::from_raw(ptr as *mut MaybeUninit<T>));
     }
 }
 
-unsafe impl<T> TransferBelt for Vec<T> {
-    type Item = T;
-
+unsafe impl<T> TransferBelt<T> for Vec<T> {
     #[inline]
     fn len(&self) -> usize {
         <Vec<T>>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(mut self) {
+    unsafe fn transfer(mut self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_ptr(), len);
         self.set_len(0);
     }
 }
 
-unsafe impl<T> TransferBelt for std::vec::IntoIter<T> {
-    type Item = T;
-
+unsafe impl<T> TransferBelt<T> for std::vec::IntoIter<T> {
     #[inline]
     fn len(&self) -> usize {
-        self.as_slice().len()
+        <Self as ExactSizeIterator>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_slice().as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(self) {
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_slice().as_ptr(), len);
         self.for_each(std::mem::forget);
     }
 }
 
-unsafe impl<T: Copy> TransferBelt for &[T] {
-    type Item = T;
+unsafe impl<T> TransferBelt<T> for std::vec::Drain<'_, T> {
+    #[inline]
+    fn len(&self) -> usize {
+        <Self as ExactSizeIterator>::len(self)
+    }
 
+    #[inline]
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_slice().as_ptr(), len);
+        self.for_each(std::mem::forget);
+    }
+}
+
+unsafe impl<T: Copy> TransferBelt<T> for &[T] {
     #[inline]
     fn len(&self) -> usize {
         <[T]>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_ptr(), len);
     }
-
-    #[inline]
-    unsafe fn finish(self) {}
 }
 
-unsafe impl<T: Copy> TransferBelt for &mut [T] {
-    type Item = T;
-
+unsafe impl<T: Copy> TransferBelt<T> for std::slice::Iter<'_, T> {
     #[inline]
     fn len(&self) -> usize {
-        <[T]>::len(self)
+        <Self as ExactSizeIterator>::len(self)
     }
 
     #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        dst.copy_from_nonoverlapping(self.as_slice().as_ptr(), len);
     }
-
-    #[inline]
-    unsafe fn finish(self) {}
-}
-
-unsafe impl<T: Copy> TransferBelt for std::slice::Iter<'_, T> {
-    type Item = T;
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.as_slice().len()
-    }
-
-    #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_slice().as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(self) {}
-}
-
-unsafe impl<T: Copy> TransferBelt for std::slice::IterMut<'_, T> {
-    type Item = T;
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.as_slice().len()
-    }
-
-    #[inline]
-    unsafe fn transfer(&self, offset: usize, len: usize, dst: *mut Self::Item) {
-        let ptr = self.as_slice().as_ptr();
-        dst.copy_from_nonoverlapping(ptr.add(offset), len);
-    }
-
-    #[inline]
-    unsafe fn finish(self) {}
 }
 
 pub struct ConsumeSlice<'a, T> {
@@ -577,6 +479,15 @@ mod tests {
 
     use crate::{sync::*, vec_belt::VecBelt};
 
+    #[derive(Debug, PartialEq)]
+    struct Int(usize);
+
+    impl Drop for Int {
+        fn drop(&mut self) {
+            println!("Dropped {}", self.0);
+        }
+    }
+
     #[test]
     fn test_vec_belt() {
         let append = [0, 1, 2, 3, 4];
@@ -585,7 +496,7 @@ mod tests {
         let vec = Arc::new(VecBelt::new(1));
         let threads = (0..thread_count)
             .zip(repeat_with(|| vec.clone()))
-            .map(|(i, vec)| thread::spawn(move || vec.append(append.map(|num| num + i * append.len()))))
+            .map(|(i, vec)| thread::spawn(move || vec.append(append.map(|num| Int(num + i * append.len())))))
             .collect::<Box<_>>();
 
         for thread in threads {
@@ -596,7 +507,9 @@ mod tests {
             assert_eq!(slice.len(), append.len() * thread_count);
             for i in 0..thread_count {
                 let slice = &slice[i * append.len()..(i + 1) * append.len()];
-                assert_eq!(slice, append.map(|num| num + slice[0]));
+                for (j, num) in slice.iter().enumerate() {
+                    assert_eq!(num.0, append[j] + slice[0].0);
+                }
             }
         })
     }
