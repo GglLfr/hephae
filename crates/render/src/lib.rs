@@ -1,11 +1,9 @@
-#![allow(internal_features)]
-#![cfg_attr(docsrs, feature(rustdoc_internals))]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 
 pub mod drawer;
-pub mod image_bind;
-pub mod pipeline;
+/*pub mod image_bind;
+pub mod pipeline;*/
 pub mod vertex;
 
 use bevy_asset::prelude::*;
@@ -18,7 +16,7 @@ pub mod prelude {
 
     pub use crate::{
         drawer::{Drawer, HasDrawer},
-        vertex::{Vertex, VertexCommand, VertexQueuer},
+        vertex::Vertex,
         HephaeRenderSystems,
     };
 }
@@ -43,7 +41,7 @@ pub mod plugin {
             clear_batches, extract_shader, load_shader, prepare_batch, prepare_view_bind_groups, queue_vertices,
             DrawRequests, HephaeBatchEntities, HephaePipeline,
         },
-        vertex::{check_visibilities, Vertex, VertexDrawers, VertexQueues},
+        vertex::{check_visibilities, Vertex, VertexDrawers},
         HephaeRenderSystems, HEPHAE_VIEW_BINDINGS_HANDLE,
     };
 
@@ -117,7 +115,6 @@ pub mod plugin {
                 if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
                     render_app
                         .init_resource::<SpecializedRenderPipelines<HephaePipeline<T>>>()
-                        .init_resource::<VertexQueues<T>>()
                         .init_resource::<HephaeBatchEntities<T>>()
                         .add_render_command::<T::Item, DrawRequests<T>>()
                         .add_systems(ExtractSchedule, extract_shader::<T>)

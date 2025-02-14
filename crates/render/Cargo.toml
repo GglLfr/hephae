@@ -32,3 +32,5 @@ bevy_utils.workspace = true
 
 bytemuck.workspace = true
 fixedbitset.workspace = true
+smallvec.workspace = true
+vec-belt.workspace = true
