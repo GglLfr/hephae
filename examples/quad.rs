@@ -16,7 +16,6 @@ use bevy::{
 };
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
-use hephae_render::drawer::DrawerExtract;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -39,8 +38,6 @@ impl Vertex for Vert {
     type PipelineParam = ();
     type PipelineProp = ();
     type PipelineKey = ();
-
-    type Command = Quad;
 
     type BatchParam = ();
     type BatchProp = ();
@@ -106,31 +103,16 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn draw(
-        &self,
-        time: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    ) {
-        queuer.extend([(0., (), Quad(time.elapsed_secs()))]);
-    }
-}
-
-#[derive(Copy, Clone)]
-struct Quad(f32);
-impl VertexCommand for Quad {
-    type Vertex = Vert;
-
-    #[inline]
-    fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let (sin, cos) = (self.0 * 3.).sin_cos();
-        queuer.vertices([
+    fn draw(&mut self, time: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+        let (sin, cos) = (time.elapsed_secs() * 3.).sin_cos();
+        let base = queuer.data([
             Vert::new(100. + cos * 25., 100. + sin * 25., 2., 0., 0., 1.),
             Vert::new(-100. - cos * 25., 100. + sin * 25., 0., 3., 0., 1.),
             Vert::new(-100. - cos * 25., -100. - sin * 25., 0., 0., 4., 1.),
             Vert::new(100. + cos * 25., -100. - sin * 25., 4., 3., 2., 1.),
         ]);
 
-        queuer.indices([0, 1, 2, 2, 3, 0]);
+        queuer.request(0., (), [base, base + 1, base + 2, base + 2, base + 3, base]);
     }
 }
 

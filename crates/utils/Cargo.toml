@@ -21,17 +21,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 hephae-utils-derive = { version = "0.6", path = "derive" }
 
 bevy_app.workspace = true
+bevy_ecs.workspace = true
 bevy_utils.workspace = true
-
-core_affinity.workspace = true
-crossbeam-utils.workspace = true
-
-[dev-dependencies]
-criterion.workspace = true
-
-[features]
-default = []
-
-[[bench]]
-name = "vec_belt"
-harness = false

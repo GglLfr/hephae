@@ -1,6 +1,6 @@
 //! Defines base drawers that work with vertices and supply various vertex commands.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::PoisonError};
 
 use bevy_ecs::{
     prelude::*,
@@ -15,8 +15,13 @@ use bevy_render::{
     view::{ExtractedView, RenderVisibleEntities},
     Extract,
 };
+use fixedbitset::FixedBitSet;
+use vec_belt::Transfer;
 
-use crate::vertex::Vertex;
+use crate::{
+    pipeline::{DrawBuffers, VisibleDrawers},
+    vertex::{DrawItems, Vertex},
+};
 
 /// A render world [`Component`] extracted from the main world that will be used to issue
 /// [`VertexCommand`](crate::vertex::VertexCommand)s.
@@ -42,23 +47,7 @@ pub trait Drawer: TypePath + Component + Sized {
     );
 
     /// Issues vertex data and draw requests for the data.
-    fn draw(&self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
-}
-
-/// Similar to [`Extend`], except it works with both vertex and index buffers.
-///
-/// Ideally it also adjusts the index offset to the length of the current vertex buffer so
-/// primitives would have the correct shapes.
-pub trait VertexQueuer {
-    /// The type of vertex this queuer works with.
-    type Vertex: Vertex;
-
-    /// Extends the vertex buffer with the supplied iterator. Returns the base index that should be
-    /// used for [`request`](VertexQueuer::request).
-    fn data(&self, vertices: impl AsRef<[Self::Vertex]>) -> usize;
-
-    /// Extends the index buffer with the supplied iterator.
-    fn request(&self, prop: <Self::Vertex as Vertex>::PipelineProp, base_index: usize, indices: impl AsRef<[u32]>);
+    fn draw(&mut self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
 }
 
 /// Specifies the behavior of [`Drawer::extract`].
@@ -89,6 +78,20 @@ impl<T: Drawer> DrawerExtract<'_, T> {
     }
 }
 
+/// Similar to [`Extend`], except it works with both vertex and index buffers.
+pub trait VertexQueuer {
+    /// The type of vertex this queuer works with.
+    type Vertex: Vertex;
+
+    /// Extends the vertex buffer with the supplied iterator. The returned index should be used as
+    /// offset adder to indices passed to [`request`](VertexQueuer::request).
+    fn data(&self, vertices: impl Transfer<Self::Vertex>) -> u32;
+
+    /// Extends the index buffer with the supplied iterator. Indices should be offset by the index
+    /// returned by [`data`](VertexQueuer::data).
+    fn request(&self, layer: f32, key: <Self::Vertex as Vertex>::PipelineKey, indices: impl Transfer<u32>);
+}
+
 /// Marker component for entities that may extract out [`Drawer`]s to the render world. This *must*
 /// be added to those entities so they'll be calculated in
 /// [`check_visibilities`](crate::vertex::check_visibilities).
@@ -96,7 +99,6 @@ impl<T: Drawer> DrawerExtract<'_, T> {
 #[reflect(Component, Default)]
 #[require(Visibility)]
 pub struct HasDrawer<T: Drawer>(#[reflect(ignore)] pub PhantomData<fn() -> T>);
-
 impl<T: Drawer> Default for HasDrawer<T> {
     #[inline]
     fn default() -> Self {
@@ -136,45 +138,52 @@ pub(crate) fn extract_drawers<T: Drawer>(
 
 pub(crate) fn queue_drawers<T: Drawer>(
     param: StaticSystemParam<T::DrawParam>,
-    query: Query<&T>,
-    views: Query<(Entity, &RenderVisibleEntities), With<ExtractedView>>,
-) {
-    for (view_entity, visible_entities) in &views {
-        for &(e, main_e) in visible_entities.iter::<With<HasDrawer<T>>>() {
-            let Ok(drawer) = query.get(e) else { continue };
-
-            drawer.draw(&param, queuer);
-        }
-    }
-}
-
-/*pub(crate) fn queue_drawers<T: Drawer>(
-    param: StaticSystemParam<T::DrawParam>,
-    query: Query<&T>,
-    views: Query<(Entity, &RenderVisibleEntities), With<ExtractedView>>,
-    queues: Res<VertexQueues<T::Vertex>>,
+    buffers: Res<DrawBuffers<T::Vertex>>,
+    mut query: Query<(Entity, &mut T, &DrawItems<T::Vertex>)>,
+    views: Query<(&RenderVisibleEntities, &VisibleDrawers<T::Vertex>), With<ExtractedView>>,
     mut iterated: Local<FixedBitSet>,
 ) {
+    let buffers = buffers.into_inner();
+
     iterated.clear();
-    for (view_entity, visible_entities) in &views {
-        for &(e, main_e) in visible_entities.iter::<With<HasDrawer<T>>>() {
+    for (visible_entities, visible_drawers) in &views {
+        let mut iter = query.iter_many_mut(visible_entities.iter::<With<HasDrawer<T>>>().map(|(e, ..)| e));
+        while let Some((e, mut drawer, items)) = iter.fetch_next() {
             let index = e.index() as usize;
             if iterated[index] {
                 continue;
             }
 
-            let Ok(drawer) = query.get(e) else { continue };
-
             iterated.grow_and_insert(index);
-            queues.entities.entry(view_entity).or_default().insert((e, main_e));
+            visible_drawers.0.append([e]);
 
-            drawer.enqueue(&param, &mut *queues.commands.entry(e).or_default());
+            drawer.draw(&param, &Queuer { buffers, items });
         }
     }
 
-    queues
-        .entity_bits
-        .write()
-        .unwrap_or_else(PoisonError::into_inner)
-        .union_with(&iterated);
-}*/
+    struct Queuer<'a, T: Vertex> {
+        buffers: &'a DrawBuffers<T>,
+        items: &'a DrawItems<T>,
+    }
+
+    impl<T: Vertex> VertexQueuer for Queuer<'_, T> {
+        type Vertex = T;
+
+        #[inline]
+        fn data(&self, vertices: impl Transfer<T>) -> u32 {
+            self.buffers.vertices.append(vertices) as u32
+        }
+
+        #[inline]
+        fn request(&self, layer: f32, key: T::PipelineKey, indices: impl Transfer<u32>) {
+            let len = indices.len();
+            let offset = self.buffers.indices.append(indices);
+
+            self.items
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push((offset..offset + len, layer, key));
+        }
+    }
+}

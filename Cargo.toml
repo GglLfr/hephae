@@ -82,6 +82,7 @@ smallvec = "1"
 syn = { version = "2", features = ["full"] }
 sys-locale = "0.3"
 thiserror = "2"
+vec-belt = "1"
 
 hephae-atlas = { version = "0.6.0", path = "crates/atlas" }
 hephae-gui = { version = "0.6.0", path = "crates/gui" }

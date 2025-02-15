@@ -2,7 +2,7 @@
 //!
 //! See the documentation of [Vertex] for more information.
 
-use std::{any::TypeId, hash::Hash, marker::PhantomData};
+use std::{any::TypeId, hash::Hash, marker::PhantomData, ops::Range, sync::Mutex};
 
 use bevy_app::prelude::*;
 use bevy_ecs::{
@@ -24,6 +24,7 @@ use bevy_render::{
 use bevy_transform::prelude::*;
 use bevy_utils::{Parallel, TypeIdMap};
 use bytemuck::NoUninit;
+use smallvec::SmallVec;
 
 use crate::drawer::{Drawer, HasDrawer};
 
@@ -120,25 +121,14 @@ impl<T: Vertex> VertexDrawers<T> {
     }
 }
 
-/*/// Stores intermediate vertex commands queued by entity [drawers](crate::vertex::Drawer) to be
-/// added into the render phase of each views for sorting and batching.
-#[derive(Resource)]
-pub struct VertexQueues<T: Vertex> {
-    pub(crate) commands: DashMap<Entity, Vec<(f32, T::PipelineKey, T::Command)>, EntityHash>,
-    pub(crate) entities: DashMap<Entity, HashSet<(Entity, MainEntity)>, EntityHash>,
-    pub(crate) entity_bits: RwLock<FixedBitSet>,
-}
-
-impl<T: Vertex> Default for VertexQueues<T> {
+#[derive(Component)]
+pub(crate) struct DrawItems<T: Vertex>(pub Mutex<SmallVec<[(Range<usize>, f32, T::PipelineKey); 8]>>);
+impl<T: Vertex> Default for DrawItems<T> {
     #[inline]
     fn default() -> Self {
-        Self {
-            commands: default(),
-            entities: default(),
-            entity_bits: default(),
-        }
+        Self(Mutex::new(SmallVec::new()))
     }
-}*/
+}
 
 /// Calculates [`ViewVisibility`] of [drawable](Drawer) entities.
 ///
