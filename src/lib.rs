@@ -1,5 +1,5 @@
 #![allow(internal_features)]
-#![cfg_attr(docsrs, feature(rustdoc_internals))]
+#![cfg_attr(any(docsrs, docsrs_dep), feature(rustdoc_internals))]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 

@@ -10,6 +10,22 @@ license.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustc-args = [
+    "--cfg", "docsrs_dep",
+]
+rustdoc-args = [
+    "-Zunstable-options",
+    "--generate-link-to-definition",
+    "--html-after-content",
+    "docs-rs/trait-tags.html",
+]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
+
 [lib]
 proc-macro = true
 

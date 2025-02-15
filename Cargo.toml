@@ -19,7 +19,16 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = [
+    "--cfg", "docsrs_dep",
+]
+rustdoc-args = [
+    "-Zunstable-options",
+    "--generate-link-to-definition",
+    "--html-after-content",
+    "docs-rs/trait-tags.html",
+]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [workspace]
 resolver = "2"
@@ -46,6 +55,9 @@ version = "0.6.0"
 [workspace.lints.clippy]
 type_complexity = "allow"
 too_many_arguments = "allow"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(docsrs_dep)"] }
 
 [workspace.dependencies]
 bevy_app = "0.15"
