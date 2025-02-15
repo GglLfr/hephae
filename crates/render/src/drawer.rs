@@ -23,8 +23,8 @@ use crate::{
     vertex::{DrawItems, Vertex},
 };
 
-/// A render world [`Component`] extracted from the main world that will be used to issue
-/// [`VertexCommand`](crate::vertex::VertexCommand)s.
+/// A render world [`Component`] extracted from the main world that will be used to issue draw
+/// requests.
 pub trait Drawer: TypePath + Component + Sized {
     /// The type of vertex this drawer works with.
     type Vertex: Vertex;
@@ -36,7 +36,7 @@ pub trait Drawer: TypePath + Component + Sized {
     /// Additional query filters accompanying [`ExtractData`](Drawer::ExtractData).
     type ExtractFilter: QueryFilter;
 
-    /// System parameter to fetch when issuing [`VertexCommand`](crate::vertex::VertexCommand)s.
+    /// System parameter to fetch when issuing draw requests.
     type DrawParam: ReadOnlySystemParam;
 
     /// Extracts an instance of this drawer from matching entities, if available.

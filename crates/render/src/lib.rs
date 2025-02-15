@@ -19,7 +19,7 @@ pub mod prelude {
     pub use crate::{
         drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
         image_bind::ImageBindGroups,
-        pipeline::{HephaePipeline, ViewBatches},
+        pipeline::{VertexPipeline, ViewBatches},
         vertex::Vertex,
         HephaeRenderSystems,
     };
@@ -47,7 +47,7 @@ pub mod plugin {
         image_bind::{extract_image_events, validate_image_bind_groups, ImageAssetEvents, ImageBindGroups},
         pipeline::{
             extract_shader, load_shader, prepare_indices, prepare_view_bind_groups, queue_vertices, DrawBuffers,
-            DrawRequests, HephaePipeline, ViewBatches, ViewIndexBuffer, VisibleDrawers,
+            DrawRequests, VertexPipeline, ViewBatches, ViewIndexBuffer, VisibleDrawers,
         },
         vertex::{check_visibilities, DrawItems, Vertex, VertexDrawers},
         HephaeRenderSystems, HEPHAE_VIEW_BINDINGS_HANDLE,
@@ -123,7 +123,7 @@ pub mod plugin {
 
                 if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
                     let world = render_app
-                        .init_resource::<SpecializedRenderPipelines<HephaePipeline<T>>>()
+                        .init_resource::<SpecializedRenderPipelines<VertexPipeline<T>>>()
                         .add_render_command::<T::Item, DrawRequests<T>>()
                         .add_systems(ExtractSchedule, extract_shader::<T>)
                         .add_systems(Render, queue_vertices::<T>.in_set(HephaeRenderSystems::QueueVertices))
@@ -139,7 +139,7 @@ pub mod plugin {
                 if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
                     render_app
                         .init_resource::<DrawBuffers<T>>()
-                        .init_resource::<HephaePipeline<T>>()
+                        .init_resource::<VertexPipeline<T>>()
                         .add_systems(
                             Render,
                             (

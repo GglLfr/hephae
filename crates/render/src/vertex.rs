@@ -32,10 +32,10 @@ use crate::drawer::{Drawer, HasDrawer};
 /// in the GPU.
 pub trait Vertex: Send + Sync + NoUninit {
     /// System parameter to fetch when initializing
-    /// [`HephaePipeline`](crate::pipeline::HephaePipeline) to create a
+    /// [`VertexPipeline`](crate::pipeline::VertexPipeline) to create a
     /// [`PipelineProp`](Vertex::PipelineProp).
     type PipelineParam: SystemParam;
-    /// The additional property of the [common pipeline definition](crate::pipeline::HephaePipeline)
+    /// The additional property of the [common pipeline definition](crate::pipeline::VertexPipeline)
     /// that may used when specializing based on [`PipelineKey`](Vertex::PipelineKey). For example,
     /// this may be used to create a
     /// [`BindGroupLayout`](bevy_render::render_resource::BindGroupLayout) for texture-sampling.
@@ -51,10 +51,9 @@ pub trait Vertex: Send + Sync + NoUninit {
 
     /// System parameter to fetch when [creating the batch](Vertex::create_batch).
     type BatchParam: SystemParam;
-    /// Additional property that is embedded into
-    /// [`HephaeBatch`](crate::pipeline::HephaeBatchSection) components for use in
-    /// [`RenderCommand`](Vertex::RenderCommand). For example, this may be an
-    /// [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) from
+    /// Additional property that is embedded into the [batch](crate::pipeline::ViewBatches)
+    /// components for use in [`RenderCommand`](Vertex::RenderCommand). For example, this may be
+    /// an [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) from
     /// [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
     /// group for texture-sampling.
     type BatchProp: Send + Sync;
@@ -87,7 +86,7 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// [prop](Vertex::PipelineProp) of the common render pipeline descriptor.
     fn specialize_pipeline(key: Self::PipelineKey, prop: &Self::PipelineProp, desc: &mut RenderPipelineDescriptor);
 
-    /// Creates the phase item associated with a [`VertexCommand`] based on its layer, render and
+    /// Creates the phase item associated with a [`Drawer`] based on its layer, render and
     /// main entity, rendering pipeline ID, draw function ID, and command index.
     fn create_item(
         layer: f32,

@@ -57,7 +57,7 @@ impl Vertex for Vert {
     type BatchParam = (
         SRes<RenderDevice>,
         SRes<RenderAssets<GpuImage>>,
-        SRes<HephaePipeline<Self>>,
+        SRes<VertexPipeline<Self>>,
         SResMut<ImageBindGroups>,
     );
     type BatchProp = AssetId<Image>;

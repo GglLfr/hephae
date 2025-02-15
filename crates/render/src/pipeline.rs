@@ -3,14 +3,14 @@
 //! The procedures are as following:
 //! - During [extraction](ExtractSchedule), the [pipeline shader](Vertex::SHADER) [id](AssetId) is
 //!   synchronized from the main world to the render world.
-//! - During [phase item queueing](bevy_render::RenderSet::Queue), vertex and index buffers for use
-//!   in batches are inserted (or cleared if exists already) to each [view](ExtractedView) entities.
-//!   Each visible [drawers](crate::drawer::Drawer) also queue [`VertexCommand`]s as [phase
-//!   items](PhaseItem), ready to be sorted.
+//! - During [phase item queueing](bevy_render::RenderSet::Queue), each visible
+//!   [drawers](crate::drawer::Drawer) queue [vertices](crate::vertex::Vertex) and indices as draw
+//!   requests.
 //! - During [GPU resource preparation](bevy_render::RenderSet::PrepareBindGroups), camera view bind
-//!   groups are created, and for each camera view, overlapping vertex commands are invoked to draw
-//!   into the GPU buffers. Compatible vertex commands are batched, that is, they share a section in
-//!   the vertex and index buffers and share GPU render calls.
+//!   groups are created, and for each camera view, index buffers are generated based on drawers
+//!   that overlap the camera view bounds. Notably, all cameras share the same vertex buffer.
+//!   Compatible vertex commands are batched; i.e., they share a section in the vertex and index
+//!   buffers and share GPU render calls.
 //! - [`DrawRequests`] renders each batch.
 
 use std::{marker::PhantomData, num::NonZero, ops::Range, sync::PoisonError};
@@ -60,12 +60,12 @@ use crate::vertex::{DrawItems, Vertex};
 /// Common pipeline descriptor for use in [specialization](Vertex::specialize_pipeline). See the
 /// module-level documentation.
 #[derive(Resource)]
-pub struct HephaePipeline<T: Vertex> {
+pub struct VertexPipeline<T: Vertex> {
     view_layout: BindGroupLayout,
     vertex_prop: T::PipelineProp,
 }
 
-impl<T: Vertex> HephaePipeline<T> {
+impl<T: Vertex> VertexPipeline<T> {
     /// Returns the [additional property](Vertex::PipelineProp) of the vertex definition for use in
     /// [specialization](Vertex::specialize_pipeline).
     #[inline]
@@ -74,7 +74,7 @@ impl<T: Vertex> HephaePipeline<T> {
     }
 }
 
-impl<T: Vertex> FromWorld for HephaePipeline<T> {
+impl<T: Vertex> FromWorld for VertexPipeline<T> {
     fn from_world(world: &mut World) -> Self {
         let device = world.resource::<RenderDevice>();
 
@@ -141,7 +141,7 @@ pub struct ViewKey {
     pub shader: AssetId<Shader>,
 }
 
-impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
+impl<T: Vertex> SpecializedRenderPipeline for VertexPipeline<T> {
     type Key = (ViewKey, T::PipelineKey);
 
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
@@ -239,6 +239,7 @@ impl<T: Vertex> SpecializedRenderPipeline for HephaePipeline<T> {
     }
 }
 
+/// Global vertex buffer written to by [`Drawer`](crate::drawer::Drawer)s in parallel.
 #[derive(Resource)]
 pub struct DrawBuffers<T: Vertex> {
     pub(crate) vertices: VecBelt<T>,
@@ -263,6 +264,7 @@ impl<T: Vertex> FromWorld for DrawBuffers<T> {
     }
 }
 
+/// Render phase items associated with each views that are responsible over batching draw calls.
 #[derive(Component)]
 pub struct ViewBatches<T: Vertex>(pub EntityHashMap<(T::BatchProp, Range<u32>)>);
 impl<T: Vertex> Default for ViewBatches<T> {
@@ -282,6 +284,7 @@ pub struct ViewBindGroup<T: Vertex> {
     _marker: PhantomData<fn() -> T>,
 }
 
+/// Index buffer associated with each views.
 #[derive(Component)]
 pub struct ViewIndexBuffer<T: Vertex> {
     indices: Vec<u32>,
@@ -311,9 +314,9 @@ impl<T: Vertex> Default for VisibleDrawers<T> {
 
 pub(crate) fn queue_vertices<T: Vertex>(
     draw_functions: Res<DrawFunctions<T::Item>>,
-    pipeline: Res<HephaePipeline<T>>,
+    pipeline: Res<VertexPipeline<T>>,
     shader: Res<PipelineShader<T>>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<HephaePipeline<T>>>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<VertexPipeline<T>>>,
     pipeline_cache: Res<PipelineCache>,
     mut transparent_phases: ResMut<ViewSortedRenderPhases<T::Item>>,
     mut views: Query<(
@@ -517,10 +520,10 @@ pub(crate) fn prepare_indices<T: Vertex>(
     }
 }
 
-/// Assigns [`HephaeViewBindGroup`]s into each views.
-pub fn prepare_view_bind_groups<T: Vertex>(
+/// Assigns [`ViewBindGroup`]s into each views.
+pub(crate) fn prepare_view_bind_groups<T: Vertex>(
     mut commands: Commands,
-    pipeline: Res<HephaePipeline<T>>,
+    pipeline: Res<VertexPipeline<T>>,
     render_device: Res<RenderDevice>,
     view_uniforms: Res<ViewUniforms>,
     mut views: Query<(Entity, &Tonemapping, Option<&mut ViewBindGroup<T>>)>,
@@ -577,14 +580,14 @@ pub fn prepare_view_bind_groups<T: Vertex>(
 /// Render command for drawing each vertex batches.
 pub type DrawRequests<T> = (
     SetItemPipeline,
-    SetHephaeViewBindGroup<T, 0>,
+    SetViewBindGroup<T, 0>,
     <T as Vertex>::RenderCommand,
     DrawBatch<T>,
 );
 
-/// Binds the [view bind group](HephaeViewBindGroup) to `@group(I)`.
-pub struct SetHephaeViewBindGroup<T: Vertex, const I: usize>(PhantomData<fn() -> T>);
-impl<P: PhaseItem, T: Vertex, const I: usize> RenderCommand<P> for SetHephaeViewBindGroup<T, I> {
+/// Binds the [view bind group](ViewBindGroup) to `@group(I)`.
+pub struct SetViewBindGroup<T: Vertex, const I: usize>(PhantomData<fn() -> T>);
+impl<P: PhaseItem, T: Vertex, const I: usize> RenderCommand<P> for SetViewBindGroup<T, I> {
     type Param = ();
     type ViewQuery = (Read<ViewUniformOffset>, Read<ViewBindGroup<T>>);
     type ItemQuery = ();
