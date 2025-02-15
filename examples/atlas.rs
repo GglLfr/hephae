@@ -27,14 +27,7 @@ use bevy::{
     },
 };
 use bytemuck::{Pod, Zeroable};
-use hephae::{
-    prelude::*,
-    render::{
-        image_bind::ImageBindGroups,
-        pipeline::{HephaeBatchSection, HephaePipeline},
-    },
-};
-use hephae_render::drawer::DrawerExtract;
+use hephae::prelude::*;
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -54,8 +47,6 @@ impl Vertex for SpriteVertex {
     type PipelineParam = SRes<RenderDevice>;
     type PipelineProp = BindGroupLayout;
     type PipelineKey = AssetId<Image>;
-
-    type Command = Sprite;
 
     type BatchParam = (
         SRes<RenderDevice>,
@@ -140,23 +131,23 @@ impl Vertex for SpriteVertex {
 struct SetSpriteBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     type Param = SRes<ImageBindGroups>;
-    type ViewQuery = ();
-    type ItemQuery = Read<HephaeBatchSection<SpriteVertex>>;
+    type ViewQuery = Read<ViewBatches<SpriteVertex>>;
+    type ItemQuery = ();
 
     #[inline]
     fn render<'w>(
-        _: &P,
-        _: ROQueryItem<'w, Self::ViewQuery>,
-        batch: Option<ROQueryItem<'w, Self::ItemQuery>>,
+        item: &P,
+        view: ROQueryItem<'w, Self::ViewQuery>,
+        _: Option<ROQueryItem<'w, Self::ItemQuery>>,
         image_bind_groups: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let image_bind_groups = image_bind_groups.into_inner();
-        let Some(batch) = batch else {
+        let Some(&(id, ..)) = view.0.get(&item.entity()) else {
             return RenderCommandResult::Skip
         };
 
-        let Some(bind_group) = image_bind_groups.get(*batch.prop()) else {
+        let Some(bind_group) = image_bind_groups.get(id) else {
             return RenderCommandResult::Skip
         };
 
@@ -210,11 +201,7 @@ impl Drawer for DrawSprite {
     }
 
     #[inline]
-    fn draw(
-        &self,
-        images: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    ) {
+    fn draw(&mut self, images: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Some(page) = images.get(self.page) else { return };
 
         let Vec2 { x, y } = self.pos;
@@ -222,55 +209,14 @@ impl Drawer for DrawSprite {
         let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / page.size.as_vec2();
         let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / page.size.as_vec2();
 
-        queuer.extend([(0., self.page, Sprite {
-            x,
-            y,
-            hw,
-            hh,
-            u,
-            v,
-            u2,
-            v2,
-        })]);
-    }
-}
-
-#[derive(Copy, Clone)]
-struct Sprite {
-    x: f32,
-    y: f32,
-    hw: f32,
-    hh: f32,
-    u: f32,
-    v: f32,
-    u2: f32,
-    v2: f32,
-}
-
-impl VertexCommand for Sprite {
-    type Vertex = SpriteVertex;
-
-    #[inline]
-    fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self {
-            x,
-            y,
-            hw,
-            hh,
-            u,
-            v,
-            u2,
-            v2,
-        } = *self;
-
-        queuer.vertices([
+        let base = queuer.data([
             SpriteVertex::new(x - hw, y - hh, u, v),
             SpriteVertex::new(x + hw, y - hh, u2, v),
             SpriteVertex::new(x + hw, y + hh, u2, v2),
             SpriteVertex::new(x - hw, y + hh, u, v2),
         ]);
 
-        queuer.indices([0, 1, 2, 2, 3, 0]);
+        queuer.request(0., self.page, [base, base + 1, base + 2, base + 2, base + 3, base]);
     }
 }
 

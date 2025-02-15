@@ -28,16 +28,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bytemuck::{Pod, Zeroable};
-use hephae::{
-    prelude::*,
-    render::{
-        image_bind::ImageBindGroups,
-        pipeline::{HephaeBatchSection, HephaePipeline},
-    },
-};
-use hephae_locale::def::LocaleChangeEvent;
-use hephae_render::drawer::DrawerExtract;
-use hephae_text::atlas::FontAtlas;
+use hephae::{locale::def::LocaleChangeEvent, prelude::*, text::atlas::FontAtlas};
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -62,8 +53,6 @@ impl Vertex for Vert {
     type PipelineParam = SRes<RenderDevice>;
     type PipelineProp = BindGroupLayout;
     type PipelineKey = AssetId<Image>;
-
-    type Command = Glyph;
 
     type BatchParam = (
         SRes<RenderDevice>,
@@ -153,23 +142,23 @@ impl Vertex for Vert {
 struct SetTextBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
     type Param = SRes<ImageBindGroups>;
-    type ViewQuery = ();
-    type ItemQuery = Read<HephaeBatchSection<Vert>>;
+    type ViewQuery = Read<ViewBatches<Vert>>;
+    type ItemQuery = ();
 
     #[inline]
     fn render<'w>(
-        _: &P,
-        _: ROQueryItem<'w, Self::ViewQuery>,
-        batch: Option<ROQueryItem<'w, Self::ItemQuery>>,
+        item: &P,
+        view: ROQueryItem<'w, Self::ViewQuery>,
+        _: Option<ROQueryItem<'w, Self::ItemQuery>>,
         image_bind_groups: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let image_bind_groups = image_bind_groups.into_inner();
-        let Some(batch) = batch else {
+        let Some(&(id, ..)) = view.0.get(&item.entity()) else {
             return RenderCommandResult::Skip
         };
 
-        let Some(bind_group) = image_bind_groups.get(*batch.prop()) else {
+        let Some(bind_group) = image_bind_groups.get(id) else {
             return RenderCommandResult::Skip
         };
 
@@ -205,59 +194,40 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn draw(
-        &self,
-        atlases: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    ) {
-        queuer.extend(self.glyphs.iter().flat_map(|&glyph| {
-            let atlas = atlases.get(glyph.atlas)?;
-            let (.., rect) = atlas.get_info_index(glyph.index)?;
+    fn draw(&mut self, atlases: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+        for glyph in self.glyphs.drain(..) {
+            let Some(atlas) = atlases.get(glyph.atlas) else { continue };
+            let Some((.., rect)) = atlas.get_info_index(glyph.index) else {
+                continue
+            };
 
-            Some((0., atlas.image(), Glyph {
-                pos: self.pos + glyph.origin,
-                rect: rect.as_rect(),
-                atlas: atlas.size().as_vec2(),
-            }))
-        }));
-    }
-}
+            let pos = self.pos + glyph.origin;
+            let rect = rect.as_rect();
+            let atlas_size = atlas.size().as_vec2();
 
-#[derive(Copy, Clone)]
-struct Glyph {
-    pos: Vec2,
-    rect: Rect,
-    atlas: Vec2,
-}
+            let (w, h) = (rect.width(), rect.height());
+            let (u, v, u2, v2) = (
+                rect.min.x / atlas_size.x,
+                rect.max.y / atlas_size.y,
+                rect.max.x / atlas_size.x,
+                rect.min.y / atlas_size.y,
+            );
 
-impl VertexCommand for Glyph {
-    type Vertex = Vert;
+            let bottom_left = (pos, vec2(u, v));
+            let bottom_right = (pos + vec2(w, 0.), vec2(u2, v));
+            let top_right = (pos + vec2(w, h), vec2(u2, v2));
+            let top_left = (pos + vec2(0., h), vec2(u, v2));
 
-    #[inline]
-    fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self { pos, rect, atlas } = *self;
-        let (w, h) = (rect.width(), rect.height());
-        let (u, v, u2, v2) = (
-            rect.min.x / atlas.x,
-            rect.max.y / atlas.y,
-            rect.max.x / atlas.x,
-            rect.min.y / atlas.y,
-        );
+            let col = [127, 255, 100, 255];
+            let base = queuer.data([
+                Vert::new(bottom_left.0, bottom_left.1, col),
+                Vert::new(bottom_right.0, bottom_right.1, col),
+                Vert::new(top_right.0, top_right.1, col),
+                Vert::new(top_left.0, top_left.1, col),
+            ]);
 
-        let bottom_left = (pos, vec2(u, v));
-        let bottom_right = (pos + vec2(w, 0.), vec2(u2, v));
-        let top_right = (pos + vec2(w, h), vec2(u2, v2));
-        let top_left = (pos + vec2(0., h), vec2(u, v2));
-
-        let col = [127, 255, 100, 255];
-        queuer.vertices([
-            Vert::new(bottom_left.0, bottom_left.1, col),
-            Vert::new(bottom_right.0, bottom_right.1, col),
-            Vert::new(top_right.0, top_right.1, col),
-            Vert::new(top_left.0, top_left.1, col),
-        ]);
-
-        queuer.indices([0, 1, 2, 2, 3, 0]);
+            queuer.request(0., atlas.image(), [base, base + 1, base + 2, base + 2, base + 3, base]);
+        }
     }
 }
 
@@ -338,8 +308,6 @@ fn update(
         ) {
             warn!("Scheduling text for update again due to: {e}");
             text.set_changed();
-        } else {
-            info!("Text updated successfully!");
         }
     }
 }

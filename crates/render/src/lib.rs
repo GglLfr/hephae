@@ -18,6 +18,8 @@ pub mod prelude {
 
     pub use crate::{
         drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
+        image_bind::ImageBindGroups,
+        pipeline::{HephaePipeline, ViewBatches},
         vertex::Vertex,
         HephaeRenderSystems,
     };

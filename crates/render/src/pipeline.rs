@@ -38,11 +38,11 @@ use bevy_render::{
     },
     render_resource::{
         binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer,
-        BufferAddress, BufferDescriptor, BufferInitDescriptor, BufferUsages, ColorTargetState, ColorWrites, CompareFunction,
-        DepthBiasState, DepthStencilState, FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache,
-        PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor, ShaderDefVal, ShaderStages,
-        SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat,
-        VertexBufferLayout, VertexState, VertexStepMode,
+        BufferAddress, BufferBinding, BufferDescriptor, BufferId, BufferInitDescriptor, BufferUsages, ColorTargetState,
+        ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace, IndexFormat,
+        MultisampleState, PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor,
+        SamplerId, ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines,
+        StencilFaceState, StencilState, TextureFormat, TextureViewId, VertexBufferLayout, VertexState, VertexStepMode,
     },
     renderer::{RenderDevice, RenderQueue},
     sync_world::MainEntity,
@@ -274,7 +274,13 @@ impl<T: Vertex> Default for ViewBatches<T> {
 
 /// Bind group associated with each views.
 #[derive(Component)]
-pub struct ViewBindGroup<T: Vertex>(BindGroup, PhantomData<fn() -> T>);
+pub struct ViewBindGroup<T: Vertex> {
+    bind_group: BindGroup,
+    last_buffer: BufferId,
+    last_lut_texture: TextureViewId,
+    last_lut_sampler: SamplerId,
+    _marker: PhantomData<fn() -> T>,
+}
 
 #[derive(Component)]
 pub struct ViewIndexBuffer<T: Vertex> {
@@ -484,6 +490,10 @@ pub(crate) fn prepare_indices<T: Vertex>(
         }
     });
 
+    for mut item in &mut items {
+        item.0.get_mut().unwrap_or_else(PoisonError::into_inner).clear();
+    }
+
     batched_results.reserve(batched_entities.len());
 
     let mut param = param_set.p1();
@@ -494,6 +504,10 @@ pub(crate) fn prepare_indices<T: Vertex>(
     drop(param);
 
     let mut batches = param_set.p2();
+    for mut view_batches in &mut batches {
+        view_batches.0.clear();
+    }
+
     for (view_entity, batch_entity, prop, range) in batched_results.drain(..) {
         let Ok(mut view_batches) = batches.get_mut(view_entity) else {
             continue
@@ -509,35 +523,54 @@ pub fn prepare_view_bind_groups<T: Vertex>(
     pipeline: Res<HephaePipeline<T>>,
     render_device: Res<RenderDevice>,
     view_uniforms: Res<ViewUniforms>,
-    views: Query<(Entity, &Tonemapping), With<ExtractedView>>,
+    mut views: Query<(Entity, &Tonemapping, Option<&mut ViewBindGroup<T>>)>,
     tonemapping_luts: Res<TonemappingLuts>,
     images: Res<RenderAssets<GpuImage>>,
     fallback_image: Res<FallbackImage>,
 ) {
-    let Some(view_binding) = view_uniforms.uniforms.binding() else {
-        return;
+    let Some(buffer) = view_uniforms.uniforms.buffer() else {
+        return
     };
 
-    for (entity, &tonemapping) in &views {
-        let (lut_texture, lut_sampler) = get_lut_bindings(&images, &tonemapping_luts, &tonemapping, &fallback_image);
-        let view_bind_group = render_device.create_bind_group("hephae_view_bind_group", &pipeline.view_layout, &[
-            BindGroupEntry {
-                binding: 0,
-                resource: view_binding.clone(),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: BindingResource::TextureView(lut_texture),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: BindingResource::Sampler(lut_sampler),
-            },
-        ]);
+    let view_binding = BindingResource::Buffer(BufferBinding {
+        buffer,
+        offset: 0,
+        size: Some(ViewUniform::min_size()),
+    });
 
-        commands
-            .entity(entity)
-            .insert(ViewBindGroup::<T>(view_bind_group, PhantomData));
+    for (entity, &tonemapping, bind_group) in &mut views {
+        let (lut_texture, lut_sampler) = get_lut_bindings(&images, &tonemapping_luts, &tonemapping, &fallback_image);
+        let create_bind_group = || ViewBindGroup::<T> {
+            bind_group: render_device.create_bind_group("hephae_view_bind_group", &pipeline.view_layout, &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: view_binding.clone(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(lut_texture),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::Sampler(lut_sampler),
+                },
+            ]),
+            last_buffer: buffer.id(),
+            last_lut_texture: lut_texture.id(),
+            last_lut_sampler: lut_sampler.id(),
+            _marker: PhantomData,
+        };
+
+        if let Some(mut bind_group) = bind_group {
+            if bind_group.last_buffer != buffer.id() ||
+                bind_group.last_lut_texture != lut_texture.id() ||
+                bind_group.last_lut_sampler != lut_sampler.id()
+            {
+                *bind_group = create_bind_group();
+            }
+        } else {
+            commands.entity(entity).insert(create_bind_group());
+        }
     }
 }
 
@@ -564,7 +597,7 @@ impl<P: PhaseItem, T: Vertex, const I: usize> RenderCommand<P> for SetHephaeView
         _: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(I, &view_bind_group.0, &[view_uniform.offset]);
+        pass.set_bind_group(I, &view_bind_group.bind_group, &[view_uniform.offset]);
         RenderCommandResult::Success
     }
 }

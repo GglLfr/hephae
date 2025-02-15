@@ -15,9 +15,10 @@ use bevy::{
     },
 };
 use bytemuck::{Pod, Zeroable};
-use hephae::prelude::*;
-use hephae_gui::gui::{Gui, GuiDepth};
-use hephae_render::drawer::DrawerExtract;
+use hephae::{
+    gui::gui::{Gui, GuiDepth},
+    prelude::*,
+};
 
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -37,8 +38,6 @@ impl Vertex for Vert {
     type PipelineParam = ();
     type PipelineProp = ();
     type PipelineKey = ();
-
-    type Command = DrawGui;
 
     type BatchParam = ();
     type BatchProp = ();
@@ -110,24 +109,27 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn draw(
-        &self,
-        _: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    ) {
-        let Gui {
-            bottom_left,
-            bottom_right,
-            top_right,
-            top_left,
-            ..
-        } = self.0;
+    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+        let Self(
+            Gui {
+                bottom_left,
+                bottom_right,
+                top_right,
+                top_left,
+                ..
+            },
+            GuiDepth { depth, total_depth },
+        ) = *self;
 
-        queuer.extend([(
-            self.1.depth as f32,
-            (),
-            DrawGui([bottom_left, bottom_right, top_right, top_left], self.1),
-        )]);
+        let nor_depth = (depth as f32) / ((total_depth + 1) as f32);
+        let base = queuer.data([
+            Vert::new(bottom_left.truncate(), nor_depth),
+            Vert::new(bottom_right.truncate(), nor_depth),
+            Vert::new(top_right.truncate(), nor_depth),
+            Vert::new(top_left.truncate(), nor_depth),
+        ]);
+
+        queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
     }
 }
 
@@ -155,68 +157,48 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn draw(
-        &self,
-        _: &SystemParamItem<Self::DrawParam>,
-        queuer: &mut impl Extend<(f32, <Self::Vertex as Vertex>::PipelineKey, <Self::Vertex as Vertex>::Command)>,
-    ) {
-        let Gui {
-            bottom_left,
-            bottom_right,
-            top_right,
-            top_left,
-            ..
-        } = self.0;
+    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+        let Self(
+            Gui {
+                bottom_left,
+                bottom_right,
+                top_right,
+                top_left,
+                ..
+            },
+            GuiDepth { depth, total_depth },
+            ref mut glyphs,
+        ) = *self;
 
-        let gui = self.0;
-        let base = bottom_left;
-        queuer.extend(
-            [(
-                self.1.depth as f32,
-                (),
-                DrawGui([bottom_left, bottom_right, top_right, top_left], self.1),
-            )]
-            .into_iter()
-            .chain(self.2.iter().map(|&glyph| {
-                (
-                    (self.1.depth + 1) as f32,
-                    (),
-                    DrawGui(
-                        [
-                            base + gui.project(glyph.origin),
-                            base + gui.project(glyph.origin + vec2(glyph.size.x, 0.)),
-                            base + gui.project(glyph.origin + glyph.size),
-                            base + gui.project(glyph.origin + vec2(0., glyph.size.y)),
-                        ],
-                        GuiDepth {
-                            depth: self.1.depth + 1,
-                            total_depth: self.1.total_depth,
-                        },
-                    ),
-                )
-            })),
-        );
-    }
-}
-
-#[derive(Copy, Clone)]
-struct DrawGui([Vec3; 4], GuiDepth);
-impl VertexCommand for DrawGui {
-    type Vertex = Vert;
-
-    #[inline]
-    fn draw(&self, queuer: &mut impl VertexQueuer<Vertex = Self::Vertex>) {
-        let &Self([bottom_left, bottom_right, top_right, top_left], GuiDepth { depth, total_depth }) = self;
-
-        let depth = (depth as f32) / ((total_depth + 1) as f32);
-        queuer.vertices([
-            Vert::new(bottom_left.truncate(), depth),
-            Vert::new(bottom_right.truncate(), depth),
-            Vert::new(top_right.truncate(), depth),
-            Vert::new(top_left.truncate(), depth),
+        let nor_depth = (depth as f32) / ((total_depth + 1) as f32);
+        let origin = bottom_left;
+        let base = queuer.data([
+            Vert::new(bottom_left.truncate(), nor_depth),
+            Vert::new(bottom_right.truncate(), nor_depth),
+            Vert::new(top_right.truncate(), nor_depth),
+            Vert::new(top_left.truncate(), nor_depth),
         ]);
 
-        queuer.indices([0, 1, 2, 2, 3, 0]);
+        queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
+
+        let gui = self.0;
+        for glyph in glyphs.drain(..) {
+            let nor_depth = ((depth + 1) as f32) / ((total_depth + 1) as f32);
+            let base = queuer.data([
+                Vert::new((origin + gui.project(glyph.origin)).truncate(), nor_depth),
+                Vert::new(
+                    (origin + gui.project(glyph.origin + vec2(glyph.size.x, 0.))).truncate(),
+                    nor_depth,
+                ),
+                Vert::new((origin + gui.project(glyph.origin + glyph.size)).truncate(), nor_depth),
+                Vert::new(
+                    (origin + gui.project(glyph.origin + vec2(0., glyph.size.y))).truncate(),
+                    nor_depth,
+                ),
+            ]);
+
+            queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
+        }
     }
 }
 
