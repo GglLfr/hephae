@@ -13,7 +13,7 @@
 //!   buffers and share GPU render calls.
 //! - [`DrawRequests`] renders each batch.
 
-use std::{marker::PhantomData, num::NonZero, ops::Range, sync::PoisonError};
+use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
 use bevy_asset::prelude::*;
 use bevy_core_pipeline::tonemapping::{
@@ -38,11 +38,12 @@ use bevy_render::{
     },
     render_resource::{
         binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer,
-        BufferAddress, BufferBinding, BufferDescriptor, BufferId, BufferInitDescriptor, BufferUsages, ColorTargetState,
-        ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace, IndexFormat,
-        MultisampleState, PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor,
-        SamplerId, ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines,
-        StencilFaceState, StencilState, TextureFormat, TextureViewId, VertexBufferLayout, VertexState, VertexStepMode,
+        BufferAddress, BufferBinding, BufferDescriptor, BufferId, BufferInitDescriptor, BufferSize, BufferUsages,
+        ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace,
+        IndexFormat, MultisampleState, PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology,
+        RenderPipelineDescriptor, SamplerId, ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline,
+        SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat, TextureViewId, VertexBufferLayout,
+        VertexState, VertexStepMode,
     },
     renderer::{RenderDevice, RenderQueue},
     sync_world::MainEntity,
@@ -421,7 +422,7 @@ pub(crate) fn prepare_indices<T: Vertex>(
                 contents,
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             });
-        } else if let Some(len) = NonZero::new(contents.len() as u64) {
+        } else if let Some(len) = BufferSize::new(contents.len() as u64) {
             queue
                 .write_buffer_with(&buffers.vertex_buffer, 0, len)
                 .unwrap()
@@ -484,7 +485,7 @@ pub(crate) fn prepare_indices<T: Vertex>(
                     contents,
                     usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
                 }));
-            } else if let Some(len) = NonZero::new(contents.len() as u64) {
+            } else if let Some(len) = BufferSize::new(contents.len() as u64) {
                 queue
                     .write_buffer_with(view_indices.index_buffer.as_ref().unwrap(), 0, len)
                     .unwrap()
@@ -496,8 +497,6 @@ pub(crate) fn prepare_indices<T: Vertex>(
     for mut item in &mut items {
         item.0.get_mut().unwrap_or_else(PoisonError::into_inner).clear();
     }
-
-    batched_results.reserve(batched_entities.len());
 
     let mut param = param_set.p1();
     batched_results.extend(batched_entities.drain(..).map(|(view_entity, batch_entity, key, range)| {
