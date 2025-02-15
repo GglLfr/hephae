@@ -104,7 +104,7 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
 
         let meta = if end == 1 {
             quote! {
-                #[cfg_attr(docsrs, doc(fake_variadic))]
+                #[cfg_attr(any(docsrs, docsrs_dep), doc(fake_variadic))]
             }
         } else {
             quote! {
