@@ -8,7 +8,7 @@
 
 use std::{any::type_name, borrow::Cow, ops::Range, slice::Iter};
 
-use bevy_asset::{prelude::*, ReflectAsset, UntypedAssetId, VisitAssetDependencies};
+use bevy_asset::{ReflectAsset, UntypedAssetId, VisitAssetDependencies, prelude::*};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::ComponentId,
@@ -18,7 +18,7 @@ use bevy_ecs::{
     world::DeferredWorld,
 };
 use bevy_reflect::prelude::*;
-use bevy_utils::{warn_once, HashMap};
+use bevy_utils::{HashMap, warn_once};
 use scopeguard::{Always, ScopeGuard};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -356,6 +356,7 @@ pub(crate) fn update_locale_result(
     /// - The drop glue of the guard must be called, i.e., [`std::mem::forget`] may not be called.
     ///   This is to ensure the `'a` lifetime objects are cleared out.
     #[inline]
+    #[allow(unsafe_op_in_unsafe_fn)]
     unsafe fn guard<'a, 'this: 'a>(
         spans: &'this mut Vec<&'static str>,
     ) -> ScopeGuard<&'this mut Vec<&'a str>, fn(&mut Vec<&'a str>), Always> {

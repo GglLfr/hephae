@@ -9,7 +9,7 @@ use bevy_ecs::{
 };
 use bevy_image::prelude::*;
 use bevy_math::{prelude::*, vec2, Affine2};
-use hephae_text::{atlas::FontAtlas, prelude::*};
+use hephae_text::{atlas::FontAtlas, def::TextQuery, prelude::*};
 
 use crate::{
     def::{Margin, UiSize, UiVal::*, UiVal2},
@@ -181,7 +181,7 @@ pub fn update_text_widget(
         (&mut TextGlyphs, &Text, &mut TextStructure, &GuiSize),
         Or<(Changed<TextStructure>, Changed<GuiSize>)>,
     >,
-    query: Query<(Option<&Text>, Option<&TextSpan>, Option<&TextFont>)>,
+    query: TextQuery,
 ) {
     for (mut glyphs, text, mut structure, &size) in &mut glyphs_query {
         if layout

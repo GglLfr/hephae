@@ -9,9 +9,9 @@ use bevy_image::prelude::*;
 use bevy_math::prelude::*;
 use bevy_utils::HashMap;
 use cosmic_text::{
+    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
     fontdb::{Database, Source},
     ttf_parser::{Face, FaceParsingError},
-    Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 use scopeguard::{Always, ScopeGuard};
 use thiserror::Error;
@@ -238,6 +238,7 @@ impl FontLayoutInner {
         /// - The drop glue of the guard must be called, i.e., [`std::mem::forget`] may not be
         ///   called. This is to ensure the `'a` lifetime objects are cleared out.
         #[inline]
+        #[allow(unsafe_op_in_unsafe_fn)]
         unsafe fn guard<'a, 'this: 'a>(
             spans: &'this mut Vec<(&'static str, &'static TextFont)>,
         ) -> ScopeGuard<&'this mut Vec<(&'a str, &'a TextFont)>, fn(&mut Vec<(&'a str, &'a TextFont)>), Always> {

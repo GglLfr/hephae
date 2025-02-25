@@ -3,10 +3,10 @@ use bevy_ecs::{
     component::ComponentId,
     prelude::*,
     system::{StaticSystemParam, SystemBuffer, SystemMeta, SystemState},
-    world::{unsafe_world_cell::UnsafeWorldCell, FilteredEntityRef},
+    world::{FilteredEntityRef, unsafe_world_cell::UnsafeWorldCell},
 };
 use bevy_hierarchy::prelude::*;
-use bevy_math::{prelude::*, vec2, Affine2, Affine3A};
+use bevy_math::{Affine2, Affine3A, prelude::*, vec2};
 use bevy_transform::components::GlobalTransform;
 use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
@@ -212,23 +212,26 @@ pub(crate) fn propagate_layout(
         if let Ok(children) = children_query.get(node) {
             for (child, actual_parent) in parent_query.iter_many(children) {
                 assert_eq!(
-                    actual_parent.get(), node,
+                    actual_parent.get(),
+                    node,
                     "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                 );
 
-                let size = propagate_initial_size(
-                    invalid_caches,
-                    world,
-                    child,
-                    layout_ids,
-                    initial_layout_size,
-                    contains_query,
-                    layout_query,
-                    parent_query,
-                    children_query,
-                    children_stack,
-                    children_size_stack,
-                );
+                let size = unsafe {
+                    propagate_initial_size(
+                        invalid_caches,
+                        world,
+                        child,
+                        layout_ids,
+                        initial_layout_size,
+                        contains_query,
+                        layout_query,
+                        parent_query,
+                        children_query,
+                        children_stack,
+                        children_size_stack,
+                    )
+                };
 
                 children_stack.push(child);
                 children_size_stack.push(size);
@@ -239,7 +242,7 @@ pub(crate) fn propagate_layout(
         let id = cache.and_then(|mut cache| match **cache {
             Some(id) => Some(id.get()),
             // Safety: This code is the only one having exclusive access to the components.
-            None => match contains_query.get_unchecked(world, node) {
+            None => match unsafe { contains_query.get_unchecked(world, node) } {
                 Ok(layouts) => {
                     for (i, &id) in layout_ids.iter().enumerate() {
                         if layouts.contains_id(id) {
@@ -265,12 +268,14 @@ pub(crate) fn propagate_layout(
 
         let result = if let Some(id) = id {
             // Safety: See below.
-            initial_layout_size[id].execute(
-                node,
-                &children_stack[children_offset..],
-                &children_size_stack[children_offset..],
-                world,
-            )
+            unsafe {
+                initial_layout_size[id].execute(
+                    node,
+                    &children_stack[children_offset..],
+                    &children_size_stack[children_offset..],
+                    world,
+                )
+            }
         } else {
             Vec2::ZERO
         };
@@ -337,14 +342,14 @@ pub(crate) fn propagate_layout(
             .and_then(|id| subsequent_layout_size.get_mut(id))
         {
             // Safety: See below.
-            let (new_size, new_size_child) = sys.execute((**size, node), parent, world);
+            let (new_size, new_size_child) = unsafe { sys.execute((**size, node), parent, world) };
             **size = new_size;
             size_child = new_size_child;
         }
 
         if let Some(children) = children {
             for &child in children {
-                propagate_subsequent_size(world, child, size_child, layout_query, subsequent_layout_size);
+                unsafe { propagate_subsequent_size(world, child, size_child, layout_query, subsequent_layout_size) };
             }
         }
     }
@@ -404,13 +409,15 @@ pub(crate) fn propagate_layout(
         {
             let (mut transform, mut size) = (node_transform, node_size);
             // Safety: See below.
-            distribute_space.execute(
-                (&mut transform, &mut size),
-                node,
-                &children_stack[from..to],
-                &mut children_output_stack[from..to],
-                world,
-            );
+            unsafe {
+                distribute_space.execute(
+                    (&mut transform, &mut size),
+                    node,
+                    &children_stack[from..to],
+                    &mut children_output_stack[from..to],
+                    world,
+                )
+            };
 
             distributed_space_query
                 .get_mut(node)
@@ -427,18 +434,20 @@ pub(crate) fn propagate_layout(
                 .unwrap()
                 .set_if_neq(DistributedSpace { transform, size });
 
-            propagate_distribute_space(
-                world,
-                child,
-                (transform, size),
-                distributed_space_query,
-                cache_query,
-                initial_layout_size_query,
-                children_query,
-                distribute_space,
-                children_stack,
-                children_output_stack,
-            );
+            unsafe {
+                propagate_distribute_space(
+                    world,
+                    child,
+                    (transform, size),
+                    distributed_space_query,
+                    cache_query,
+                    initial_layout_size_query,
+                    children_query,
+                    distribute_space,
+                    children_stack,
+                    children_output_stack,
+                )
+            };
         }
 
         children_stack.truncate(from);
@@ -602,7 +611,7 @@ pub(crate) fn calculate_corners(
         }
     }
 
-    for (total, ref mut list) in &mut depth_list {
+    for (total, list) in &mut depth_list {
         for (depth, e) in list.drain(..) {
             gui_depth_query.get_mut(e).unwrap().set_if_neq(GuiDepth {
                 depth,

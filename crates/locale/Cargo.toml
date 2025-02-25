@@ -3,9 +3,7 @@ name = "hephae-locale"
 description = "Hephae's localization module."
 authors.workspace = true
 edition.workspace = true
-keywords.workspace = true
 rust-version.workspace = true
-categories.workspace = true
 license.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -21,8 +19,6 @@ rustc-args = [
 rustdoc-args = [
     "-Zunstable-options",
     "--generate-link-to-definition",
-    "--html-after-content",
-    "docs-rs/trait-tags.html",
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 

@@ -10,7 +10,7 @@ use bevy_ecs::{
     entity::EntityHashMap,
     prelude::*,
     storage::SparseSet,
-    system::{lifetimeless::Read, ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
+    system::{ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState, lifetimeless::Read},
     world::FilteredEntityRef,
 };
 use bevy_render::{
@@ -163,19 +163,18 @@ pub fn check_visibilities<T: Vertex>(
     mut view_queues: Local<EntityHashMap<Vec<Entity>>>,
     mut view_maps: Local<EntityHashMap<TypeIdMap<Vec<Entity>>>>,
 ) {
-    let drawers = world.resource_ref::<VertexDrawers<T>>();
-    if drawers.is_changed() {
-        let indices = drawers.0.indices().collect::<Box<_>>();
-        let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
+    world.resource_scope(|world, drawers: Mut<VertexDrawers<T>>| {
+        if drawers.is_changed() {
+            let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
+            builder.or(|query| {
+                for id in drawers.0.indices() {
+                    query.with_id(id);
+                }
+            });
 
-        builder.or(|query| {
-            for &id in &indices {
-                query.with_id(id);
-            }
-        });
-
-        *visibility = builder.build();
-    }
+            *visibility = builder.build();
+        }
+    });
 
     let (view_query, mut visible_aabb_query, visible_entity_ranges) = views.get_mut(world);
     let visible_entity_ranges = visible_entity_ranges.as_deref();
@@ -245,11 +244,16 @@ pub fn check_visibilities<T: Vertex>(
         thread_queues.drain_into(view_queues.entry(view).or_default());
     }
 
+    visibility.update_archetypes(world);
+
     let drawers = world.resource::<VertexDrawers<T>>();
     for (&view, queues) in &mut view_queues {
         let map = view_maps.entry(view).or_default();
         for e in queues.drain(..) {
-            let Ok(visible) = visibility.get(world, e) else { continue };
+            let Ok(visible) = visibility.get_manual(world, e) else {
+                continue
+            };
+
             for (&id, &key) in drawers.0.iter() {
                 if visible.contains_id(id) {
                     map.entry(key).or_default().push(e);

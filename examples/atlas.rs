@@ -5,8 +5,8 @@ use bevy::{
     ecs::{
         query::{QueryItem, ROQueryItem},
         system::{
-            lifetimeless::{Read, SRes, SResMut},
             SystemParamItem,
+            lifetimeless::{Read, SRes, SResMut},
         },
     },
     math::FloatOrd,
@@ -17,9 +17,9 @@ use bevy::{
             DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
         },
         render_resource::{
-            binding_types::{sampler, texture_2d},
             BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
             SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
+            binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
         sync_world::MainEntity,
@@ -109,7 +109,7 @@ impl Vertex for SpriteVertex {
 
     #[inline]
     fn create_batch(
-        (ref render_device, ref gpu_images, ref pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
+        (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
         key: Self::PipelineKey,
     ) -> Self::BatchProp {
         let Some(gpu_image) = gpu_images.get(key) else { return key };

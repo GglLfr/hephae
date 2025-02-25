@@ -8,10 +8,10 @@ use bevy_ecs::{
     prelude::*,
     query::{QueryData, QueryFilter, QueryItem, ReadOnlyQueryData},
     system::{ReadOnlySystemParam, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
-    world::{unsafe_world_cell::UnsafeWorldCell, FilteredEntityRef},
+    world::{FilteredEntityRef, unsafe_world_cell::UnsafeWorldCell},
 };
 use bevy_hierarchy::prelude::*;
-use bevy_math::{prelude::*, Affine2, Affine3A, Vec3A};
+use bevy_math::{Affine2, Affine3A, Vec3A, prelude::*};
 use bevy_transform::components::Transform;
 use nonmax::NonMaxUsize;
 
@@ -212,7 +212,7 @@ unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
         children_layout_sizes: &[Vec2],
         world: UnsafeWorldCell,
     ) -> Vec2 {
-        let (param, mut query) = self.0.get_unchecked_manual(world);
+        let (param, mut query) = unsafe { self.0.get_unchecked_manual(world) };
         let item = query.get_mut(parent).unwrap_or_else(|_| panic!(
             "{}::InitialItem must *always* match the GUI entities. A common escape hatch is using `Option<T>::unwrap_or_default()`",
             type_name::<T>()
@@ -255,7 +255,7 @@ unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
 
     #[inline]
     unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2) {
-        let (param, mut query) = self.0.get_unchecked_manual(world);
+        let (param, mut query) = unsafe { self.0.get_unchecked_manual(world) };
         let item = query.get_mut(this.1).unwrap_or_else(|_| panic!(
             "{}::SubsequentItem must *always* match the GUI entities. A common escape hatch is using `Option<T>::unwrap_or_default()`",
             type_name::<T>()
@@ -315,7 +315,7 @@ unsafe impl<'w, 's, T: GuiLayout> DistributeSpaceSys
         output: &mut [(Affine2, Vec2)],
         world: UnsafeWorldCell,
     ) {
-        let (param, mut query) = self.0.get_unchecked_manual(world);
+        let (param, mut query) = unsafe { self.0.get_unchecked_manual(world) };
         let item = query.get_mut(parent).unwrap_or_else(|_| panic!(
             "{}::DistributeItem must *always* match the GUI entities. A common escape hatch is using `Option<T>::unwrap_or_default()`",
             type_name::<T>()

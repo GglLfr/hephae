@@ -1,6 +1,6 @@
 [package]
-name = "hephae-utils"
-description = "Hephae's generic utility module."
+name = "hephae-ui"
+description = "Hephae's Graphical User Interface abstract layout module."
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -23,8 +23,23 @@ rustdoc-args = [
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [dependencies]
-hephae-utils-derive = { version = "0.6", path = "derive" }
+hephae-text = { workspace = true, optional = true }
+hephae-utils.workspace = true
 
 bevy_app.workspace = true
+bevy_asset.workspace = true
+bevy_derive.workspace = true
 bevy_ecs.workspace = true
+bevy_hierarchy.workspace = true
+bevy_image.workspace = true
+bevy_math.workspace = true
+bevy_reflect.workspace = true
+bevy_transform.workspace = true
 bevy_utils.workspace = true
+
+smallvec.workspace = true
+taffy.workspace = true
+
+[features]
+default = ["text"]
+text = ["dep:hephae-text"]

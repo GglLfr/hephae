@@ -3,9 +3,7 @@ name = "hephae"
 description = "A personalized, opinionated Bevy plugin that adds support for drawing and batching arbitrary vertices and indices."
 authors.workspace = true
 edition.workspace = true
-keywords.workspace = true
 rust-version.workspace = true
-categories.workspace = true
 exclude = [
     "assets",
     "examples",
@@ -25,8 +23,6 @@ rustc-args = [
 rustdoc-args = [
     "-Zunstable-options",
     "--generate-link-to-definition",
-    "--html-after-content",
-    "docs-rs/trait-tags.html",
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
@@ -38,16 +34,15 @@ members = [
     "crates/locale",
     "crates/render",
     "crates/text",
+    "crates/ui",
     "crates/utils",
     "crates/utils/derive",
 ]
 
 [workspace.package]
 authors = ["GlFolker"]
-edition = "2021"
-keywords = ["bevy", "graphics", "render", "vertex", "batch"]
-rust-version = "1.84"
-categories = ["graphics", "rendering"]
+edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/GlennFolker/hephae"
 version = "0.6.0"
@@ -93,6 +88,7 @@ serde = { version = "1", features = ["derive"] }
 smallvec = "1"
 syn = { version = "2", features = ["full"] }
 sys-locale = "0.3"
+taffy = { version = "0.7", default-features = false, features = ["std", "flexbox", "block_layout", "content_size"] }
 thiserror = "2"
 vec-belt = "1"
 
@@ -101,6 +97,7 @@ hephae-gui = { version = "0.6.0", path = "crates/gui" }
 hephae-locale = { version = "0.6.0", path = "crates/locale" }
 hephae-render = { version = "0.6.0", path = "crates/render" }
 hephae-text = { version = "0.6.0", path = "crates/text" }
+hephae-ui = { version = "0.6.0", path = "crates/ui" }
 hephae-utils = { version = "0.6.0", path = "crates/utils" }
 
 [dependencies]
@@ -109,6 +106,7 @@ hephae-gui = { optional = true, workspace = true }
 hephae-locale = { optional = true, workspace = true }
 hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
+hephae-ui = { optional = true, workspace = true }
 hephae-utils.workspace = true
 
 [dev-dependencies]
@@ -117,11 +115,12 @@ bevy = { version = "0.15", default-features = false, features = ["bevy_window", 
 bytemuck.workspace = true
 
 [features]
-default = ["atlas", "gui", "locale", "text"]
+default = ["atlas", "gui", "locale", "text", "ui"]
 atlas = ["dep:hephae-atlas"]
 gui = ["dep:hephae-gui"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
 text = ["dep:hephae-text", "hephae-gui?/text"]
+ui = ["dep:hephae-ui"]
 
 [[example]]
 name = "quad"

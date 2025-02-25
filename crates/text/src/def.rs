@@ -5,7 +5,13 @@ use std::{io::Error as IoError, slice::Iter, sync::Mutex};
 use async_channel::Sender;
 use bevy_asset::{io::Reader, prelude::*, AssetLoader, LoadContext};
 use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{
+    prelude::*,
+    system::{
+        lifetimeless::{Read, SQuery},
+        SystemParamItem,
+    },
+};
 use bevy_hierarchy::prelude::*;
 use bevy_math::prelude::*;
 use bevy_reflect::prelude::*;
@@ -201,6 +207,11 @@ impl Default for TextFont {
     }
 }
 
+/// Type of [`Query`] that may be passed to [`TextStructure::iter`], with a `'static` lifetime.
+pub type STextQuery = SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>;
+/// Type of [`Query`] that may be passed to [`TextStructure::iter`].
+pub type TextQuery<'w, 's> = SystemParamItem<'w, 's, STextQuery>;
+
 /// Contains entities that make up a full text buffer. Listen to [`Changed<TextStructure>`] if you
 /// want to recompute [`TextGlyphs`].
 #[derive(Component, Clone, Deref, DerefMut, Default)]
@@ -208,10 +219,7 @@ pub struct TextStructure(SmallVec<[(Entity, usize); 1]>);
 impl TextStructure {
     /// Iterates textual entities for use in [`FontLayout`](crate::layout::FontLayout).
     #[inline]
-    pub fn iter<'w, 's, 'a, 'b, 'c>(
-        &'w self,
-        query: &'w Query<'w, 's, (Option<&'a Text>, Option<&'b TextSpan>, Option<&'c TextFont>)>,
-    ) -> TextStructureIter<'w, 's, 'a, 'b, 'c> {
+    pub fn iter<'w, 's>(&'w self, query: &'w TextQuery<'w, 's>) -> TextStructureIter<'w, 's> {
         TextStructureIter {
             inner: self.0.iter(),
             fonts: SmallVec::new_const(),
@@ -221,13 +229,13 @@ impl TextStructure {
 }
 
 /// Iterates textual entities for use in [`FontLayout`](crate::layout::FontLayout).
-pub struct TextStructureIter<'w, 's, 'a, 'b, 'c> {
+pub struct TextStructureIter<'w, 's: 'w> {
     inner: Iter<'w, (Entity, usize)>,
-    fonts: SmallVec<[(&'w TextFont, usize); 1]>,
-    query: &'w Query<'w, 's, (Option<&'a Text>, Option<&'b TextSpan>, Option<&'c TextFont>)>,
+    fonts: SmallVec<[(&'w TextFont, usize); 4]>,
+    query: &'w TextQuery<'w, 's>,
 }
 
-impl<'w> Iterator for TextStructureIter<'w, '_, '_, '_, '_> {
+impl<'w> Iterator for TextStructureIter<'w, '_> {
     type Item = (&'w str, &'w TextFont);
 
     fn next(&mut self) -> Option<Self::Item> {
