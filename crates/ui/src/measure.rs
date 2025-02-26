@@ -62,17 +62,22 @@ pub struct Measurements {
 
 impl Measurements {
     pub fn register<T: Measure>(&mut self, world: &mut World) -> MeasureId {
-        *self.ids.get_or_insert_with(world.register_component::<T>(), || {
-            self.data.push(Box::new(MeasureImpl::<T> {
-                state: SystemState::new(world),
-                fetch: MaybeUninit::uninit(),
-            }));
+        *self
+            .ids
+            .get_or_insert_with(world.register_component::<T>(), || {
+                self.data.push(Box::new(MeasureImpl::<T> {
+                    state: SystemState::new(world),
+                    fetch: MaybeUninit::uninit(),
+                }));
 
-            MeasureId(self.data.len() - 1)
-        })
+                MeasureId(self.data.len() - 1)
+            })
     }
 
-    pub unsafe fn get_measurers(&mut self, world: UnsafeWorldCell) -> impl IndexMut<MeasureId, Output = dyn Measurer> {
+    pub unsafe fn get_measurers(
+        &mut self,
+        world: UnsafeWorldCell,
+    ) -> impl IndexMut<MeasureId, Output = dyn Measurer> {
         struct Guard<'a> {
             measurers: &'a mut [Box<dyn MeasureDyn>],
         }
@@ -124,8 +129,8 @@ impl Measurements {
 }
 
 pub trait Measurer: 'static + Send + Sync {
-    unsafe fn measure<'w>(
-        &'w mut self,
+    unsafe fn measure(
+        &mut self,
         known_size: (Option<f32>, Option<f32>),
         available_space: (AvailableSpace, AvailableSpace),
         entity: Entity,
@@ -156,7 +161,7 @@ impl<T: Measure> Measurer for MeasureImpl<T> {
         };
 
         let Ok((measure, item)) = queue.get(entity) else {
-            return Vec2::ZERO
+            return Vec2::ZERO;
         };
 
         measure.measure(param, item, known_size, available_space)

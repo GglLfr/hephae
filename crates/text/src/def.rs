@@ -3,20 +3,21 @@
 use std::{io::Error as IoError, slice::Iter, sync::Mutex};
 
 use async_channel::Sender;
-use bevy_asset::{io::Reader, prelude::*, AssetLoader, LoadContext};
+use bevy_asset::{AssetLoader, LoadContext, io::Reader, prelude::*};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     prelude::*,
     system::{
-        lifetimeless::{Read, SQuery},
         SystemParamItem,
+        lifetimeless::{Read, SQuery},
     },
 };
 use bevy_hierarchy::prelude::*;
 use bevy_math::prelude::*;
 use bevy_reflect::prelude::*;
 use cosmic_text::{
-    fontdb::ID as FontId, ttf_parser::FaceParsingError, Align, Buffer, Metrics, Stretch, Style, Weight, Wrap,
+    Align, Buffer, Metrics, Stretch, Style, Weight, Wrap, fontdb::ID as FontId,
+    ttf_parser::FaceParsingError,
 };
 use fixedbitset::FixedBitSet;
 #[cfg(feature = "locale")]
@@ -77,10 +78,13 @@ impl AssetLoader for FontLoader {
 
         let (sender, receiver) = async_channel::bounded(1);
         if self.add_to_database.send((bytes, sender)).await.is_err() {
-            return Err(FontError::ChannelClosed)
+            return Err(FontError::ChannelClosed);
         }
 
-        let font = receiver.recv().await.map_err(|_| FontError::ChannelClosed)??;
+        let font = receiver
+            .recv()
+            .await
+            .map_err(|_| FontError::ChannelClosed)??;
         Ok(font)
     }
 
@@ -208,7 +212,11 @@ impl Default for TextFont {
 }
 
 /// Type of [`Query`] that may be passed to [`TextStructure::iter`], with a `'static` lifetime.
-pub type STextQuery = SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>;
+pub type STextQuery = SQuery<(
+    Option<Read<Text>>,
+    Option<Read<TextSpan>>,
+    Option<Read<TextFont>>,
+)>;
 /// Type of [`Query`] that may be passed to [`TextStructure::iter`].
 pub type TextQuery<'w, 's> = SystemParamItem<'w, 's, STextQuery>;
 
@@ -256,13 +264,15 @@ impl<'w> Iterator for TextStructureIter<'w, '_> {
             (None, None) => return None,
         };
 
-        let font = font.unwrap_or_else(|| loop {
-            let &(last_font, last_depth) = self.fonts.last().unwrap_or(&(&DEFAULT_FONT, 0));
-            if depth > 0 && last_depth >= depth {
-                self.fonts.pop();
-            } else {
-                self.fonts.push((last_font, depth));
-                break last_font
+        let font = font.unwrap_or_else(|| {
+            loop {
+                let &(last_font, last_depth) = self.fonts.last().unwrap_or(&(&DEFAULT_FONT, 0));
+                if depth > 0 && last_depth >= depth {
+                    self.fonts.pop();
+                } else {
+                    self.fonts.push((last_font, depth));
+                    break last_font;
+                }
             }
         });
 
@@ -286,7 +296,10 @@ impl Default for TextGlyphs {
         Self {
             glyphs: Vec::new(),
             size: Vec2::ZERO,
-            buffer: Mutex::new(Buffer::new_empty(Metrics::new(f32::MIN_POSITIVE, f32::MIN_POSITIVE))),
+            buffer: Mutex::new(Buffer::new_empty(Metrics::new(
+                f32::MIN_POSITIVE,
+                f32::MIN_POSITIVE,
+            ))),
         }
     }
 }
@@ -345,7 +358,7 @@ pub fn compute_structure(
     'out: for (e, text, span, parent, children) in &changed_query {
         iterated.grow((e.index() + 1) as usize);
         if iterated.put(e.index() as usize) {
-            continue 'out
+            continue 'out;
         }
 
         let parent_changed = parent.as_ref().is_some_and(Ref::is_changed);
@@ -358,18 +371,20 @@ pub fn compute_structure(
                 if removed.contains(e.index() as usize) {
                     true
                 } else {
-                    continue 'out
+                    continue 'out;
                 }
             }
         } {
             let Ok((root, mut structure, children)) = (if text.is_some() {
                 text_query.get_mut(e)
             } else {
-                let Some(mut e) = parent.map(|p| p.get()) else { continue 'out };
+                let Some(mut e) = parent.map(|p| p.get()) else {
+                    continue 'out;
+                };
                 loop {
                     iterated.grow((e.index() + 1) as usize);
                     if iterated.put(e.index() as usize) {
-                        continue 'out
+                        continue 'out;
                     }
 
                     match text_query.get_mut(e) {
@@ -377,14 +392,14 @@ pub fn compute_structure(
                         Err(..) => match parent_query.get(e) {
                             Ok(parent) => {
                                 e = parent.get();
-                                continue
+                                continue;
                             }
                             Err(..) => continue 'out,
                         },
                     }
                 }
             }) else {
-                continue 'out
+                continue 'out;
             };
 
             let inner = &mut structure.bypass_change_detection().0;
@@ -395,11 +410,15 @@ pub fn compute_structure(
                 depth: usize,
                 parent: Entity,
                 children: &[Entity],
-                recurse_query: &Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
+                recurse_query: &Query<
+                    (Entity, Option<&Children>, &Parent),
+                    (With<TextSpan>, Without<Text>),
+                >,
             ) {
                 for (e, children, actual_parent) in recurse_query.iter_many(children) {
                     assert_eq!(
-                        actual_parent.get(), parent,
+                        actual_parent.get(),
+                        parent,
                         "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                     );
 
@@ -430,19 +449,23 @@ pub fn compute_structure(
 pub fn notify_structure(
     mut root_query: Query<&mut TextStructure>,
     changed_query: Query<
-        (Option<Ref<Text>>, Option<Ref<TextSpan>>, Option<Ref<TextFont>>),
+        (
+            Option<Ref<Text>>,
+            Option<Ref<TextSpan>>,
+            Option<Ref<TextFont>>,
+        ),
         Or<(With<Text>, With<TextSpan>)>,
     >,
 ) {
     'out: for mut structure in &mut root_query {
         let inner = &structure.bypass_change_detection().0;
         for (text, span, font) in changed_query.iter_many(inner.iter().map(|&(e, ..)| e)) {
-            if text.is_some_and(|text| text.is_changed()) ||
-                span.is_some_and(|span| span.is_changed()) ||
-                font.is_some_and(|font| font.is_changed())
+            if text.is_some_and(|text| text.is_changed())
+                || span.is_some_and(|span| span.is_changed())
+                || font.is_some_and(|font| font.is_changed())
             {
                 structure.set_changed();
-                continue 'out
+                continue 'out;
             }
         }
     }

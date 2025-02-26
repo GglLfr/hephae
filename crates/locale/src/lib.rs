@@ -23,19 +23,20 @@ pub mod prelude {
 pub mod plugin {
     use std::{borrow::Cow, marker::PhantomData};
 
-    use bevy_app::{prelude::*, PluginGroupBuilder};
+    use bevy_app::{PluginGroupBuilder, prelude::*};
     use bevy_asset::prelude::*;
     use bevy_ecs::prelude::*;
     use hephae_utils::derive::plugin_conf;
 
     use crate::{
-        arg::{localize_target, LocaleArg, LocaleTarget, LocalizeBy},
+        HephaeLocaleSystems,
+        arg::{LocaleArg, LocaleTarget, LocalizeBy, localize_target},
         def::{
-            update_locale_asset, update_locale_cache, update_locale_result, Locale, LocaleArgs, LocaleChangeEvent,
-            LocaleCollection, LocaleFmt, LocaleKey, LocaleResult, LocaleSrc,
+            Locale, LocaleArgs, LocaleChangeEvent, LocaleCollection, LocaleFmt, LocaleKey,
+            LocaleResult, LocaleSrc, update_locale_asset, update_locale_cache,
+            update_locale_result,
         },
         loader::{LocaleCollectionLoader, LocaleLoader},
-        HephaeLocaleSystems,
     };
 
     plugin_conf! {
@@ -84,8 +85,10 @@ pub mod plugin {
                             .add_systems(
                                 PostUpdate,
                                 (
-                                    update_locale_asset.in_set(HephaeLocaleSystems::UpdateLocaleAsset),
-                                    update_locale_result.in_set(HephaeLocaleSystems::UpdateLocaleResult),
+                                    update_locale_asset
+                                        .in_set(HephaeLocaleSystems::UpdateLocaleAsset),
+                                    update_locale_result
+                                        .in_set(HephaeLocaleSystems::UpdateLocaleResult),
                                 ),
                             );
                     })
@@ -129,7 +132,10 @@ pub mod plugin {
     #[inline]
     pub fn locale_target<T: LocaleTarget>() -> impl Plugin {
         |app: &mut App| {
-            app.add_systems(PostUpdate, localize_target::<T>.in_set(HephaeLocaleSystems::LocalizeTarget));
+            app.add_systems(
+                PostUpdate,
+                localize_target::<T>.in_set(HephaeLocaleSystems::LocalizeTarget),
+            );
         }
     }
 }

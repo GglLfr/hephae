@@ -21,7 +21,7 @@ pub mod prelude {
 pub mod plugin {
     use std::marker::PhantomData;
 
-    use bevy_app::{prelude::*, PluginGroupBuilder};
+    use bevy_app::{PluginGroupBuilder, prelude::*};
     use bevy_ecs::{component::ComponentId, prelude::*, world::DeferredWorld};
     use bevy_render::camera::CameraUpdateSystem;
     #[cfg(feature = "text")]
@@ -29,12 +29,14 @@ pub mod plugin {
     use hephae_utils::prelude::*;
 
     #[cfg(feature = "text")]
-    use crate::def::{update_text_widget, UiText};
+    use crate::def::{UiText, update_text_widget};
     use crate::{
-        def::{FromCamera2d, UiCont},
-        gui::{GuiLayout, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform, GuiRoots, LayoutCache},
-        layout::{calculate_corners, calculate_root, propagate_layout, validate_root},
         HephaeGuiSystems,
+        def::{FromCamera2d, UiCont},
+        gui::{
+            GuiLayout, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform, GuiRoots, LayoutCache,
+        },
+        layout::{calculate_corners, calculate_root, propagate_layout, validate_root},
     };
 
     plugin_conf! {
@@ -59,10 +61,16 @@ pub mod plugin {
                         .configure_sets(
                             PostUpdate,
                             (
-                                (HephaeGuiSystems::CalculateRoot, HephaeGuiSystems::ValidateRoot)
+                                (
+                                    HephaeGuiSystems::CalculateRoot,
+                                    HephaeGuiSystems::ValidateRoot,
+                                )
                                     .before(HephaeGuiSystems::PropagateLayout)
                                     .after(CameraUpdateSystem),
-                                (HephaeGuiSystems::PropagateLayout, HephaeGuiSystems::CalculateCorners)
+                                (
+                                    HephaeGuiSystems::PropagateLayout,
+                                    HephaeGuiSystems::CalculateCorners,
+                                )
                                     .chain()
                                     .after(CameraUpdateSystem),
                             ),
@@ -85,11 +93,15 @@ pub mod plugin {
                 #[cfg(feature = "text")]
                 {
                     fn configure_ui_text(app: &mut App) {
-                        app.add_systems(PostUpdate, update_text_widget.after(HephaeGuiSystems::CalculateCorners))
-                            .configure_sets(
-                                PostUpdate,
-                                HephaeGuiSystems::PropagateLayout.after(HephaeTextSystems::ComputeStructure),
-                            );
+                        app.add_systems(
+                            PostUpdate,
+                            update_text_widget.after(HephaeGuiSystems::CalculateCorners),
+                        )
+                        .configure_sets(
+                            PostUpdate,
+                            HephaeGuiSystems::PropagateLayout
+                                .after(HephaeTextSystems::ComputeStructure),
+                        );
                     }
 
                     builder = builder.add(gui_layout::<UiText>());
@@ -118,7 +130,10 @@ pub mod plugin {
             app.register_required_components::<T, LayoutCache>();
 
             let world = app.world_mut();
-            world.register_component_hooks::<T>().on_add(hook).on_remove(hook);
+            world
+                .register_component_hooks::<T>()
+                .on_add(hook)
+                .on_remove(hook);
             world.resource_scope(|world, mut layouts: Mut<GuiLayouts>| layouts.register::<T>(world))
         }
     }
@@ -128,7 +143,10 @@ pub mod plugin {
         |app: &mut App| {
             app.register_required_components::<T, GuiRootTransform>()
                 .register_required_components::<T, GuiRootSpace>()
-                .add_systems(PostUpdate, calculate_root::<T>.in_set(HephaeGuiSystems::CalculateRoot))
+                .add_systems(
+                    PostUpdate,
+                    calculate_root::<T>.in_set(HephaeGuiSystems::CalculateRoot),
+                )
                 .world_mut()
                 .resource_scope(|world, mut roots: Mut<GuiRoots>| roots.register::<T>(world))
         }

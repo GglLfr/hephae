@@ -17,39 +17,40 @@ use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
 use bevy_asset::prelude::*;
 use bevy_core_pipeline::tonemapping::{
-    get_lut_bind_group_layout_entries, get_lut_bindings, DebandDither, Tonemapping, TonemappingLuts,
+    DebandDither, Tonemapping, TonemappingLuts, get_lut_bind_group_layout_entries, get_lut_bindings,
 };
 use bevy_ecs::{
     entity::EntityHashMap,
     prelude::*,
     query::ROQueryItem,
     system::{
-        lifetimeless::{Read, SRes},
         StaticSystemParam, SystemParamItem, SystemState,
+        lifetimeless::{Read, SRes},
     },
 };
 use bevy_image::BevyDefault;
 use bevy_render::{
+    Extract,
     prelude::*,
     render_asset::RenderAssets,
     render_phase::{
-        DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, SetItemPipeline,
-        TrackedRenderPass, ViewSortedRenderPhases,
+        DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult,
+        SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
     },
     render_resource::{
-        binding_types::uniform_buffer, BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer,
-        BufferAddress, BufferBinding, BufferDescriptor, BufferId, BufferInitDescriptor, BufferSize, BufferUsages,
-        ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace,
-        IndexFormat, MultisampleState, PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology,
-        RenderPipelineDescriptor, SamplerId, ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline,
-        SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat, TextureViewId, VertexBufferLayout,
-        VertexState, VertexStepMode,
+        BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer,
+        BufferAddress, BufferBinding, BufferDescriptor, BufferId, BufferInitDescriptor, BufferSize,
+        BufferUsages, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState,
+        DepthStencilState, FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCache,
+        PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor, SamplerId,
+        ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline,
+        SpecializedRenderPipelines, StencilFaceState, StencilState, TextureFormat, TextureViewId,
+        VertexBufferLayout, VertexState, VertexStepMode, binding_types::uniform_buffer,
     },
     renderer::{RenderDevice, RenderQueue},
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
     view::{ExtractedView, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
-    Extract,
 };
 use bevy_utils::default;
 use bytemuck::cast_slice;
@@ -80,11 +81,14 @@ impl<T: Vertex> FromWorld for VertexPipeline<T> {
         let device = world.resource::<RenderDevice>();
 
         let [lut_texture, lut_sampler] = get_lut_bind_group_layout_entries();
-        let view_layout = device.create_bind_group_layout("hephae_view_layout", &[
-            uniform_buffer::<ViewUniform>(true).build(0, ShaderStages::VERTEX_FRAGMENT),
-            lut_texture.build(1, ShaderStages::FRAGMENT),
-            lut_sampler.build(2, ShaderStages::FRAGMENT),
-        ]);
+        let view_layout = device.create_bind_group_layout(
+            "hephae_view_layout",
+            &[
+                uniform_buffer::<ViewUniform>(true).build(0, ShaderStages::VERTEX_FRAGMENT),
+                lut_texture.build(1, ShaderStages::FRAGMENT),
+                lut_sampler.build(2, ShaderStages::FRAGMENT),
+            ],
+        );
 
         let mut state = SystemState::<T::PipelineParam>::new(world);
         let vertex_prop = T::init_pipeline(state.get_mut(world));
@@ -115,7 +119,10 @@ pub fn load_shader<T: Vertex>(mut commands: Commands, server: Res<AssetServer>) 
 
 /// Extracts the [`PipelineShader`] resource from the main world to the render world for use in
 /// pipeline specialization.
-pub fn extract_shader<T: Vertex>(mut commands: Commands, shader: Extract<Option<Res<PipelineShader<T>>>>) {
+pub fn extract_shader<T: Vertex>(
+    mut commands: Commands,
+    shader: Extract<Option<Res<PipelineShader<T>>>>,
+) {
     if let Some(ref shader) = *shader {
         if shader.is_changed() {
             commands.insert_resource(PipelineShader::<T>(shader.0.clone_weak(), PhantomData));
@@ -159,7 +166,9 @@ impl<T: Vertex> SpecializedRenderPipeline for VertexPipeline<T> {
                     Tonemapping::ReinhardLuminance => "TONEMAP_METHOD_REINHARD_LUMINANCE",
                     Tonemapping::AcesFitted => "TONEMAP_METHOD_ACES_FITTED",
                     Tonemapping::AgX => "TONEMAP_METHOD_AGX",
-                    Tonemapping::SomewhatBoringDisplayTransform => "TONEMAP_METHOD_SOMEWHAT_BORING_DISPLAY_TRANSFORM",
+                    Tonemapping::SomewhatBoringDisplayTransform => {
+                        "TONEMAP_METHOD_SOMEWHAT_BORING_DISPLAY_TRANSFORM"
+                    }
                     Tonemapping::TonyMcMapface => "TONEMAP_METHOD_TONY_MC_MAPFACE",
                     Tonemapping::BlenderFilmic => "TONEMAP_METHOD_BLENDER_FILMIC",
                 }
@@ -360,7 +369,7 @@ pub(crate) fn queue_vertices<T: Vertex>(
             while let Some((e, &main_e, mut items)) = iter.fetch_next() {
                 let index = e.index() as usize;
                 if iterated[index] {
-                    continue
+                    continue;
                 }
 
                 iterated.grow_and_insert(index);
@@ -375,7 +384,11 @@ pub(crate) fn queue_vertices<T: Vertex>(
                             T::create_item(
                                 layer,
                                 (e, main_e),
-                                pipelines.specialize(&pipeline_cache, &pipeline, (view_key, key.clone())),
+                                pipelines.specialize(
+                                    &pipeline_cache,
+                                    &pipeline,
+                                    (view_key, key.clone()),
+                                ),
                                 draw_function,
                                 i,
                             )
@@ -447,15 +460,22 @@ pub(crate) fn prepare_indices<T: Vertex>(
                 let item = &mut transparent_phase.items[item_index];
                 let Ok(mut items) = items.get_mut(item.entity()) else {
                     batch_key = None;
-                    continue
+                    continue;
                 };
 
-                let Some((range, .., key)) =
-                    items.0.get_mut().unwrap_or_else(PoisonError::into_inner).get(
-                        std::mem::replace(item.batch_range_and_extra_index_mut().1, PhaseItemExtraIndex::NONE).0 as usize,
+                let Some((range, .., key)) = items
+                    .0
+                    .get_mut()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .get(
+                        std::mem::replace(
+                            item.batch_range_and_extra_index_mut().1,
+                            PhaseItemExtraIndex::NONE,
+                        )
+                        .0 as usize,
                     )
                 else {
-                    continue
+                    continue;
                 };
 
                 view_indices.indices.extend(&indices[range.clone()]);
@@ -464,11 +484,18 @@ pub(crate) fn prepare_indices<T: Vertex>(
                     Some(ref batch_key) => batch_key != key,
                 } {
                     batch_item_index = item_index;
-                    batched_entities.push((view_entity, item.entity(), key.clone(), batch_index_range..batch_index_range));
+                    batched_entities.push((
+                        view_entity,
+                        item.entity(),
+                        key.clone(),
+                        batch_index_range..batch_index_range,
+                    ));
                 }
 
                 batch_index_range = view_indices.indices.len() as u32;
-                transparent_phase.items[batch_item_index].batch_range_mut().end += 1;
+                transparent_phase.items[batch_item_index]
+                    .batch_range_mut()
+                    .end += 1;
                 batched_entities.last_mut().unwrap().3.end = batch_index_range;
 
                 batch_key = Some(key.clone());
@@ -480,11 +507,12 @@ pub(crate) fn prepare_indices<T: Vertex>(
                 .as_ref()
                 .is_none_or(|index_buffer| (index_buffer.size() as usize) < contents.len())
             {
-                view_indices.index_buffer = Some(device.create_buffer_with_data(&BufferInitDescriptor {
-                    label: Some("hephae_index_buffer"),
-                    contents,
-                    usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-                }));
+                view_indices.index_buffer =
+                    Some(device.create_buffer_with_data(&BufferInitDescriptor {
+                        label: Some("hephae_index_buffer"),
+                        contents,
+                        usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
+                    }));
             } else if let Some(len) = BufferSize::new(contents.len() as u64) {
                 queue
                     .write_buffer_with(view_indices.index_buffer.as_ref().unwrap(), 0, len)
@@ -495,13 +523,23 @@ pub(crate) fn prepare_indices<T: Vertex>(
     });
 
     for mut item in &mut items {
-        item.0.get_mut().unwrap_or_else(PoisonError::into_inner).clear();
+        item.0
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 
     let mut param = param_set.p1();
-    batched_results.extend(batched_entities.drain(..).map(|(view_entity, batch_entity, key, range)| {
-        (view_entity, batch_entity, T::create_batch(&mut param, key), range)
-    }));
+    batched_results.extend(batched_entities.drain(..).map(
+        |(view_entity, batch_entity, key, range)| {
+            (
+                view_entity,
+                batch_entity,
+                T::create_batch(&mut param, key),
+                range,
+            )
+        },
+    ));
 
     drop(param);
 
@@ -512,7 +550,7 @@ pub(crate) fn prepare_indices<T: Vertex>(
 
     for (view_entity, batch_entity, prop, range) in batched_results.drain(..) {
         let Ok(mut view_batches) = batches.get_mut(view_entity) else {
-            continue
+            continue;
         };
 
         view_batches.0.insert(batch_entity, (prop, range));
@@ -531,7 +569,7 @@ pub(crate) fn prepare_view_bind_groups<T: Vertex>(
     fallback_image: Res<FallbackImage>,
 ) {
     let Some(buffer) = view_uniforms.uniforms.buffer() else {
-        return
+        return;
     };
 
     let view_binding = BindingResource::Buffer(BufferBinding {
@@ -541,22 +579,27 @@ pub(crate) fn prepare_view_bind_groups<T: Vertex>(
     });
 
     for (entity, &tonemapping, bind_group) in &mut views {
-        let (lut_texture, lut_sampler) = get_lut_bindings(&images, &tonemapping_luts, &tonemapping, &fallback_image);
+        let (lut_texture, lut_sampler) =
+            get_lut_bindings(&images, &tonemapping_luts, &tonemapping, &fallback_image);
         let create_bind_group = || ViewBindGroup::<T> {
-            bind_group: render_device.create_bind_group("hephae_view_bind_group", &pipeline.view_layout, &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: view_binding.clone(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(lut_texture),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::Sampler(lut_sampler),
-                },
-            ]),
+            bind_group: render_device.create_bind_group(
+                "hephae_view_bind_group",
+                &pipeline.view_layout,
+                &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: view_binding.clone(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(lut_texture),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::Sampler(lut_sampler),
+                    },
+                ],
+            ),
             last_buffer: buffer.id(),
             last_lut_texture: lut_texture.id(),
             last_lut_sampler: lut_sampler.id(),
@@ -564,9 +607,9 @@ pub(crate) fn prepare_view_bind_groups<T: Vertex>(
         };
 
         if let Some(mut bind_group) = bind_group {
-            if bind_group.last_buffer != buffer.id() ||
-                bind_group.last_lut_texture != lut_texture.id() ||
-                bind_group.last_lut_sampler != lut_sampler.id()
+            if bind_group.last_buffer != buffer.id()
+                || bind_group.last_lut_texture != lut_texture.id()
+                || bind_group.last_lut_sampler != lut_sampler.id()
             {
                 *bind_group = create_bind_group();
             }
@@ -620,11 +663,11 @@ impl<P: PhaseItem, T: Vertex> RenderCommand<P> for DrawBatch<T> {
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let Some((.., range)) = batches.0.get(&item.entity()) else {
-            return RenderCommandResult::Skip
+            return RenderCommandResult::Skip;
         };
 
         let Some(ref index_buffer) = index_buffer.index_buffer else {
-            return RenderCommandResult::Skip
+            return RenderCommandResult::Skip;
         };
 
         let buffers = buffers.into_inner();

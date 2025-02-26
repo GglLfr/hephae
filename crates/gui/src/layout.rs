@@ -12,8 +12,9 @@ use fixedbitset::FixedBitSet;
 use nonmax::NonMaxUsize;
 
 use crate::gui::{
-    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot, GuiRootSpace, GuiRootTransform,
-    GuiRoots, GuiSize, InitialLayoutSize, InitialLayoutSizeSys, LayoutCache, SubsequentLayoutSizeSys,
+    ChangedQuery, DistributeSpaceSys, DistributedSpace, Gui, GuiDepth, GuiLayouts, GuiRoot,
+    GuiRootSpace, GuiRootTransform, GuiRoots, GuiSize, InitialLayoutSize, InitialLayoutSizeSys,
+    LayoutCache, SubsequentLayoutSizeSys,
 };
 
 #[derive(Default, Deref, DerefMut)]
@@ -65,14 +66,17 @@ pub(crate) fn validate_root(
     root_query.update_archetypes(world);
 
     for (e, parent) in test_query.iter(world) {
-        if parent.and_then(|e| has_gui_query.get_manual(world, e.get()).ok()).is_some() {
+        if parent
+            .and_then(|e| has_gui_query.get_manual(world, e.get()).ok())
+            .is_some()
+        {
             to_remove.push(e);
-            continue
+            continue;
         }
 
         if root_query.get_manual(world, e).is_err() {
             to_remove.push(e);
-            continue
+            continue;
         }
     }
 
@@ -124,7 +128,11 @@ pub(crate) fn propagate_layout(
     (mut initial_stack, mut initial_size_stack): (Local<Vec<Entity>>, Local<Vec<Vec2>>),
     subsequent_size_state: &mut SystemState<(
         Query<(&GuiRootSpace, Option<&Children>)>,
-        Query<(Option<&LayoutCache>, &mut InitialLayoutSize, Option<&Children>)>,
+        Query<(
+            Option<&LayoutCache>,
+            &mut InitialLayoutSize,
+            Option<&Children>,
+        )>,
     )>,
     distribute_space_state: &mut SystemState<(
         Query<&mut DistributedSpace>,
@@ -133,7 +141,10 @@ pub(crate) fn propagate_layout(
         Query<(Entity, &InitialLayoutSize)>,
         Query<&Children>,
     )>,
-    (mut distribute_stack, mut distribute_output_stack): (Local<Vec<Entity>>, Local<Vec<(Affine2, Vec2)>>),
+    (mut distribute_stack, mut distribute_output_stack): (
+        Local<Vec<Entity>>,
+        Local<Vec<(Affine2, Vec2)>>,
+    ),
 ) {
     let mut all_changed = false;
     world.resource_scope(|world, layouts: Mut<GuiLayouts>| {
@@ -172,18 +183,18 @@ pub(crate) fn propagate_layout(
             query.for_each(world, &mut |mut e| {
                 root_iterated.grow((e.index() + 1) as usize);
                 if root_iterated.put(e.index() as usize) {
-                    return
+                    return;
                 }
 
                 root_changed.push(loop {
                     let Ok(parent) = ancestor_query.get_manual(world, e) else {
-                        break e
+                        break e;
                     };
 
                     if has_gui_query.get_manual(world, parent.get()).is_ok() {
                         e = parent.get()
                     } else {
-                        break e
+                        break e;
                     }
                 });
             })
@@ -191,7 +202,7 @@ pub(crate) fn propagate_layout(
     }
 
     if root_changed.is_empty() {
-        return
+        return;
     }
 
     // Phase 1: Calculate initial layout size, children-to-parent.
@@ -247,7 +258,7 @@ pub(crate) fn propagate_layout(
                     for (i, &id) in layout_ids.iter().enumerate() {
                         if layouts.contains_id(id) {
                             **cache = Some(NonMaxUsize::new(i).unwrap());
-                            break
+                            break;
                         }
                     }
 
@@ -328,12 +339,16 @@ pub(crate) fn propagate_layout(
         world: UnsafeWorldCell,
         node: Entity,
         parent: Vec2,
-        layout_query: &Query<(Option<&LayoutCache>, &mut InitialLayoutSize, Option<&Children>)>,
+        layout_query: &Query<(
+            Option<&LayoutCache>,
+            &mut InitialLayoutSize,
+            Option<&Children>,
+        )>,
         subsequent_layout_size: &mut [Box<dyn SubsequentLayoutSizeSys>],
     ) {
         // Safety: Hierarchy is validated, so no aliasing may occur.
         let Ok((cache, mut size, children)) = (unsafe { layout_query.get_unchecked(node) }) else {
-            return
+            return;
         };
 
         let mut size_child = **size;
@@ -349,7 +364,15 @@ pub(crate) fn propagate_layout(
 
         if let Some(children) = children {
             for &child in children {
-                unsafe { propagate_subsequent_size(world, child, size_child, layout_query, subsequent_layout_size) };
+                unsafe {
+                    propagate_subsequent_size(
+                        world,
+                        child,
+                        size_child,
+                        layout_query,
+                        subsequent_layout_size,
+                    )
+                };
             }
         }
     }
@@ -372,7 +395,13 @@ pub(crate) fn propagate_layout(
         if let Some(children) = children {
             for &child in children {
                 unsafe {
-                    propagate_subsequent_size(cell, child, *size, &layout_query, &mut subsequent_layout_size);
+                    propagate_subsequent_size(
+                        cell,
+                        child,
+                        *size,
+                        &layout_query,
+                        &mut subsequent_layout_size,
+                    );
                 }
             }
         }
@@ -468,8 +497,13 @@ pub(crate) fn propagate_layout(
     //   way an end-user could somehow transform the tree based on removals of the `LayoutCache`
     //   component.
     distribute_space_state.update_archetypes_unsafe_world_cell(cell);
-    let (mut distributed_space_query, root_query, cache_query, initial_layout_size_query, children_query) =
-        unsafe { distribute_space_state.get_unchecked_manual(cell) };
+    let (
+        mut distributed_space_query,
+        root_query,
+        cache_query,
+        initial_layout_size_query,
+        children_query,
+    ) = unsafe { distribute_space_state.get_unchecked_manual(cell) };
 
     for root in root_changed.drain(..) {
         let available_space = match root_query.get(root) {
@@ -477,10 +511,13 @@ pub(crate) fn propagate_layout(
             Err(..) => Vec2::ZERO,
         };
 
-        distributed_space_query.get_mut(root).unwrap().set_if_neq(DistributedSpace {
-            transform: Affine2::IDENTITY,
-            size: available_space,
-        });
+        distributed_space_query
+            .get_mut(root)
+            .unwrap()
+            .set_if_neq(DistributedSpace {
+                transform: Affine2::IDENTITY,
+                size: available_space,
+            });
 
         unsafe {
             propagate_distribute_space(
@@ -534,7 +571,7 @@ pub(crate) fn calculate_corners(
         depth_list: &mut Vec<(usize, Entity)>,
     ) -> usize {
         let Ok((mut gui, mut size, space)) = gui_query.get_mut(node) else {
-            return current_depth - 1
+            return current_depth - 1;
         };
 
         depth_list.push((current_depth, node));
@@ -576,12 +613,12 @@ pub(crate) fn calculate_corners(
     let mut depth_index = Some(0);
     for (root, trns, root_trns) in &root_query {
         let (gui, size, space) = gui_query.get_mut(root).unwrap();
-        let changed = space.is_changed() ||
-            trns.is_changed() ||
-            root_trns.is_changed() ||
-            gui.is_added() ||
-            size.is_added() ||
-            orphaned_entities.contains(root.index() as usize);
+        let changed = space.is_changed()
+            || trns.is_changed()
+            || root_trns.is_changed()
+            || gui.is_added()
+            || size.is_added()
+            || orphaned_entities.contains(root.index() as usize);
 
         let global_trns = trns.affine() * **root_trns;
 

@@ -17,12 +17,12 @@
 
 use std::borrow::Cow;
 
-use bevy_asset::{prelude::*, ReflectAsset};
+use bevy_asset::{ReflectAsset, prelude::*};
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
 use bevy_math::prelude::*;
 use bevy_reflect::prelude::*;
-use bevy_utils::{prelude::*, HashMap, HashSet};
+use bevy_utils::{HashMap, HashSet, prelude::*};
 use nonmax::NonMaxUsize;
 
 /// A list of textures packed into one large texture. See the [module-level](crate::atlas)
@@ -102,7 +102,9 @@ pub fn update_atlas_index(
     }
 
     let update = |entry: &AtlasEntry, mut index: Mut<AtlasIndex>| {
-        let Some(atlas) = atlases.get(&entry.atlas) else { return };
+        let Some(atlas) = atlases.get(&entry.atlas) else {
+            return;
+        };
         let Some(&(page, sprite)) = atlas.sprite_map.get(&*entry.key) else {
             *index = default();
             return;

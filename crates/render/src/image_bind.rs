@@ -9,9 +9,9 @@ use bevy_ecs::{
 };
 use bevy_image::prelude::*;
 use bevy_render::{
+    Extract,
     render_resource::{BindGroup, BindGroupEntry, BindGroupLayout},
     renderer::RenderDevice,
-    Extract,
 };
 use bevy_utils::{Entry, HashMap};
 
@@ -61,11 +61,16 @@ pub fn extract_image_events(
 }
 
 /// For each removed [`Image`], remove the [`BindGroup`] in [`ImageBindGroups`] too.
-pub fn validate_image_bind_groups(mut image_bind_groups: ResMut<ImageBindGroups>, mut events: ResMut<ImageAssetEvents>) {
+pub fn validate_image_bind_groups(
+    mut image_bind_groups: ResMut<ImageBindGroups>,
+    mut events: ResMut<ImageAssetEvents>,
+) {
     for event in events.0.drain(..) {
         match event {
             AssetEvent::Added { .. } | AssetEvent::LoadedWithDependencies { .. } => {}
-            AssetEvent::Modified { id } | AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
+            AssetEvent::Modified { id }
+            | AssetEvent::Removed { id }
+            | AssetEvent::Unused { id } => {
                 image_bind_groups.0.remove(&id);
             }
         }

@@ -18,7 +18,7 @@ pub mod plugin {
 
     use crate::{
         asset::TextureAtlasLoader,
-        atlas::{update_atlas_index, AtlasEntry, AtlasPage, TextureAtlas},
+        atlas::{AtlasEntry, AtlasPage, TextureAtlas, update_atlas_index},
     };
 
     /// Provides texture atlas functionality into the app.

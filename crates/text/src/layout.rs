@@ -51,7 +51,9 @@ pub struct FontLayoutInner {
 impl FontLayoutInner {
     /// Creates a new font layout pipeline.
     #[inline]
-    pub(crate) fn new(pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>) -> Self {
+    pub(crate) fn new(
+        pending_fonts: Receiver<(Vec<u8>, Sender<Result<Font, FaceParsingError>>)>,
+    ) -> Self {
         let locale = sys_locale::get_locale().unwrap_or("en-US".into());
         Self {
             sys: FontSystem::new_with_locale_and_db(locale, Database::new()),
@@ -71,7 +73,7 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
     while let Ok((bytes, sender)) = fonts.pending_fonts.try_recv() {
         if let Err(e) = Face::parse(&bytes, 0) {
             _ = sender.send_blocking(Err(e));
-            continue
+            continue;
         }
 
         // None of these unwraps should fail, as `Face::parse` has already ensured a valid 0th face.
@@ -124,18 +126,32 @@ impl FontLayoutInner {
 
         let mut glyph_spans = std::mem::take(&mut self.glyph_spans);
         let spans = spans.inspect(|&(.., font)| {
-            glyph_spans.push((font.font.id(), FontAtlasKey {
-                font_size: font.font_size.to_bits(),
-                antialias: font.antialias,
-            }))
+            glyph_spans.push((
+                font.font.id(),
+                FontAtlasKey {
+                    font_size: font.font_size.to_bits(),
+                    antialias: font.antialias,
+                },
+            ))
         });
 
-        let buffer = glyphs.buffer.get_mut().unwrap_or_else(PoisonError::into_inner);
-        if let Err(e) = self.update_buffer(buffer, (width, height), wrap, align, scale_factor, fonts, spans) {
+        let buffer = glyphs
+            .buffer
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Err(e) = self.update_buffer(
+            buffer,
+            (width, height),
+            wrap,
+            align,
+            scale_factor,
+            fonts,
+            spans,
+        ) {
             glyph_spans.clear();
             self.glyph_spans = glyph_spans;
 
-            return Err(e)
+            return Err(e);
         }
 
         let buffer_size = buffer_size(buffer);
@@ -163,7 +179,8 @@ impl FontLayoutInner {
                 let phys = glyph.physical((0., 0.), 1.);
                 let (atlas_id, atlas) = atlas_set.atlas_mut(key, atlases);
 
-                let (offset, rect, index) = atlas.get_or_create_info(&mut self.sys, &mut self.cache, glyph, images)?;
+                let (offset, rect, index) =
+                    atlas.get_or_create_info(&mut self.sys, &mut self.cache, glyph, images)?;
                 let size = (rect.max - rect.min).as_vec2();
                 let (top, left) = (offset.y as f32, offset.x as f32);
 
@@ -184,7 +201,7 @@ impl FontLayoutInner {
             glyph_spans.clear();
             self.glyph_spans = glyph_spans;
 
-            return Err(e)
+            return Err(e);
         }
 
         glyph_spans.clear();
@@ -207,7 +224,15 @@ impl FontLayoutInner {
         spans: impl Iterator<Item = (&'a str, &'a TextFont)>,
     ) -> Result<Vec2, FontLayoutError> {
         let mut buffer = glyphs.buffer.lock().unwrap_or_else(PoisonError::into_inner);
-        self.update_buffer(&mut buffer, (width, height), wrap, align, scale_factor, fonts, spans)?;
+        self.update_buffer(
+            &mut buffer,
+            (width, height),
+            wrap,
+            align,
+            scale_factor,
+            fonts,
+            spans,
+        )?;
 
         Ok(buffer_size(&buffer))
     }
@@ -241,7 +266,11 @@ impl FontLayoutInner {
         #[allow(unsafe_op_in_unsafe_fn)]
         unsafe fn guard<'a, 'this: 'a>(
             spans: &'this mut Vec<(&'static str, &'static TextFont)>,
-        ) -> ScopeGuard<&'this mut Vec<(&'a str, &'a TextFont)>, fn(&mut Vec<(&'a str, &'a TextFont)>), Always> {
+        ) -> ScopeGuard<
+            &'this mut Vec<(&'a str, &'a TextFont)>,
+            fn(&mut Vec<(&'a str, &'a TextFont)>),
+            Always,
+        > {
             // Safety: We only change the lifetime, so the value is valid for both types.
             ScopeGuard::with_strategy(
                 std::mem::transmute::<
@@ -259,11 +288,11 @@ impl FontLayoutInner {
         let mut font_size = f32::MIN_POSITIVE;
         for (span, font) in spans {
             if span.is_empty() || font.font_size <= 0. || font.line_height <= 0. {
-                continue
+                continue;
             }
 
             if !fonts.contains(&font.font) {
-                return Err(FontLayoutError::FontNotLoaded(font.font.id()))
+                return Err(FontLayoutError::FontNotLoaded(font.font.id()));
             }
 
             font_size = font_size.max(font.font_size);
@@ -272,23 +301,30 @@ impl FontLayoutInner {
 
         let mut buffer = buffer.borrow_with(sys);
         buffer.lines.clear();
-        buffer.set_metrics_and_size(Metrics::relative(font_size, 1.2).scale(scale_factor), width, height);
+        buffer.set_metrics_and_size(
+            Metrics::relative(font_size, 1.2).scale(scale_factor),
+            width,
+            height,
+        );
         buffer.set_wrap(wrap.into());
         buffer.set_rich_text(
-            spans_vec.iter().enumerate().map(|(span_index, &(span, font))| {
-                // The unwrap won't fail because the existence of the fonts have been checked.
-                let info = fonts.get(&font.font).unwrap();
-                (
-                    span,
-                    Attrs::new()
-                        .family(Family::Name(&info.name))
-                        .stretch(info.stretch)
-                        .style(info.style)
-                        .weight(info.weight)
-                        .metadata(span_index)
-                        .metrics(Metrics::relative(font.font_size, font.line_height)),
-                )
-            }),
+            spans_vec
+                .iter()
+                .enumerate()
+                .map(|(span_index, &(span, font))| {
+                    // The unwrap won't fail because the existence of the fonts have been checked.
+                    let info = fonts.get(&font.font).unwrap();
+                    (
+                        span,
+                        Attrs::new()
+                            .family(Family::Name(&info.name))
+                            .stretch(info.stretch)
+                            .style(info.style)
+                            .weight(info.weight)
+                            .metadata(span_index)
+                            .metrics(Metrics::relative(font.font_size, font.line_height)),
+                    )
+                }),
             Attrs::new(),
             Shaping::Advanced,
         );

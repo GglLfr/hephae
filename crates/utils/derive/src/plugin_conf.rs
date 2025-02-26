@@ -2,8 +2,8 @@ use bevy_macro_utils::BevyManifest;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    parse::{Parse, ParseStream},
     Attribute, Block, Ident, Meta, Path, Stmt, Token, Visibility,
+    parse::{Parse, ParseStream},
 };
 
 struct Syntax {

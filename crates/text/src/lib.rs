@@ -15,7 +15,10 @@ use bevy_ecs::prelude::*;
 pub mod prelude {
     pub use crate::{
         atlas::ExtractedFontAtlases,
-        def::{Font, Text, TextAlign, TextFont, TextGlyph, TextGlyphs, TextSpan, TextStructure, TextWrap},
+        def::{
+            Font, Text, TextAlign, TextFont, TextGlyph, TextGlyphs, TextSpan, TextStructure,
+            TextWrap,
+        },
         layout::FontLayout,
     };
 }
@@ -24,16 +27,19 @@ pub mod prelude {
 pub mod plugin {
     use std::sync::Mutex;
 
-    use bevy_app::{prelude::*, PluginGroupBuilder};
+    use bevy_app::{PluginGroupBuilder, prelude::*};
     use bevy_asset::AssetApp;
     use bevy_ecs::prelude::IntoSystemConfigs;
     use bevy_render::{ExtractSchedule, RenderApp};
 
     use crate::{
-        atlas::{extract_font_atlases, ExtractedFontAtlases, FontAtlas},
-        def::{compute_structure, notify_structure, Font, FontLoader, Text, TextAlign, TextFont, TextSpan, TextWrap},
-        layout::{load_fonts_to_database, FontLayout, FontLayoutInner},
         HephaeTextSystems,
+        atlas::{ExtractedFontAtlases, FontAtlas, extract_font_atlases},
+        def::{
+            Font, FontLoader, Text, TextAlign, TextFont, TextSpan, TextWrap, compute_structure,
+            notify_structure,
+        },
+        layout::{FontLayout, FontLayoutInner, load_fonts_to_database},
     };
 
     /// Provides text-rendering functionality into the app.
@@ -46,7 +52,9 @@ pub mod plugin {
                     let (sender, receiver) = async_channel::bounded(4);
                     app.init_asset::<Font>()
                         .init_asset::<FontAtlas>()
-                        .register_asset_loader(FontLoader { add_to_database: sender })
+                        .register_asset_loader(FontLoader {
+                            add_to_database: sender,
+                        })
                         .insert_resource(FontLayout(Mutex::new(FontLayoutInner::new(receiver))))
                         .register_type::<Text>()
                         .register_type::<TextWrap>()
@@ -55,7 +63,10 @@ pub mod plugin {
                         .register_type::<TextSpan>()
                         .configure_sets(Update, HephaeTextSystems::LoadFontsToDatabase)
                         .configure_sets(PostUpdate, HephaeTextSystems::ComputeStructure)
-                        .add_systems(Update, load_fonts_to_database.in_set(HephaeTextSystems::LoadFontsToDatabase))
+                        .add_systems(
+                            Update,
+                            load_fonts_to_database.in_set(HephaeTextSystems::LoadFontsToDatabase),
+                        )
                         .add_systems(
                             PostUpdate,
                             (compute_structure, notify_structure)

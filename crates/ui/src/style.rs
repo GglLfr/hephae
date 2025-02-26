@@ -1,11 +1,13 @@
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
-use taffy::{BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle};
+use taffy::{
+    BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle,
+};
 
-use crate::node::{ComputedNode, NodeCache, NodeChildren};
+use crate::node::{ComputedNode, NodeCache};
 
 #[derive(Component, Reflect, Clone, Default)]
-#[require(ComputedNode, NodeCache, NodeChildren)]
+#[require(ComputedNode, NodeCache)]
 #[reflect(Component, Default)]
 pub struct Node {
     pub display: Display,

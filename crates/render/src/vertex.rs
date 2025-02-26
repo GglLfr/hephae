@@ -17,9 +17,14 @@ use bevy_render::{
     prelude::*,
     primitives::{Aabb, Frustum, Sphere},
     render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, RenderCommand, SortedPhaseItem},
-    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat, VertexAttribute},
+    render_resource::{
+        CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat, VertexAttribute,
+    },
     sync_world::MainEntity,
-    view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
+    view::{
+        NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities,
+        VisibleEntityRanges,
+    },
 };
 use bevy_transform::prelude::*;
 use bevy_utils::{Parallel, TypeIdMap};
@@ -84,7 +89,11 @@ pub trait Vertex: Send + Sync + NoUninit {
 
     /// Specializes the render pipeline descriptor based off of the [key](Vertex::PipelineKey) and
     /// [prop](Vertex::PipelineProp) of the common render pipeline descriptor.
-    fn specialize_pipeline(key: Self::PipelineKey, prop: &Self::PipelineProp, desc: &mut RenderPipelineDescriptor);
+    fn specialize_pipeline(
+        key: Self::PipelineKey,
+        prop: &Self::PipelineProp,
+        desc: &mut RenderPipelineDescriptor,
+    );
 
     /// Creates the phase item associated with a [`Drawer`] based on its layer, render and
     /// main entity, rendering pipeline ID, draw function ID, and command index.
@@ -97,13 +106,19 @@ pub trait Vertex: Send + Sync + NoUninit {
     ) -> Self::Item;
 
     /// Creates additional batch property for use in rendering.
-    fn create_batch(param: &mut SystemParamItem<Self::BatchParam>, key: Self::PipelineKey) -> Self::BatchProp;
+    fn create_batch(
+        param: &mut SystemParamItem<Self::BatchParam>,
+        key: Self::PipelineKey,
+    ) -> Self::BatchProp;
 }
 
 /// Stores the runtime-only type information of [`Drawer`] that is associated with a [`Vertex`] for
 /// use in [`check_visibilities`].
 #[derive(Resource)]
-pub struct VertexDrawers<T: Vertex>(pub(crate) SparseSet<ComponentId, TypeId>, PhantomData<fn() -> T>);
+pub struct VertexDrawers<T: Vertex>(
+    pub(crate) SparseSet<ComponentId, TypeId>,
+    PhantomData<fn() -> T>,
+);
 impl<T: Vertex> Default for VertexDrawers<T> {
     #[inline]
     fn default() -> Self {
@@ -115,13 +130,17 @@ impl<T: Vertex> VertexDrawers<T> {
     /// Registers a [`Drawer`] to be checked in [`check_visibilities`].
     #[inline]
     pub fn add<D: Drawer<Vertex = T>>(&mut self, world: &mut World) {
-        self.0
-            .insert(world.register_component::<HasDrawer<D>>(), TypeId::of::<With<HasDrawer<D>>>());
+        self.0.insert(
+            world.register_component::<HasDrawer<D>>(),
+            TypeId::of::<With<HasDrawer<D>>>(),
+        );
     }
 }
 
 #[derive(Component)]
-pub(crate) struct DrawItems<T: Vertex>(pub Mutex<SmallVec<[(Range<usize>, f32, T::PipelineKey); 8]>>);
+pub(crate) struct DrawItems<T: Vertex>(
+    pub Mutex<SmallVec<[(Range<usize>, f32, T::PipelineKey); 8]>>,
+);
 impl<T: Vertex> Default for DrawItems<T> {
     #[inline]
     fn default() -> Self {
@@ -180,7 +199,7 @@ pub fn check_visibilities<T: Vertex>(
     let visible_entity_ranges = visible_entity_ranges.as_deref();
     for (view, &frustum, maybe_view_mask, camera, no_cpu_culling) in &view_query {
         if !camera.is_active {
-            continue
+            continue;
         }
 
         let view_mask = maybe_view_mask.unwrap_or_default();
@@ -198,7 +217,7 @@ pub fn check_visibilities<T: Vertex>(
                 has_visibility_range,
             )| {
                 if !inherited_visibility.get() {
-                    return
+                    return;
                 }
 
                 let entity_mask = maybe_entity_mask.unwrap_or_default();
@@ -207,8 +226,8 @@ pub fn check_visibilities<T: Vertex>(
                 }
 
                 // If outside of the visibility range, cull.
-                if has_visibility_range &&
-                    visible_entity_ranges.is_some_and(|visible_entity_ranges| {
+                if has_visibility_range
+                    && visible_entity_ranges.is_some_and(|visible_entity_ranges| {
                         !visible_entity_ranges.entity_is_in_range_of_view(entity, view)
                     })
                 {
@@ -251,7 +270,7 @@ pub fn check_visibilities<T: Vertex>(
         let map = view_maps.entry(view).or_default();
         for e in queues.drain(..) {
             let Ok(visible) = visibility.get_manual(world, e) else {
-                continue
+                continue;
             };
 
             for (&id, &key) in drawers.0.iter() {
@@ -264,7 +283,9 @@ pub fn check_visibilities<T: Vertex>(
 
     let mut visible_entities = visible_entities.get_mut(world);
     for (view, mut visible_entities) in &mut visible_entities {
-        let Some(map) = view_maps.get_mut(&view) else { continue };
+        let Some(map) = view_maps.get_mut(&view) else {
+            continue;
+        };
         for (&id, entities) in map {
             let dst = visible_entities.entities.entry(id).or_default();
             dst.clear();

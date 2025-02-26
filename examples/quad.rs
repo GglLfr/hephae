@@ -4,13 +4,16 @@ use bevy::{
     core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
     ecs::{
         query::QueryItem,
-        system::{lifetimeless::SRes, SystemParamItem},
+        system::{SystemParamItem, lifetimeless::SRes},
     },
     math::FloatOrd,
     prelude::*,
     render::{
         render_phase::{DrawFunctionId, PhaseItemExtraIndex},
-        render_resource::{BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute, VertexFormat},
+        render_resource::{
+            BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute,
+            VertexFormat,
+        },
         sync_world::MainEntity,
     },
 };
@@ -29,7 +32,12 @@ impl Vert {
     const fn new(x: f32, y: f32, red: f32, green: f32, blue: f32, alpha: f32) -> Self {
         Self {
             pos: [x, y],
-            color: LinearRgba { red, green, blue, alpha },
+            color: LinearRgba {
+                red,
+                green,
+                blue,
+                alpha,
+            },
         }
     }
 }
@@ -63,7 +71,12 @@ impl Vertex for Vert {
     fn init_pipeline(_: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {}
 
     #[inline]
-    fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
+    fn specialize_pipeline(
+        _: Self::PipelineKey,
+        _: &Self::PipelineProp,
+        _: &mut RenderPipelineDescriptor,
+    ) {
+    }
 
     fn create_item(
         layer: f32,
@@ -83,7 +96,11 @@ impl Vertex for Vert {
     }
 
     #[inline]
-    fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}
+    fn create_batch(
+        _: &mut SystemParamItem<Self::BatchParam>,
+        _: Self::PipelineKey,
+    ) -> Self::BatchProp {
+    }
 }
 
 #[derive(TypePath, Component, Copy, Clone)]
@@ -98,12 +115,20 @@ impl Drawer for Draw {
     type DrawParam = SRes<Time>;
 
     #[inline]
-    fn extract(mut drawer: DrawerExtract<Self>, _: &SystemParamItem<Self::ExtractParam>, _: QueryItem<Self::ExtractData>) {
+    fn extract(
+        mut drawer: DrawerExtract<Self>,
+        _: &SystemParamItem<Self::ExtractParam>,
+        _: QueryItem<Self::ExtractData>,
+    ) {
         *drawer.get_mut(|| Self) = Self;
     }
 
     #[inline]
-    fn draw(&mut self, time: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(
+        &mut self,
+        time: &SystemParamItem<Self::DrawParam>,
+        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
+    ) {
         let (sin, cos) = (time.elapsed_secs() * 3.).sin_cos();
         let base = queuer.data([
             Vert::new(100. + cos * 25., 100. + sin * 25., 2., 0., 0., 1.),
@@ -124,6 +149,13 @@ fn main() {
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            hdr: true,
+            ..default()
+        },
+        Bloom::NATURAL,
+    ));
     commands.spawn((Transform::IDENTITY, HasDrawer::<Draw>::new()));
 }

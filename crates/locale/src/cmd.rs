@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_utils::all_tuples;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 use crate::{
     arg::LocaleArg,
@@ -47,13 +47,18 @@ all_tuples!(impl_loc_bundle, 0, 15, T, t);
 impl<T: LocaleArg> LocBundle for T {
     #[inline]
     fn spawn(this: Self, mut commands: Commands) -> SmallVec<[Entity; 4]> {
-        smallvec![commands
-            .spawn((LocaleSrc(this), LocaleCache {
-                result: None,
-                locale: AssetId::default(),
-                changed: false,
-            }))
-            .id()]
+        smallvec![
+            commands
+                .spawn((
+                    LocaleSrc(this),
+                    LocaleCache {
+                        result: None,
+                        locale: AssetId::default(),
+                        changed: false,
+                    }
+                ))
+                .id()
+        ]
     }
 }
 

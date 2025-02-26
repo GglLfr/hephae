@@ -1,17 +1,17 @@
 //! Defines font atlas sets for rendering glyphs.
 
-use bevy_asset::{prelude::*, RenderAssetUsages};
+use bevy_asset::{RenderAssetUsages, prelude::*};
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
 use bevy_math::{ivec2, prelude::*, uvec2};
 use bevy_reflect::prelude::*;
 use bevy_render::{
-    render_resource::{Extent3d, TextureDimension, TextureFormat},
     Extract,
+    render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 use bevy_utils::HashMap;
 use cosmic_text::{CacheKey, FontSystem, LayoutGlyph, Placement, SwashCache, SwashContent};
-use guillotiere::{size2, AtlasAllocator};
+use guillotiere::{AtlasAllocator, size2};
 
 use crate::layout::FontLayoutError;
 
@@ -75,10 +75,12 @@ impl FontAtlas {
     /// Gets the glyph information in a tuple of positional offset, size, and index.
     #[inline]
     pub fn get_info(&self, glyph: &LayoutGlyph) -> Option<(IVec2, URect, usize)> {
-        self.map.get(&glyph.physical((0., 0.), 1.).cache_key).and_then(|&index| {
-            let (offset, rect) = self.get_info_index(index)?;
-            Some((offset, rect, index))
-        })
+        self.map
+            .get(&glyph.physical((0., 0.), 1.).cache_key)
+            .and_then(|&index| {
+                let (offset, rect) = self.get_info_index(index)?;
+                Some((offset, rect, index))
+            })
     }
 
     /// Gets the glyph information based on its index in a tuple of positional offset and size.
@@ -96,7 +98,7 @@ impl FontAtlas {
         images: &mut Assets<Image>,
     ) -> Result<(IVec2, URect, usize), FontLayoutError> {
         if let Some(info) = self.get_info(glyph) {
-            return Ok(info)
+            return Ok(info);
         }
 
         let phys = glyph.physical((0., 0.), 1.);
@@ -113,12 +115,20 @@ impl FontAtlas {
 
         if width == 0 || height == 0 {
             self.map.insert(phys.cache_key, self.nodes.len());
-            self.nodes.push((ivec2(left, top), URect::new(0, 0, width, height)));
+            self.nodes
+                .push((ivec2(left, top), URect::new(0, 0, width, height)));
 
-            Ok((ivec2(left, top), URect::new(0, 0, width, height), self.nodes.len() - 1))
+            Ok((
+                ivec2(left, top),
+                URect::new(0, 0, width, height),
+                self.nodes.len() - 1,
+            ))
         } else {
             loop {
-                match self.alloc.allocate(size2(width as i32 + 2, height as i32 + 2)) {
+                match self
+                    .alloc
+                    .allocate(size2(width as i32 + 2, height as i32 + 2))
+                {
                     Some(alloc) => {
                         let mut rect = alloc.rectangle.cast::<u32>();
                         rect.min.x += 1;
@@ -129,14 +139,17 @@ impl FontAtlas {
                         let alloc_size = self.alloc.size().cast::<u32>();
 
                         self.map.insert(phys.cache_key, self.nodes.len());
-                        self.nodes
-                            .push((ivec2(left, top), URect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y)));
+                        self.nodes.push((
+                            ivec2(left, top),
+                            URect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y),
+                        ));
 
                         let image = match images.get_mut(&self.image) {
                             Some(image)
                                 if {
                                     let size = image.texture_descriptor.size;
-                                    size.width == alloc_size.width && size.height == alloc_size.height
+                                    size.width == alloc_size.width
+                                        && size.height == alloc_size.height
                                 } =>
                             {
                                 image
@@ -154,16 +167,21 @@ impl FontAtlas {
                                         Some(old) => {
                                             let old_size = old.texture_descriptor.size;
                                             let mut data = Vec::with_capacity(
-                                                alloc_size.width as usize * alloc_size.height as usize * 4,
+                                                alloc_size.width as usize
+                                                    * alloc_size.height as usize
+                                                    * 4,
                                             );
 
-                                            let copy_amount = (old_size.width.min(alloc_size.width) * 4) as usize;
-                                            let copy_left =
-                                                alloc_size.width.saturating_sub(old_size.width.min(alloc_size.width));
+                                            let copy_amount =
+                                                (old_size.width.min(alloc_size.width) * 4) as usize;
+                                            let copy_left = alloc_size.width.saturating_sub(
+                                                old_size.width.min(alloc_size.width),
+                                            );
 
                                             for y in 0..old_size.height as usize {
                                                 data.extend_from_slice(
-                                                    &old.data[(y * copy_amount)..((y + 1) * copy_amount)],
+                                                    &old.data[(y * copy_amount)
+                                                        ..((y + 1) * copy_amount)],
                                                 );
                                                 for _ in 0..copy_left {
                                                     data.extend_from_slice(&[0, 0, 0, 0]);
@@ -172,7 +190,12 @@ impl FontAtlas {
 
                                             data
                                         }
-                                        None => vec![0; alloc_size.width as usize * alloc_size.height as usize * 4],
+                                        None => vec![
+                                            0;
+                                            alloc_size.width as usize
+                                                * alloc_size.height as usize
+                                                * 4
+                                        ],
                                     },
                                     TextureFormat::Rgba8UnormSrgb,
                                     RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -199,23 +222,29 @@ impl FontAtlas {
                             true => a,
                         };
 
-                        for (src_y, dst_y) in (rect.min.y as usize..rect.max.y as usize).enumerate() {
+                        for (src_y, dst_y) in (rect.min.y as usize..rect.max.y as usize).enumerate()
+                        {
                             for (src_x, dst_x) in (from_x..to_x).enumerate() {
-                                image.data[dst_y * row + dst_x * 4..dst_y * row + dst_x * 4 + 4].copy_from_slice(
-                                    &match swash_image.content {
-                                        SwashContent::Mask => {
-                                            [255, 255, 255, alpha(swash_image.data[src_y * src_row + src_x])]
-                                        }
+                                image.data[dst_y * row + dst_x * 4..dst_y * row + dst_x * 4 + 4]
+                                    .copy_from_slice(&match swash_image.content {
+                                        SwashContent::Mask => [
+                                            255,
+                                            255,
+                                            255,
+                                            alpha(swash_image.data[src_y * src_row + src_x]),
+                                        ],
                                         SwashContent::Color => {
-                                            let data = &swash_image.data
-                                                [src_y * src_row * 4 + src_x * 4..src_y * src_row * 4 + src_x * 4 + 4];
+                                            let data = &swash_image.data[src_y * src_row * 4
+                                                + src_x * 4
+                                                ..src_y * src_row * 4 + src_x * 4 + 4];
                                             [data[0], data[1], data[2], alpha(data[3])]
                                         }
                                         SwashContent::SubpixelMask => {
-                                            unimplemented!("sub-pixel antialiasing is unimplemented")
+                                            unimplemented!(
+                                                "sub-pixel antialiasing is unimplemented"
+                                            )
                                         }
-                                    },
-                                );
+                                    });
                             }
                         }
 
@@ -223,7 +252,7 @@ impl FontAtlas {
                             ivec2(left, top),
                             URect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y),
                             self.nodes.len() - 1,
-                        ))
+                        ));
                     }
                     None => self.alloc.grow(self.alloc.size() * 2),
                 }
@@ -287,7 +316,9 @@ pub fn extract_font_atlases(
 
     for &e in atlas_events.read() {
         match e {
-            AssetEvent::Added { .. } | AssetEvent::Modified { .. } | AssetEvent::LoadedWithDependencies { .. } => {}
+            AssetEvent::Added { .. }
+            | AssetEvent::Modified { .. }
+            | AssetEvent::LoadedWithDependencies { .. } => {}
             AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
                 extracted.0.remove(&id);
             }
