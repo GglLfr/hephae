@@ -1,13 +1,8 @@
 //! Defines asset loaders for [`Locale`] and [`LocaleLoader`].
 
-use std::{
-    fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError,
-    str::FromStr,
-};
+use std::{fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError, str::FromStr};
 
-use bevy_asset::{
-    AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::de::SpannedError,
-};
+use bevy_asset::{AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::de::SpannedError};
 use bevy_utils::HashMap;
 use nom::{
     Err as NomErr, IResult, Parser,
@@ -85,11 +80,7 @@ fn parse_index<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntE
     input: &'a str,
 ) -> IResult<&'a str, FmtFrag<'a>, E> {
     map_res(
-        delimited(
-            char('{'),
-            cut(take_while1(|c: char| c.is_ascii_digit())),
-            char('}'),
-        ),
+        delimited(char('{'), cut(take_while1(|c: char| c.is_ascii_digit())), char('}')),
         usize::from_str,
     )
     .map(FmtFrag::Index)
@@ -269,14 +260,12 @@ impl AssetLoader for LocaleLoader {
         _: &Self::Settings,
         _: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        Ok(Locale(ron::de::from_bytes::<HashMap<String, LocaleFmt>>(
-            &{
-                let mut bytes = Vec::new();
-                reader.read_to_end(&mut bytes).await?;
+        Ok(Locale(ron::de::from_bytes::<HashMap<String, LocaleFmt>>(&{
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await?;
 
-                bytes
-            },
-        )?))
+            bytes
+        })?))
     }
 
     #[inline]
@@ -334,9 +323,7 @@ impl AssetLoader for LocaleCollectionLoader {
         };
 
         for key in file.languages {
-            let path = load_context
-                .asset_path()
-                .resolve_embed(&format!("locale_{key}.locale.ron"))?;
+            let path = load_context.asset_path().resolve_embed(&format!("locale_{key}.locale.ron"))?;
             asset.languages.insert(key, load_context.load(path));
         }
 

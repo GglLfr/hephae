@@ -14,13 +14,11 @@ use bevy::{
     render::{
         render_asset::RenderAssets,
         render_phase::{
-            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult,
-            TrackedRenderPass,
+            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
         },
         render_resource::{
-            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding,
-            RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType,
-            VertexAttribute, VertexFormat,
+            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
+            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
@@ -88,14 +86,10 @@ impl Vertex for Vert {
 
     #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {
-        render_device.create_bind_group_layout(
-            "text_material_layout",
-            &[
-                texture_2d(TextureSampleType::Float { filterable: true })
-                    .build(0, ShaderStages::FRAGMENT),
-                sampler(SamplerBindingType::Filtering).build(1, ShaderStages::FRAGMENT),
-            ],
-        )
+        render_device.create_bind_group_layout("text_material_layout", &[
+            texture_2d(TextureSampleType::Float { filterable: true }).build(0, ShaderStages::FRAGMENT),
+            sampler(SamplerBindingType::Filtering).build(1, ShaderStages::FRAGMENT),
+        ])
     }
 
     #[inline]
@@ -126,29 +120,22 @@ impl Vertex for Vert {
 
     #[inline]
     fn create_batch(
-        (ref render_device, ref gpu_images, ref pipeline, image_bind_groups): &mut SystemParamItem<
-            Self::BatchParam,
-        >,
+        (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
         key: Self::PipelineKey,
     ) -> Self::BatchProp {
         let Some(gpu_image) = gpu_images.get(key) else {
             return key;
         };
-        image_bind_groups.create(
-            key,
-            render_device,
-            pipeline.vertex_prop(),
-            &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: gpu_image.texture_view.into_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: gpu_image.sampler.into_binding(),
-                },
-            ],
-        );
+        image_bind_groups.create(key, render_device, pipeline.vertex_prop(), &[
+            BindGroupEntry {
+                binding: 0,
+                resource: gpu_image.texture_view.into_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: gpu_image.sampler.into_binding(),
+            },
+        ]);
 
         key
     }
@@ -209,11 +196,7 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn draw(
-        &mut self,
-        atlases: &SystemParamItem<Self::DrawParam>,
-        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
-    ) {
+    fn draw(&mut self, atlases: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         for glyph in self.glyphs.drain(..) {
             let Some(atlas) = atlases.get(glyph.atlas) else {
                 continue;
@@ -247,11 +230,7 @@ impl Drawer for DrawText {
                 Vert::new(top_left.0, top_left.1, col),
             ]);
 
-            queuer.request(
-                0.,
-                atlas.image(),
-                [base, base + 1, base + 2, base + 2, base + 3, base],
-            );
+            queuer.request(0., atlas.image(), [base, base + 1, base + 2, base + 2, base + 3, base]);
         }
     }
 }
@@ -294,11 +273,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
     );
 }
 
-fn move_camera(
-    time: Res<Time>,
-    input: Res<ButtonInput<KeyCode>>,
-    mut camera: Query<&mut Transform, With<Camera>>,
-) {
+fn move_camera(time: Res<Time>, input: Res<ButtonInput<KeyCode>>, mut camera: Query<&mut Transform, With<Camera>>) {
     let [up, down, left, right] = [
         input.pressed(KeyCode::KeyW),
         input.pressed(KeyCode::KeyS),

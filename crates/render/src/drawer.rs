@@ -46,11 +46,7 @@ pub trait Drawer: TypePath + Component + Sized {
     );
 
     /// Issues vertex data and draw requests for the data.
-    fn draw(
-        &mut self,
-        param: &SystemParamItem<Self::DrawParam>,
-        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
-    );
+    fn draw(&mut self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
 }
 
 /// Specifies the behavior of [`Drawer::extract`].
@@ -92,12 +88,7 @@ pub trait VertexQueuer {
 
     /// Extends the index buffer with the supplied iterator. Indices should be offset by the index
     /// returned by [`data`](VertexQueuer::data).
-    fn request(
-        &self,
-        layer: f32,
-        key: <Self::Vertex as Vertex>::PipelineKey,
-        indices: impl Transfer<u32>,
-    );
+    fn request(&self, layer: f32, key: <Self::Vertex as Vertex>::PipelineKey, indices: impl Transfer<u32>);
 }
 
 /// Marker component for entities that may extract out [`Drawer`]s to the render world. This *must*
@@ -125,12 +116,7 @@ impl<T: Drawer> HasDrawer<T> {
 pub(crate) fn extract_drawers<T: Drawer>(
     mut commands: Commands,
     param: Extract<T::ExtractParam>,
-    query: Extract<
-        Query<
-            (RenderEntity, &ViewVisibility, T::ExtractData),
-            (T::ExtractFilter, With<HasDrawer<T>>),
-        >,
-    >,
+    query: Extract<Query<(RenderEntity, &ViewVisibility, T::ExtractData), (T::ExtractFilter, With<HasDrawer<T>>)>>,
     mut target_query: Query<&mut T>,
 ) {
     for (e, &view, data) in &query {
@@ -160,11 +146,7 @@ pub(crate) fn queue_drawers<T: Drawer>(
 
     iterated.clear();
     for (visible_entities, visible_drawers) in &views {
-        let mut iter = query.iter_many_mut(
-            visible_entities
-                .iter::<With<HasDrawer<T>>>()
-                .map(|(e, ..)| e),
-        );
+        let mut iter = query.iter_many_mut(visible_entities.iter::<With<HasDrawer<T>>>().map(|(e, ..)| e));
         while let Some((e, mut drawer, items)) = iter.fetch_next() {
             let index = e.index() as usize;
             if iterated[index] {

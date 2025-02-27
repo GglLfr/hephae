@@ -23,9 +23,7 @@ pub trait LocaleTarget: Component {
     fn update(&mut self, src: &str);
 }
 
-pub(crate) fn localize_target<T: LocaleTarget>(
-    mut query: Query<(&mut T, &LocaleResult), Changed<LocaleResult>>,
-) {
+pub(crate) fn localize_target<T: LocaleTarget>(mut query: Query<(&mut T, &LocaleResult), Changed<LocaleResult>>) {
     for (mut target, src) in &mut query {
         target.update(src);
     }

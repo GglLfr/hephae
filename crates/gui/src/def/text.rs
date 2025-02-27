@@ -35,11 +35,7 @@ impl GuiLayout for UiText {
     type PrimaryParam = (
         SRes<FontLayout>,
         SRes<Assets<Font>>,
-        SQuery<(
-            Option<Read<Text>>,
-            Option<Read<TextSpan>>,
-            Option<Read<TextFont>>,
-        )>,
+        SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>,
     );
     type PrimaryItem = (
         Read<Text>,
@@ -52,11 +48,7 @@ impl GuiLayout for UiText {
     type SecondaryParam = (
         SRes<FontLayout>,
         SRes<Assets<Font>>,
-        SQuery<(
-            Option<Read<Text>>,
-            Option<Read<TextSpan>>,
-            Option<Read<TextFont>>,
-        )>,
+        SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>,
     );
     type SecondaryItem = (
         Read<Text>,
@@ -130,15 +122,9 @@ impl GuiLayout for UiText {
         let margin = *margin.copied().unwrap_or_default();
 
         if let Some((width, height)) = match (size.x, size.y) {
-            (Rel(..), Abs(val)) => Some((
-                Some(size.x.refer_rel(parent.x)),
-                Some(val + (margin.top + margin.bottom)),
-            )),
+            (Rel(..), Abs(val)) => Some((Some(size.x.refer_rel(parent.x)), Some(val + (margin.top + margin.bottom)))),
             (Rel(..), Auto) => Some((Some(size.x.refer_rel(parent.x)), None)),
-            (Abs(val), Rel(..)) => Some((
-                Some(val + (margin.left + margin.right)),
-                Some(size.y.refer_rel(parent.y)),
-            )),
+            (Abs(val), Rel(..)) => Some((Some(val + (margin.left + margin.right)), Some(size.y.refer_rel(parent.y)))),
             (Auto, Rel(..)) => Some((None, Some(size.y.refer_rel(parent.y)))),
             _ => None,
         } {

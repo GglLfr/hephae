@@ -45,13 +45,10 @@ pub mod plugin {
     use crate::{
         HEPHAE_VIEW_BINDINGS_HANDLE, HephaeRenderSystems,
         drawer::{Drawer, HasDrawer, extract_drawers, queue_drawers},
-        image_bind::{
-            ImageAssetEvents, ImageBindGroups, extract_image_events, validate_image_bind_groups,
-        },
+        image_bind::{ImageAssetEvents, ImageBindGroups, extract_image_events, validate_image_bind_groups},
         pipeline::{
-            DrawBuffers, DrawRequests, VertexPipeline, ViewBatches, ViewIndexBuffer,
-            VisibleDrawers, extract_shader, load_shader, prepare_indices, prepare_view_bind_groups,
-            queue_vertices,
+            DrawBuffers, DrawRequests, VertexPipeline, ViewBatches, ViewIndexBuffer, VisibleDrawers, extract_shader,
+            load_shader, prepare_indices, prepare_view_bind_groups, queue_vertices,
         },
         vertex::{DrawItems, Vertex, VertexDrawers, check_visibilities},
     };
@@ -74,10 +71,7 @@ pub mod plugin {
                 let mut builder = PluginGroupBuilder::start::<Self>().add(|app: &mut App| {
                     app.world_mut().resource_mut::<Assets<Shader>>().insert(
                         &HEPHAE_VIEW_BINDINGS_HANDLE,
-                        Shader::from_wgsl(
-                            include_str!("view_bindings.wgsl"),
-                            "hephae/view_bindings.wgsl",
-                        ),
+                        Shader::from_wgsl(include_str!("view_bindings.wgsl"), "hephae/view_bindings.wgsl"),
                     );
 
                     if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
@@ -91,12 +85,9 @@ pub mod plugin {
                                         HephaeRenderSystems::QueueVertices,
                                     )
                                         .in_set(RenderSet::Queue),
-                                    HephaeRenderSystems::QueueDrawers
-                                        .before(HephaeRenderSystems::QueueVertices),
-                                    HephaeRenderSystems::PrepareIndices
-                                        .in_set(RenderSet::PrepareResources),
-                                    HephaeRenderSystems::PrepareBindGroups
-                                        .in_set(RenderSet::PrepareBindGroups),
+                                    HephaeRenderSystems::QueueDrawers.before(HephaeRenderSystems::QueueVertices),
+                                    HephaeRenderSystems::PrepareIndices.in_set(RenderSet::PrepareResources),
+                                    HephaeRenderSystems::PrepareBindGroups.in_set(RenderSet::PrepareBindGroups),
                                 ),
                             )
                             .init_resource::<ImageAssetEvents>()
@@ -104,8 +95,7 @@ pub mod plugin {
                             .add_systems(ExtractSchedule, extract_image_events)
                             .add_systems(
                                 Render,
-                                validate_image_bind_groups
-                                    .before(HephaeRenderSystems::PrepareBindGroups),
+                                validate_image_bind_groups.before(HephaeRenderSystems::PrepareBindGroups),
                             );
                     }
                 });
@@ -129,20 +119,14 @@ pub mod plugin {
             fn build(&self, app: &mut App) {
                 app.init_resource::<VertexDrawers<T>>()
                     .add_systems(Startup, load_shader::<T>)
-                    .add_systems(
-                        PostUpdate,
-                        check_visibilities::<T>.in_set(VisibilitySystems::CheckVisibility),
-                    );
+                    .add_systems(PostUpdate, check_visibilities::<T>.in_set(VisibilitySystems::CheckVisibility));
 
                 if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
                     let world = render_app
                         .init_resource::<SpecializedRenderPipelines<VertexPipeline<T>>>()
                         .add_render_command::<T::Item, DrawRequests<T>>()
                         .add_systems(ExtractSchedule, extract_shader::<T>)
-                        .add_systems(
-                            Render,
-                            queue_vertices::<T>.in_set(HephaeRenderSystems::QueueVertices),
-                        )
+                        .add_systems(Render, queue_vertices::<T>.in_set(HephaeRenderSystems::QueueVertices))
                         .world_mut();
 
                     world.register_required_components::<ExtractedView, ViewBatches<T>>();
@@ -160,8 +144,7 @@ pub mod plugin {
                             Render,
                             (
                                 prepare_indices::<T>.in_set(HephaeRenderSystems::PrepareIndices),
-                                prepare_view_bind_groups::<T>
-                                    .in_set(HephaeRenderSystems::PrepareBindGroups),
+                                prepare_view_bind_groups::<T>.in_set(HephaeRenderSystems::PrepareBindGroups),
                             ),
                         );
                 }
@@ -182,17 +165,12 @@ pub mod plugin {
             app.add_plugins(SyncComponentPlugin::<HasDrawer<T>>::default())
                 .register_type::<HasDrawer<T>>()
                 .world_mut()
-                .resource_scope::<VertexDrawers<T::Vertex>, ()>(|world, mut drawers| {
-                    drawers.add::<T>(world)
-                });
+                .resource_scope::<VertexDrawers<T::Vertex>, ()>(|world, mut drawers| drawers.add::<T>(world));
 
             if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
                 render_app
                     .add_systems(ExtractSchedule, extract_drawers::<T>)
-                    .add_systems(
-                        Render,
-                        queue_drawers::<T>.in_set(HephaeRenderSystems::QueueDrawers),
-                    )
+                    .add_systems(Render, queue_drawers::<T>.in_set(HephaeRenderSystems::QueueDrawers))
                     .world_mut()
                     .register_required_components::<T, DrawItems<T::Vertex>>();
             }
@@ -202,8 +180,7 @@ pub mod plugin {
 
 /// Global handle to the global shader containing bind groups defining view uniform and tonemapping
 /// LUTs.
-pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(278527494526026980866063021704582553601);
+pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = Handle::weak_from_u128(278527494526026980866063021704582553601);
 
 /// Labels assigned to Hephae systems that are added to [`bevy_render::Render`].
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]

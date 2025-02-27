@@ -8,11 +8,7 @@ use bevy_ecs::prelude::*;
 /// Extension traits for `Option<&T>`, `Option<&mut T>`, and `Option<Ref<T>>`.
 pub trait ComponentOption<T: Deref<Target: Component + Sized>>: Sized {
     /// Unwraps the option or inserts a new one provided by a closure to the entity.
-    fn get_or_insert_with(
-        self,
-        commands: EntityCommands,
-        insert: impl FnOnce() -> T::Target,
-    ) -> RefOrInsert<T>;
+    fn get_or_insert_with(self, commands: EntityCommands, insert: impl FnOnce() -> T::Target) -> RefOrInsert<T>;
 
     /// Unwraps the option or inserts a new one by-value to the entity.
     #[inline]
@@ -32,11 +28,7 @@ pub trait ComponentOption<T: Deref<Target: Component + Sized>>: Sized {
 
 impl<T: Deref<Target: Component + Sized>> ComponentOption<T> for Option<T> {
     #[inline]
-    fn get_or_insert_with(
-        self,
-        commands: EntityCommands,
-        insert: impl FnOnce() -> <T as Deref>::Target,
-    ) -> RefOrInsert<T> {
+    fn get_or_insert_with(self, commands: EntityCommands, insert: impl FnOnce() -> <T as Deref>::Target) -> RefOrInsert<T> {
         RefOrInsert(match self {
             Some(val) => RefOrInsertInner::Ref(val),
             None => RefOrInsertInner::Spawn(MaybeUninit::new(insert()), commands),

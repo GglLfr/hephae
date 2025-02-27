@@ -49,14 +49,11 @@ impl<T: LocaleArg> LocBundle for T {
     fn spawn(this: Self, mut commands: Commands) -> SmallVec<[Entity; 4]> {
         smallvec![
             commands
-                .spawn((
-                    LocaleSrc(this),
-                    LocaleCache {
-                        result: None,
-                        locale: AssetId::default(),
-                        changed: false,
-                    }
-                ))
+                .spawn((LocaleSrc(this), LocaleCache {
+                    result: None,
+                    locale: AssetId::default(),
+                    changed: false,
+                }))
                 .id()
         ]
     }

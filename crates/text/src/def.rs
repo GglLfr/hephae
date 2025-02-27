@@ -16,8 +16,7 @@ use bevy_hierarchy::prelude::*;
 use bevy_math::prelude::*;
 use bevy_reflect::prelude::*;
 use cosmic_text::{
-    Align, Buffer, Metrics, Stretch, Style, Weight, Wrap, fontdb::ID as FontId,
-    ttf_parser::FaceParsingError,
+    Align, Buffer, Metrics, Stretch, Style, Weight, Wrap, fontdb::ID as FontId, ttf_parser::FaceParsingError,
 };
 use fixedbitset::FixedBitSet;
 #[cfg(feature = "locale")]
@@ -81,10 +80,7 @@ impl AssetLoader for FontLoader {
             return Err(FontError::ChannelClosed);
         }
 
-        let font = receiver
-            .recv()
-            .await
-            .map_err(|_| FontError::ChannelClosed)??;
+        let font = receiver.recv().await.map_err(|_| FontError::ChannelClosed)??;
         Ok(font)
     }
 
@@ -212,11 +208,7 @@ impl Default for TextFont {
 }
 
 /// Type of [`Query`] that may be passed to [`TextStructure::iter`], with a `'static` lifetime.
-pub type STextQuery = SQuery<(
-    Option<Read<Text>>,
-    Option<Read<TextSpan>>,
-    Option<Read<TextFont>>,
-)>;
+pub type STextQuery = SQuery<(Option<Read<Text>>, Option<Read<TextSpan>>, Option<Read<TextFont>>)>;
 /// Type of [`Query`] that may be passed to [`TextStructure::iter`].
 pub type TextQuery<'w, 's> = SystemParamItem<'w, 's, STextQuery>;
 
@@ -296,10 +288,7 @@ impl Default for TextGlyphs {
         Self {
             glyphs: Vec::new(),
             size: Vec2::ZERO,
-            buffer: Mutex::new(Buffer::new_empty(Metrics::new(
-                f32::MIN_POSITIVE,
-                f32::MIN_POSITIVE,
-            ))),
+            buffer: Mutex::new(Buffer::new_empty(Metrics::new(f32::MIN_POSITIVE, f32::MIN_POSITIVE))),
         }
     }
 }
@@ -410,10 +399,7 @@ pub fn compute_structure(
                 depth: usize,
                 parent: Entity,
                 children: &[Entity],
-                recurse_query: &Query<
-                    (Entity, Option<&Children>, &Parent),
-                    (With<TextSpan>, Without<Text>),
-                >,
+                recurse_query: &Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
             ) {
                 for (e, children, actual_parent) in recurse_query.iter_many(children) {
                     assert_eq!(
@@ -449,20 +435,16 @@ pub fn compute_structure(
 pub fn notify_structure(
     mut root_query: Query<&mut TextStructure>,
     changed_query: Query<
-        (
-            Option<Ref<Text>>,
-            Option<Ref<TextSpan>>,
-            Option<Ref<TextFont>>,
-        ),
+        (Option<Ref<Text>>, Option<Ref<TextSpan>>, Option<Ref<TextFont>>),
         Or<(With<Text>, With<TextSpan>)>,
     >,
 ) {
     'out: for mut structure in &mut root_query {
         let inner = &structure.bypass_change_detection().0;
         for (text, span, font) in changed_query.iter_many(inner.iter().map(|&(e, ..)| e)) {
-            if text.is_some_and(|text| text.is_changed())
-                || span.is_some_and(|span| span.is_changed())
-                || font.is_some_and(|font| font.is_changed())
+            if text.is_some_and(|text| text.is_changed()) ||
+                span.is_some_and(|span| span.is_changed()) ||
+                font.is_some_and(|font| font.is_changed())
             {
                 structure.set_changed();
                 continue 'out;

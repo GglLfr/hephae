@@ -1,29 +1,28 @@
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
-use taffy::{
-    BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle,
-};
+use bevy_transform::prelude::*;
+use taffy::{BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle};
 
-use crate::node::{ComputedNode, NodeCache};
+use crate::node::{ComputedUi, UiCache};
 
 #[derive(Component, Reflect, Clone, Default)]
-#[require(ComputedNode, NodeCache)]
+#[require(Transform, ComputedUi, UiCache)]
 #[reflect(Component, Default)]
-pub struct Node {
+pub struct Ui {
     pub display: Display,
     pub box_sizing: BoxSizing,
     pub overflow_x: Overflow,
     pub overflow_y: Overflow,
     pub scrollbar_width: f32,
     pub position: Position,
-    pub inset: UiRect,
+    pub inset: UiBorder,
     pub size: UiSize,
     pub min_size: UiSize,
     pub max_size: UiSize,
     pub aspect_ratio: Option<f32>,
-    pub margin: UiRect,
-    pub padding: UiRect,
-    pub border: UiRect,
+    pub margin: UiBorder,
+    pub padding: UiBorder,
+    pub border: UiBorder,
     pub flex_direction: FlexDirection,
     pub flex_wrap: FlexWrap,
     pub gap: UiSize,
@@ -97,22 +96,22 @@ impl<T: From<Val>> From<UiSize> for taffy::Size<T> {
 
 #[derive(Reflect, Copy, Clone, Default)]
 #[reflect(Default)]
-pub struct UiRect {
+pub struct UiBorder {
     pub left: Val,
     pub right: Val,
     pub bottom: Val,
     pub top: Val,
 }
 
-impl<T: From<Val>> From<UiRect> for taffy::Rect<T> {
+impl<T: From<Val>> From<UiBorder> for taffy::Rect<T> {
     #[inline]
     fn from(
-        UiRect {
+        UiBorder {
             left,
             right,
             bottom,
             top,
-        }: UiRect,
+        }: UiBorder,
     ) -> Self {
         Self {
             left: left.into(),
@@ -226,7 +225,7 @@ impl From<Position> for taffy::Position {
     }
 }
 
-impl CoreStyle for Node {
+impl CoreStyle for Ui {
     #[inline]
     fn box_generation_mode(&self) -> taffy::BoxGenerationMode {
         self.display.into()
@@ -448,7 +447,7 @@ impl From<AlignItems> for Option<taffy::AlignItems> {
 /// For Grid it controls alignment in the inline axis.
 pub type JustifyContent = AlignContent;
 
-impl FlexboxContainerStyle for Node {
+impl FlexboxContainerStyle for Ui {
     #[inline]
     fn flex_direction(&self) -> taffy::FlexDirection {
         self.flex_direction.into()
@@ -483,7 +482,7 @@ impl FlexboxContainerStyle for Node {
 /// Controls alignment of an individual node.
 pub type AlignSelf = AlignItems;
 
-impl FlexboxItemStyle for Node {
+impl FlexboxItemStyle for Ui {
     #[inline]
     fn flex_basis(&self) -> taffy::Dimension {
         self.flex_basis.into()
@@ -505,14 +504,14 @@ impl FlexboxItemStyle for Node {
     }
 }
 
-impl BlockContainerStyle for Node {
+impl BlockContainerStyle for Ui {
     #[inline]
     fn text_align(&self) -> taffy::TextAlign {
         taffy::TextAlign::Auto
     }
 }
 
-impl BlockItemStyle for Node {
+impl BlockItemStyle for Ui {
     #[inline]
     fn is_table(&self) -> bool {
         false

@@ -32,12 +32,7 @@ use crate::arg::LocaleArg;
 pub struct Locale(pub HashMap<String, LocaleFmt>);
 impl Locale {
     /// Formats a localization string with the provided arguments into an output [`String`].
-    pub fn localize_into(
-        &self,
-        key: impl AsRef<str>,
-        args_src: &[&str],
-        out: &mut String,
-    ) -> Result<(), LocalizeError> {
+    pub fn localize_into(&self, key: impl AsRef<str>, args_src: &[&str], out: &mut String) -> Result<(), LocalizeError> {
         match self.get(key.as_ref()).ok_or(LocalizeError::MissingKey)? {
             LocaleFmt::Unformatted(res) => {
                 out.clone_from(res);
@@ -46,10 +41,7 @@ impl Locale {
             LocaleFmt::Formatted { format, args } => {
                 let len = args.iter().try_fold(0, |mut len, &(ref range, i)| {
                     len += range.end - range.start;
-                    len += args_src
-                        .get(i)
-                        .ok_or(LocalizeError::MissingArgument(i))?
-                        .len();
+                    len += args_src.get(i).ok_or(LocalizeError::MissingArgument(i))?.len();
                     Ok(len)
                 })?;
 
@@ -77,11 +69,7 @@ impl Locale {
     /// Convenient shortcut for [`localize_into`](Self::localize_into) that allocates a new
     /// [`String`].
     #[inline]
-    pub fn localize(
-        &self,
-        key: impl AsRef<str>,
-        args_src: &[&str],
-    ) -> Result<String, LocalizeError> {
+    pub fn localize(&self, key: impl AsRef<str>, args_src: &[&str]) -> Result<String, LocalizeError> {
         let mut out = String::new();
         self.localize_into(key, args_src, &mut out)?;
         Ok(out)
@@ -181,9 +169,7 @@ impl Asset for LocaleCollection {}
 impl VisitAssetDependencies for LocaleCollection {
     #[inline]
     fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
-        self.languages
-            .values()
-            .for_each(|handle| visit(handle.id().untyped()))
+        self.languages.values().for_each(|handle| visit(handle.id().untyped()))
     }
 }
 
@@ -210,15 +196,12 @@ pub struct LocaleKey {
 
 fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
     let args = std::mem::take(&mut world.get_mut::<LocaleArgs>(e).unwrap().0);
-    world
-        .commands()
-        .entity(e)
-        .queue(move |e: Entity, world: &mut World| {
-            world.entity_mut(e).remove::<LocaleArgs>();
-            for arg in args {
-                world.despawn(arg);
-            }
-        });
+    world.commands().entity(e).queue(move |e: Entity, world: &mut World| {
+        world.entity_mut(e).remove::<LocaleArgs>();
+        for arg in args {
+            world.despawn(arg);
+        }
+    });
 }
 
 /// Formatted localized string, ready to be used.
@@ -354,10 +337,7 @@ pub(crate) fn update_locale_cache<T: LocaleArg>(
 
         if src.localize_into(locale, result).is_err() {
             result.clear();
-            warn_once!(
-                "An error occurred while trying to format {} in {e}",
-                type_name::<T>()
-            );
+            warn_once!("An error occurred while trying to format {} in {e}", type_name::<T>());
         }
     }
 }

@@ -21,8 +21,8 @@
 use std::io::Error as IoError;
 
 use bevy_asset::{
-    AssetLoadError, AssetLoader, AssetPath, LoadContext, ParseAssetPathError, RenderAssetUsages,
-    io::Reader, ron, ron::error::SpannedError,
+    AssetLoadError, AssetLoader, AssetPath, LoadContext, ParseAssetPathError, RenderAssetUsages, io::Reader, ron,
+    ron::error::SpannedError,
 };
 use bevy_image::{TextureFormatPixelInfo, prelude::*};
 use bevy_math::{prelude::*, uvec2};
@@ -92,10 +92,7 @@ impl TextureAtlasFile {
 
     /// Serializes the usages into `(main: <bool>, render: <bool>)`.
     #[inline]
-    pub fn serialize_usages<S: Serializer>(
-        usages: &RenderAssetUsages,
-        ser: S,
-    ) -> Result<S::Ok, S::Error> {
+    pub fn serialize_usages<S: Serializer>(usages: &RenderAssetUsages, ser: S) -> Result<S::Ok, S::Error> {
         let mut u = ser.serialize_struct("RenderAssetUsages", 2)?;
         u.serialize_field("main", &usages.contains(RenderAssetUsages::MAIN_WORLD))?;
         u.serialize_field("render", &usages.contains(RenderAssetUsages::RENDER_WORLD))?;
@@ -104,9 +101,7 @@ impl TextureAtlasFile {
 
     /// Deserializes the usages from `(main: <bool>, render: <bool>)`.
     #[inline]
-    pub fn deserialize_usages<'de, D: Deserializer<'de>>(
-        de: D,
-    ) -> Result<RenderAssetUsages, D::Error> {
+    pub fn deserialize_usages<'de, D: Deserializer<'de>>(de: D) -> Result<RenderAssetUsages, D::Error> {
         const FIELDS: &[&str] = &["main", "render"];
 
         struct Visit;
@@ -115,10 +110,7 @@ impl TextureAtlasFile {
 
             #[inline]
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(
-                    formatter,
-                    "struct RenderAssetUsages {{ main: bool, render: bool }}"
-                )
+                write!(formatter, "struct RenderAssetUsages {{ main: bool, render: bool }}")
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -203,9 +195,7 @@ impl Default for TextureAtlasSettings {
 #[derive(Error, Debug)]
 pub enum TextureAtlasError {
     /// Error that arises when a texture is larger than the maximum size of the atlas page.
-    #[error(
-        "Texture '{name}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]"
-    )]
+    #[error("Texture '{name}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]")]
     TooLarge {
         /// The sprite lookup key.
         name: String,
@@ -313,10 +303,7 @@ impl AssetLoader for TextureAtlasLoader {
                             .immediate()
                             .load::<Image>(&path)
                             .await
-                            .map_err(|e| TextureAtlasError::InvalidImage {
-                                name,
-                                error: e.error,
-                            })?
+                            .map_err(|e| TextureAtlasError::InvalidImage { name, error: e.error })?
                             .take(),
                     ));
                 }
@@ -398,61 +385,52 @@ impl AssetLoader for TextureAtlasLoader {
                     image.data[left_x..left_x + size].copy_from_slice(&texture.data[..size]);
 
                     let right_x = (min_y - bleeding) * page_row_size + (max_x + bleed_x) * size;
-                    image.data[right_x..right_x + size]
-                        .copy_from_slice(&texture.data[src_row_size - size..src_row_size]);
+                    image.data[right_x..right_x + size].copy_from_slice(&texture.data[src_row_size - size..src_row_size]);
                 }
 
                 // Copy top-most edge to bleed upwards.
-                image.data[(min_y - bleeding) * page_row_size + min_x * size
-                    ..(min_y - bleeding) * page_row_size + max_x * size]
+                image.data
+                    [(min_y - bleeding) * page_row_size + min_x * size..(min_y - bleeding) * page_row_size + max_x * size]
                     .copy_from_slice(&texture.data[..src_row_size]);
                 for bleed_y in 1..bleeding {
-                    let (src, dst) = image.data.split_at_mut(
-                        (min_y - bleeding + bleed_y) * page_row_size + (min_x - bleeding) * size,
-                    );
+                    let (src, dst) = image
+                        .data
+                        .split_at_mut((min_y - bleeding + bleed_y) * page_row_size + (min_x - bleeding) * size);
                     dst[..src_row_size + 2 * bleeding * size].copy_from_slice(
-                        &src[(min_y - bleeding + bleed_y - 1) * page_row_size
-                            + (min_x - bleeding) * size
-                            ..(min_y - bleeding + bleed_y - 1) * page_row_size
-                                + (max_x + bleeding) * size],
+                        &src[(min_y - bleeding + bleed_y - 1) * page_row_size + (min_x - bleeding) * size..
+                            (min_y - bleeding + bleed_y - 1) * page_row_size + (max_x + bleeding) * size],
                     );
                 }
 
                 // Copy the actual image, while performing sideways bleeding.
                 for (src_y, dst_y) in (min_y..max_y).enumerate() {
                     let dst_row = dst_y * page_row_size;
-                    image.data[dst_row + min_x * size..dst_row + max_x * size].copy_from_slice(
-                        &texture.data[src_y * src_row_size..(src_y + 1) * src_row_size],
-                    );
+                    image.data[dst_row + min_x * size..dst_row + max_x * size]
+                        .copy_from_slice(&texture.data[src_y * src_row_size..(src_y + 1) * src_row_size]);
 
                     for bleed_x in 0..bleeding {
                         let left_x = dst_y * page_row_size + (min_x - bleed_x - 1) * size;
-                        image.data[left_x..left_x + size].copy_from_slice(
-                            &texture.data[src_y * src_row_size..src_y * src_row_size + size],
-                        );
+                        image.data[left_x..left_x + size]
+                            .copy_from_slice(&texture.data[src_y * src_row_size..src_y * src_row_size + size]);
 
                         let right_x = dst_y * page_row_size + (max_x + bleed_x) * size;
-                        image.data[right_x..right_x + size].copy_from_slice(
-                            &texture.data
-                                [(src_y + 1) * src_row_size - size..(src_y + 1) * src_row_size],
-                        );
+                        image.data[right_x..right_x + size]
+                            .copy_from_slice(&texture.data[(src_y + 1) * src_row_size - size..(src_y + 1) * src_row_size]);
                     }
                 }
 
                 // Copy the bottom-most edge to bleed downwards.
                 for bleed_y in 0..bleeding {
-                    let (src, dst) = image.data.split_at_mut(
-                        (max_y + bleed_y) * page_row_size + (min_x - bleeding) * size,
-                    );
+                    let (src, dst) = image
+                        .data
+                        .split_at_mut((max_y + bleed_y) * page_row_size + (min_x - bleeding) * size);
                     dst[..src_row_size + 2 * bleeding * size].copy_from_slice(
-                        &src[(max_y + bleed_y - 1) * page_row_size + (min_x - bleeding) * size
-                            ..(max_y + bleed_y - 1) * page_row_size + (max_x + bleeding) * size],
+                        &src[(max_y + bleed_y - 1) * page_row_size + (min_x - bleeding) * size..
+                            (max_y + bleed_y - 1) * page_row_size + (max_x + bleeding) * size],
                     );
                 }
 
-                atlas
-                    .sprite_map
-                    .insert(name, (atlas.pages.len(), sprites.len()));
+                atlas.sprite_map.insert(name, (atlas.pages.len(), sprites.len()));
                 sprites.push(URect {
                     min: uvec2(min_x as u32, min_y as u32),
                     max: uvec2(max_x as u32, max_y as u32),

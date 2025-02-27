@@ -274,19 +274,10 @@ impl GuiLayout for UiCont {
     )>;
 
     type PrimaryParam = ();
-    type PrimaryItem = (
-        Read<Self>,
-        Option<Read<UiSize>>,
-        Option<Read<Padding>>,
-        Option<Read<Margin>>,
-    );
+    type PrimaryItem = (Read<Self>, Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     type SecondaryParam = ();
-    type SecondaryItem = (
-        Option<Read<UiSize>>,
-        Option<Read<Padding>>,
-        Option<Read<Margin>>,
-    );
+    type SecondaryItem = (Option<Read<UiSize>>, Option<Read<Padding>>, Option<Read<Margin>>);
 
     type DistributeParam = SQuery<(Option<Read<Expand>>, Option<Read<Shrink>>)>;
     type DistributeItem = (Read<Self>, Option<Read<Padding>>, Option<Read<Margin>>);
@@ -304,23 +295,20 @@ impl GuiLayout for UiCont {
         let size = match size {
             UiVal2 { x: Auto, .. } | UiVal2 { y: Auto, .. } => {
                 let UiVal2 { x, y } = size;
-                let children_size =
-                    children_layout_sizes
-                        .iter()
-                        .fold(Vec2::ZERO, |mut out, &size| {
-                            match cont {
-                                Self::Horizontal | Self::HorizontalReverse => {
-                                    out.x += size.x;
-                                    out.y = out.y.max(size.y);
-                                }
-                                Self::Vertical | Self::VerticalReverse => {
-                                    out.x = out.x.max(size.x);
-                                    out.y += size.y;
-                                }
-                            }
+                let children_size = children_layout_sizes.iter().fold(Vec2::ZERO, |mut out, &size| {
+                    match cont {
+                        Self::Horizontal | Self::HorizontalReverse => {
+                            out.x += size.x;
+                            out.y = out.y.max(size.y);
+                        }
+                        Self::Vertical | Self::VerticalReverse => {
+                            out.x = out.x.max(size.x);
+                            out.y += size.y;
+                        }
+                    }
 
-                            out
-                        });
+                    out
+                });
 
                 vec2(x.refer(0., children_size.x), y.refer(0., children_size.y))
             }
@@ -364,30 +352,29 @@ impl GuiLayout for UiCont {
         let padding = *padding.copied().unwrap_or_default();
         let available_space = (*this_size - padding.size()).max(Vec2::ZERO);
 
-        let (taken, mut total_expand, mut total_shrink) =
-            children.iter().zip(output.iter_mut()).fold(
-                (0., 0., 0.),
-                |(mut taken, mut total_expand, mut total_shrink), (&child, &mut (.., size))| {
-                    let (expand, shrink) = flex_query.get(child).unwrap();
-                    let expand = *expand.copied().unwrap_or_default();
-                    let shrink = *shrink.copied().unwrap_or_default();
+        let (taken, mut total_expand, mut total_shrink) = children.iter().zip(output.iter_mut()).fold(
+            (0., 0., 0.),
+            |(mut taken, mut total_expand, mut total_shrink), (&child, &mut (.., size))| {
+                let (expand, shrink) = flex_query.get(child).unwrap();
+                let expand = *expand.copied().unwrap_or_default();
+                let shrink = *shrink.copied().unwrap_or_default();
 
-                    match cont {
-                        Self::Horizontal | Self::HorizontalReverse => {
-                            taken += size.x;
-                            total_expand += expand.x;
-                            total_shrink += shrink.x;
-                        }
-                        Self::Vertical | Self::VerticalReverse => {
-                            taken += size.y;
-                            total_expand += expand.y;
-                            total_shrink += shrink.y;
-                        }
+                match cont {
+                    Self::Horizontal | Self::HorizontalReverse => {
+                        taken += size.x;
+                        total_expand += expand.x;
+                        total_shrink += shrink.x;
                     }
+                    Self::Vertical | Self::VerticalReverse => {
+                        taken += size.y;
+                        total_expand += expand.y;
+                        total_shrink += shrink.y;
+                    }
+                }
 
-                    (taken, total_expand, total_shrink)
-                },
-            );
+                (taken, total_expand, total_shrink)
+            },
+        );
 
         total_expand = total_expand.max(1.);
         total_shrink = total_shrink.max(1.);
@@ -417,23 +404,21 @@ impl GuiLayout for UiCont {
             let cross_expand = cross.max(0.);
             let cross_shrink = cross.min(0.);
 
-            let size = (*output
-                + match cont {
+            let size = (*output +
+                match cont {
                     Self::Horizontal | Self::HorizontalReverse => vec2(
-                        delta_expand * (expand.x / total_expand)
-                            + delta_shrink * (shrink.x / total_shrink),
+                        delta_expand * (expand.x / total_expand) + delta_shrink * (shrink.x / total_shrink),
                         cross_expand * expand.y + cross_shrink * shrink.y,
                     ),
                     Self::Vertical | Self::VerticalReverse => vec2(
                         cross_expand * expand.x + cross_shrink * shrink.x,
-                        delta_expand * (expand.y / total_expand)
-                            + delta_shrink * (shrink.y / total_shrink),
+                        delta_expand * (expand.y / total_expand) + delta_shrink * (shrink.y / total_shrink),
                     ),
                 })
             .max(Vec2::ZERO);
 
-            let pos = offset
-                + match cont {
+            let pos = offset +
+                match cont {
                     Self::Horizontal | Self::Vertical => Vec2::ZERO,
                     Self::HorizontalReverse => vec2(-size.x, 0.),
                     Self::VerticalReverse => vec2(0., size.y),

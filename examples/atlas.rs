@@ -14,13 +14,11 @@ use bevy::{
     render::{
         render_asset::RenderAssets,
         render_phase::{
-            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult,
-            TrackedRenderPass,
+            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
         },
         render_resource::{
-            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding,
-            RenderPipelineDescriptor, SamplerBindingType, ShaderStages, TextureSampleType,
-            VertexAttribute, VertexFormat,
+            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
+            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
@@ -41,10 +39,7 @@ struct SpriteVertex {
 impl SpriteVertex {
     #[inline]
     pub const fn new(x: f32, y: f32, u: f32, v: f32) -> Self {
-        Self {
-            pos: [x, y],
-            uv: [u, v],
-        }
+        Self { pos: [x, y], uv: [u, v] }
     }
 }
 
@@ -80,14 +75,10 @@ impl Vertex for SpriteVertex {
 
     #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {
-        render_device.create_bind_group_layout(
-            "sprite_material_layout",
-            &[
-                texture_2d(TextureSampleType::Float { filterable: true })
-                    .build(0, ShaderStages::FRAGMENT),
-                sampler(SamplerBindingType::Filtering).build(1, ShaderStages::FRAGMENT),
-            ],
-        )
+        render_device.create_bind_group_layout("sprite_material_layout", &[
+            texture_2d(TextureSampleType::Float { filterable: true }).build(0, ShaderStages::FRAGMENT),
+            sampler(SamplerBindingType::Filtering).build(1, ShaderStages::FRAGMENT),
+        ])
     }
 
     #[inline]
@@ -118,29 +109,22 @@ impl Vertex for SpriteVertex {
 
     #[inline]
     fn create_batch(
-        (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<
-            Self::BatchParam,
-        >,
+        (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
         key: Self::PipelineKey,
     ) -> Self::BatchProp {
         let Some(gpu_image) = gpu_images.get(key) else {
             return key;
         };
-        image_bind_groups.create(
-            key,
-            render_device,
-            pipeline.vertex_prop(),
-            &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: gpu_image.texture_view.into_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: gpu_image.sampler.into_binding(),
-                },
-            ],
-        );
+        image_bind_groups.create(key, render_device, pipeline.vertex_prop(), &[
+            BindGroupEntry {
+                binding: 0,
+                resource: gpu_image.texture_view.into_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: gpu_image.sampler.into_binding(),
+            },
+        ]);
 
         key
     }
@@ -219,11 +203,7 @@ impl Drawer for DrawSprite {
     }
 
     #[inline]
-    fn draw(
-        &mut self,
-        images: &SystemParamItem<Self::DrawParam>,
-        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
-    ) {
+    fn draw(&mut self, images: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Some(page) = images.get(self.page) else {
             return;
         };
@@ -240,11 +220,7 @@ impl Drawer for DrawSprite {
             SpriteVertex::new(x - hw, y + hh, u, v2),
         ]);
 
-        queuer.request(
-            0.,
-            self.page,
-            [base, base + 1, base + 2, base + 2, base + 3, base],
-        );
+        queuer.request(0., self.page, [base, base + 1, base + 2, base + 2, base + 3, base]);
     }
 }
 
@@ -260,14 +236,7 @@ fn main() {
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
-    commands.spawn((
-        Camera2d,
-        Camera {
-            hdr: true,
-            ..default()
-        },
-        Bloom::NATURAL,
-    ));
+    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
 
     for translation in [
         Vec3::new(-200., -200., 0.),

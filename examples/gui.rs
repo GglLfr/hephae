@@ -10,10 +10,7 @@ use bevy::{
     prelude::*,
     render::{
         render_phase::{DrawFunctionId, PhaseItemExtraIndex},
-        render_resource::{
-            BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute,
-            VertexFormat,
-        },
+        render_resource::{BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute, VertexFormat},
         sync_world::MainEntity,
     },
 };
@@ -66,12 +63,7 @@ impl Vertex for Vert {
     fn init_pipeline(_: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {}
 
     #[inline]
-    fn specialize_pipeline(
-        _: Self::PipelineKey,
-        _: &Self::PipelineProp,
-        _: &mut RenderPipelineDescriptor,
-    ) {
-    }
+    fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
 
     fn create_item(
         layer: f32,
@@ -91,11 +83,7 @@ impl Vertex for Vert {
     }
 
     #[inline]
-    fn create_batch(
-        _: &mut SystemParamItem<Self::BatchParam>,
-        _: Self::PipelineKey,
-    ) -> Self::BatchProp {
-    }
+    fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}
 }
 
 #[derive(TypePath, Component, Copy, Clone, Default)]
@@ -121,11 +109,7 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn draw(
-        &mut self,
-        _: &SystemParamItem<Self::DrawParam>,
-        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
-    ) {
+    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self(
             Gui {
                 bottom_left,
@@ -145,11 +129,7 @@ impl Drawer for Draw {
             Vert::new(top_left.truncate(), nor_depth),
         ]);
 
-        queuer.request(
-            nor_depth,
-            (),
-            [base, base + 1, base + 2, base + 2, base + 3, base],
-        );
+        queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
     }
 }
 
@@ -177,11 +157,7 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn draw(
-        &mut self,
-        _: &SystemParamItem<Self::DrawParam>,
-        queuer: &impl VertexQueuer<Vertex = Self::Vertex>,
-    ) {
+    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self(
             Gui {
                 bottom_left,
@@ -203,11 +179,7 @@ impl Drawer for DrawText {
             Vert::new(top_left.truncate(), nor_depth),
         ]);
 
-        queuer.request(
-            nor_depth,
-            (),
-            [base, base + 1, base + 2, base + 2, base + 3, base],
-        );
+        queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
 
         let gui = self.0;
         for glyph in glyphs.drain(..) {
@@ -218,21 +190,14 @@ impl Drawer for DrawText {
                     (origin + gui.project(glyph.origin + vec2(glyph.size.x, 0.))).truncate(),
                     nor_depth,
                 ),
-                Vert::new(
-                    (origin + gui.project(glyph.origin + glyph.size)).truncate(),
-                    nor_depth,
-                ),
+                Vert::new((origin + gui.project(glyph.origin + glyph.size)).truncate(), nor_depth),
                 Vert::new(
                     (origin + gui.project(glyph.origin + vec2(0., glyph.size.y))).truncate(),
                     nor_depth,
                 ),
             ]);
 
-            queuer.request(
-                nor_depth,
-                (),
-                [base, base + 1, base + 2, base + 2, base + 3, base],
-            );
+            queuer.request(nor_depth, (), [base, base + 1, base + 2, base + 2, base + 3, base]);
         }
     }
 }
@@ -255,12 +220,7 @@ fn main() {
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
     commands
-        .spawn((
-            Camera2d,
-            FromCamera2d,
-            UiCont::Horizontal,
-            HasDrawer::<Draw>::new(),
-        ))
+        .spawn((Camera2d, FromCamera2d, UiCont::Horizontal, HasDrawer::<Draw>::new()))
         .with_children(|ui| {
             ui.spawn((
                 Rotate,

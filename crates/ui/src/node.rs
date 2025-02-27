@@ -1,38 +1,38 @@
-use std::{iter::Map, ops::IndexMut};
+use std::{iter::Map, ops::Index};
 
 use bevy_ecs::{
     entity::EntityHashMap,
     prelude::*,
     query::QueryManyIter,
     system::{
-        SystemState,
+        SystemParam, SystemState,
         lifetimeless::{Read, Write},
     },
 };
 use bevy_hierarchy::prelude::*;
 use bevy_math::prelude::*;
+use bevy_reflect::prelude::*;
+use bevy_transform::prelude::*;
 use taffy::{
-    AvailableSpace, Cache, CacheTree, Layout, LayoutBlockContainer, LayoutFlexboxContainer,
-    LayoutInput, LayoutOutput, LayoutPartialTree, NodeId, PrintTree, RoundTree, RunMode, Size,
-    TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
-    compute_flexbox_layout, compute_hidden_layout, compute_leaf_layout, compute_root_layout,
+    AvailableSpace, Cache, CacheTree, Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutInput, LayoutOutput,
+    LayoutPartialTree, NodeId, PrintTree, RoundTree, RunMode, Size, TraversePartialTree, TraverseTree, compute_block_layout,
+    compute_cached_layout, compute_flexbox_layout, compute_hidden_layout, compute_leaf_layout, compute_root_layout,
+    round_layout,
 };
 
 use crate::{
-    measure::{MeasureId, Measurements, Measurer},
-    root::UiRootTrns,
-    style::{Display, Node},
+    measure::{ContentSize, MeasureId, Measurements, Measurer},
+    root::{UiRootSize, UiUnrounded},
+    style::{Display, Ui},
 };
 
 #[derive(Component, Copy, Clone, Default)]
-pub struct ComputedNode {
+pub struct ComputedUi {
     /// The relative ordering of the node.
     ///
     /// Nodes with a higher order should be rendered on top of those with a lower order.
     /// This is effectively a topological sort of each tree.
     pub order: u32,
-    /// The top-left corner of the node.
-    pub location: Vec2,
     /// The width and height of the node.
     pub size: Vec2,
     /// The width and height of the content inside the node. This may be larger than the size of the
@@ -43,38 +43,80 @@ pub struct ComputedNode {
     /// zero.
     pub scrollbar_size: Vec2,
     /// The size of the borders of the node.
-    pub border: Rect,
+    pub border: Border,
     /// The size of the padding of the node.
-    pub padding: Rect,
+    pub padding: Border,
     /// The size of the margin of the node.
-    pub margin: Rect,
+    pub margin: Border,
 }
 
-#[derive(Component, Copy, Clone)]
-pub struct ContentSize(MeasureId);
-impl ContentSize {
-    #[inline]
-    pub const fn get(self) -> MeasureId {
-        self.0
-    }
+#[derive(Reflect, Copy, Clone, Default)]
+#[reflect(Default)]
+pub struct Border {
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    pub bottom: f32,
 }
 
-impl Default for ContentSize {
+impl From<taffy::Rect<f32>> for Border {
     #[inline]
-    fn default() -> Self {
-        Self(MeasureId::INVALID)
+    fn from(
+        taffy::Rect {
+            left,
+            right,
+            top,
+            bottom,
+        }: taffy::Rect<f32>,
+    ) -> Self {
+        Self {
+            left,
+            right,
+            top,
+            bottom,
+        }
     }
 }
 
 #[derive(Component, Default)]
-pub(crate) struct NodeCache(Cache);
+pub(crate) struct UiCache(Cache);
+impl UiCache {
+    #[inline]
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+}
+
+#[derive(SystemParam)]
+pub struct UiCaches<'w, 's> {
+    pub parent_query: Query<'w, 's, Read<Parent>>,
+    cache_query: Query<'w, 's, (Write<UiCache>, Has<UiRootSize>)>,
+}
+
+impl UiCaches<'_, '_> {
+    #[inline]
+    pub fn invalidate(&mut self, mut e: Entity) {
+        loop {
+            let Ok((mut cache, has_root)) = self.cache_query.get_mut(e) else {
+                break
+            };
+
+            cache.clear();
+            if let Some(parent) = (!has_root).then(|| self.parent_query.get(e).ok()).flatten() {
+                e = **parent
+            } else {
+                break
+            }
+        }
+    }
+}
 
 pub(crate) struct UiTree<'w, 's, M> {
     measurements: M,
-    node_query: Query<'w, 's, (Entity, Read<Node>, Option<Read<ContentSize>>), Without<UiRootTrns>>,
+    ui_query: Query<'w, 's, (Entity, Read<Ui>, Option<Read<ContentSize>>), Without<UiRootSize>>,
     children_query: Query<'w, 's, Read<Children>>,
-    cache_query: Query<'w, 's, Write<NodeCache>>,
-    outputs: &'s mut EntityHashMap<Layout>,
+    cache_query: Query<'w, 's, Write<UiCache>>,
+    outputs: &'s mut EntityHashMap<(Transform, Layout)>,
 }
 
 impl<M> TraverseTree for UiTree<'_, '_, M> {}
@@ -85,11 +127,11 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
         QueryManyIter<
             'a,
             'a,
-            (Entity, Read<Node>, Option<Read<ContentSize>>),
-            Without<UiRootTrns>,
+            (Entity, Read<Ui>, Option<Read<ContentSize>>),
+            Without<UiRootSize>,
             std::slice::Iter<'a, Entity>,
         >,
-        fn((Entity, &Node, Option<&ContentSize>)) -> NodeId,
+        fn((Entity, &Ui, Option<&ContentSize>)) -> NodeId,
     >
     where
         Self: 'a;
@@ -103,9 +145,7 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
             .unwrap_or(const { &[] })
             .iter();
 
-        self.node_query
-            .iter_many(children)
-            .map(|(e, ..)| NodeId::from(e.to_bits()))
+        self.ui_query.iter_many(children).map(|(e, ..)| NodeId::from(e.to_bits()))
     }
 
     #[inline]
@@ -119,32 +159,28 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
     }
 }
 
-impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_, '_, M> {
+impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_, '_, M> {
     type CoreContainerStyle<'a>
-        = &'a Node
+        = &'a Ui
     where
         Self: 'a;
 
     #[inline]
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
-        self
-            .node_query
-            .get(Entity::from_bits(node_id.into()))
-            .unwrap()
-            .1
+        self.ui_query.get(Entity::from_bits(node_id.into())).unwrap().1
     }
 
     #[inline]
     fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
         self.outputs
-            .insert(Entity::from_bits(node_id.into()), *layout);
+            .insert(Entity::from_bits(node_id.into()), (Transform::IDENTITY, *layout));
     }
 
     #[inline]
     fn compute_child_layout(&mut self, node_id: NodeId, inputs: LayoutInput) -> LayoutOutput {
         compute_cached_layout(self, node_id, inputs, |tree, node_id, inputs| {
             let e = Entity::from_bits(node_id.into());
-            let (.., node, measure) = tree.node_query.get(e).unwrap();
+            let (.., node, measure) = tree.ui_query.get(e).unwrap();
             let has_children = tree.child_count(node_id) != 0;
 
             match (node.display, has_children) {
@@ -152,17 +188,15 @@ impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree
                 (Display::Block, true) => compute_block_layout(tree, node_id, inputs),
                 (Display::None, _) => compute_hidden_layout(tree, node_id),
                 (_, false) => compute_leaf_layout(inputs, node, |known_size, available_space| {
-                    if let Some(measure) = measure {
-                        let Vec2 {
-                            x: width,
-                            y: height,
-                        } = unsafe {
-                            tree.measurements[measure.get()].measure(
-                                (known_size.width, known_size.height),
-                                (available_space.width.into(), available_space.height.into()),
-                                e,
-                            )
-                        };
+                    if let Some(measure) = measure.and_then(|id| match id.get() {
+                        MeasureId::INVALID => None,
+                        id => Some(id),
+                    }) {
+                        let Vec2 { x: width, y: height } = tree.measurements[measure].measure(
+                            (known_size.width, known_size.height),
+                            (available_space.width.into(), available_space.height.into()),
+                            e,
+                        );
 
                         Size { width, height }
                     } else {
@@ -177,36 +211,41 @@ impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree
 impl<M> RoundTree for UiTree<'_, '_, M> {
     #[inline]
     fn get_unrounded_layout(&self, node_id: NodeId) -> &Layout {
-        &self.outputs[&Entity::from_bits(node_id.into())]
+        &self.outputs[&Entity::from_bits(node_id.into())].1
     }
 
     #[inline]
     fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
         self.outputs
-            .insert(Entity::from_bits(node_id.into()), *layout);
+            .insert(Entity::from_bits(node_id.into()), (Transform::IDENTITY, *layout));
     }
 }
 
 impl<M> PrintTree for UiTree<'_, '_, M> {
     #[inline]
-    fn get_debug_label(&self, _: NodeId) -> &'static str {
-        "something"
+    fn get_debug_label(&self, node_id: NodeId) -> &'static str {
+        let node = self.ui_query.get(Entity::from_bits(node_id.into())).unwrap().1;
+        match node.display {
+            Display::Flexbox => "flexbox",
+            Display::Block => "block",
+            Display::None => "none",
+        }
     }
 
     #[inline]
     fn get_final_layout(&self, node_id: NodeId) -> &Layout {
-        &self.outputs[&Entity::from_bits(node_id.into())]
+        &self.outputs[&Entity::from_bits(node_id.into())].1
     }
 }
 
-impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTree<'_, '_, M> {
+impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTree<'_, '_, M> {
     type FlexboxContainerStyle<'a>
-        = &'a Node
+        = &'a Ui
     where
         Self: 'a;
 
     type FlexboxItemStyle<'a>
-        = &'a Node
+        = &'a Ui
     where
         Self: 'a;
 
@@ -221,14 +260,14 @@ impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for U
     }
 }
 
-impl<M: IndexMut<MeasureId, Output = dyn Measurer>> LayoutBlockContainer for UiTree<'_, '_, M> {
+impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutBlockContainer for UiTree<'_, '_, M> {
     type BlockContainerStyle<'a>
-        = &'a Node
+        = &'a Ui
     where
         Self: 'a;
 
     type BlockItemStyle<'a>
-        = &'a Node
+        = &'a Ui
     where
         Self: 'a;
 
@@ -268,9 +307,7 @@ impl<M> CacheTree for UiTree<'_, '_, M> {
         layout_output: LayoutOutput,
     ) {
         if let Ok(mut cache) = self.cache_query.get_mut(Entity::from_bits(node_id.into())) {
-            cache
-                .0
-                .store(known_dimensions, available_space, run_mode, layout_output)
+            cache.0.store(known_dimensions, available_space, run_mode, layout_output)
         }
     }
 
@@ -284,79 +321,90 @@ impl<M> CacheTree for UiTree<'_, '_, M> {
 
 pub(crate) fn compute_ui_tree(
     world: &mut World,
-    root_query: &mut SystemState<(
-        Query<(Entity, &UiRootTrns)>,
-        // Parameters for `UiTree`.
-        Query<(Entity, Read<Node>, Option<Read<ContentSize>>), Without<UiRootTrns>>,
+    compute_state: &mut SystemState<(
+        Query<(Entity, &UiRootSize, Has<UiUnrounded>), Changed<UiCache>>,
+        Query<(Entity, Read<Ui>, Option<Read<ContentSize>>), Without<UiRootSize>>,
         Query<Read<Children>>,
-        Query<Write<NodeCache>>,
+        Query<Write<UiCache>>,
     )>,
-    mut outputs: Local<EntityHashMap<Layout>>,
+    propagate_state: &mut SystemState<(Query<Entity, With<UiRootSize>>, Query<&Children>)>,
+    mut outputs: Local<EntityHashMap<(Transform, Layout)>>,
 ) {
     world.resource_scope(|world, mut measurers: Mut<Measurements>| {
         {
             let cell = world.as_unsafe_world_cell();
 
-            root_query.update_archetypes_unsafe_world_cell(cell);
-            let ((root_query, node_query, children_query, cache_query), measurements) = unsafe {
-                (
-                    root_query.get_unchecked_manual(cell),
-                    measurers.get_measurers(cell),
-                )
-            };
+            compute_state.update_archetypes_unsafe_world_cell(cell);
+            let ((root_query, ui_query, children_query, cache_query), measurements) =
+                unsafe { (compute_state.get_unchecked_manual(cell), measurers.get_measurers(cell)) };
 
             let outputs = &mut *outputs;
             let mut tree = UiTree {
                 measurements,
-                node_query,
+                ui_query,
                 children_query,
                 cache_query,
                 outputs,
             };
 
-            for (e, &trns) in &root_query {
-                compute_root_layout(
-                    &mut tree,
-                    NodeId::from(e.to_bits()),
-                    taffy::Size {
-                        width: taffy::AvailableSpace::Definite(trns.size.x),
-                        height: taffy::AvailableSpace::Definite(trns.size.y),
-                    },
-                );
+            for (e, &trns, is_unrounded) in &root_query {
+                let node_id = NodeId::from(e.to_bits());
+                compute_root_layout(&mut tree, node_id, taffy::Size {
+                    width: taffy::AvailableSpace::Definite(trns.0.x),
+                    height: taffy::AvailableSpace::Definite(trns.0.y),
+                });
+
+                if !is_unrounded {
+                    round_layout(&mut tree, node_id);
+                }
             }
         }
 
-        world.insert_batch(outputs.drain().map(|(e, layout)| {
+        let (root_query, children_query) = propagate_state.get(world);
+        for e in &root_query {
+            let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
+
+            let pos = Vec3::new(layout.location.x, layout.location.y - layout.size.height, 0.);
+            *trns = Transform::from_translation(pos);
+
+            if let Ok(children) = children_query.get(e) {
+                propagate(pos, children, &children_query, &mut outputs)
+            }
+        }
+
+        fn propagate(
+            parent: Vec3,
+            entities: &[Entity],
+            children_query: &Query<&Children>,
+            outputs: &mut EntityHashMap<(Transform, Layout)>,
+        ) {
+            for &e in entities {
+                let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
+                let pos = Vec3::new(
+                    layout.location.x - parent.x,
+                    layout.location.y - parent.y - layout.size.height,
+                    parent.z + 0.001,
+                );
+
+                *trns = Transform::from_translation(pos);
+                if let Ok(children) = children_query.get(e) {
+                    propagate(pos, children, &children_query, outputs)
+                }
+            }
+        }
+
+        world.insert_batch(outputs.drain().map(|(e, (trns, layout))| {
             (
                 e,
-                ComputedNode {
+                (trns, ComputedUi {
                     order: layout.order,
-                    location: Vec2::new(layout.location.x, layout.location.y),
                     size: Vec2::new(layout.size.width, layout.size.height),
                     content_size: Vec2::new(layout.content_size.width, layout.content_size.height),
-                    scrollbar_size: Vec2::new(
-                        layout.scrollbar_size.width,
-                        layout.scrollbar_size.height,
-                    ),
-                    border: Rect::new(
-                        layout.border.left,
-                        layout.border.bottom,
-                        layout.border.right,
-                        layout.border.top,
-                    ),
-                    padding: Rect::new(
-                        layout.padding.left,
-                        layout.padding.bottom,
-                        layout.padding.right,
-                        layout.padding.top,
-                    ),
-                    margin: Rect::new(
-                        layout.margin.left,
-                        layout.margin.bottom,
-                        layout.margin.right,
-                        layout.margin.top,
-                    ),
-                },
+                    scrollbar_size: Vec2::new(layout.scrollbar_size.width, layout.scrollbar_size.height),
+                    border: layout.border.into(),
+                    padding: layout.padding.into(),
+                    margin: layout.margin.into(),
+                }),
             )
         }));
 

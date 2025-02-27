@@ -49,8 +49,8 @@ impl Gui {
         top_right: Vec2,
         top_left: Vec2,
     ) -> Self {
-        let trns = global_trns
-            * Affine3A::from_cols(
+        let trns = global_trns *
+            Affine3A::from_cols(
                 local_trns.x_axis.extend(0.).into(),
                 local_trns.y_axis.extend(0.).into(),
                 Vec3A::Z,
@@ -190,10 +190,7 @@ pub(crate) unsafe trait InitialLayoutSizeSys: Send {
 
 unsafe impl<'w, 's, T: GuiLayout> InitialLayoutSizeSys
     for (
-        SystemState<(
-            StaticSystemParam<'w, 's, T::PrimaryParam>,
-            Query<'w, 's, T::PrimaryItem>,
-        )>,
+        SystemState<(StaticSystemParam<'w, 's, T::PrimaryParam>, Query<'w, 's, T::PrimaryItem>)>,
         PhantomData<T>,
     )
 {
@@ -237,20 +234,12 @@ pub(crate) unsafe trait SubsequentLayoutSizeSys: Send {
     /// - `world` must be the same [`World`] that's passed to [`Self::update_archetypes`].
     /// - Within the entire span of this function call **no** write accesses to
     ///   [`GuiLayout::SecondaryParam`] nor [`GuiLayout::SecondaryItem`].
-    unsafe fn execute(
-        &mut self,
-        this: (Vec2, Entity),
-        parent: Vec2,
-        world: UnsafeWorldCell,
-    ) -> (Vec2, Vec2);
+    unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2);
 }
 
 unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
     for (
-        SystemState<(
-            StaticSystemParam<'w, 's, T::SecondaryParam>,
-            Query<'w, 's, T::SecondaryItem>,
-        )>,
+        SystemState<(StaticSystemParam<'w, 's, T::SecondaryParam>, Query<'w, 's, T::SecondaryItem>)>,
         PhantomData<T>,
     )
 {
@@ -265,12 +254,7 @@ unsafe impl<'w, 's, T: GuiLayout> SubsequentLayoutSizeSys
     }
 
     #[inline]
-    unsafe fn execute(
-        &mut self,
-        this: (Vec2, Entity),
-        parent: Vec2,
-        world: UnsafeWorldCell,
-    ) -> (Vec2, Vec2) {
+    unsafe fn execute(&mut self, this: (Vec2, Entity), parent: Vec2, world: UnsafeWorldCell) -> (Vec2, Vec2) {
         let (param, mut query) = unsafe { self.0.get_unchecked_manual(world) };
         let item = query.get_mut(this.1).unwrap_or_else(|_| panic!(
             "{}::SubsequentItem must *always* match the GUI entities. A common escape hatch is using `Option<T>::unwrap_or_default()`",
@@ -378,43 +362,38 @@ impl GuiLayouts {
         Vec<Box<dyn DistributeSpaceSys>>,
     ) {
         let len = self.0.len();
-        let (
-            layout_ids,
-            changed_queries,
-            initial_layout_size,
-            subsequent_layout_size,
-            distribute_space,
-        ) = self.0.iter().fold(
-            (
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-                Vec::with_capacity(len),
-            ),
-            |(
-                mut layout_ids,
-                mut changed_queries,
-                mut initial_layout_sizes,
-                mut subsequent_layout_sizes,
-                mut distribute_space,
-            ),
-             data| {
-                layout_ids.push(data.id);
-                changed_queries.push((data.changed)(world));
-                initial_layout_sizes.push((data.initial_layout_size)(world));
-                subsequent_layout_sizes.push((data.subsequent_layout_size)(world));
-                distribute_space.push((data.distribute_space)(world));
-
+        let (layout_ids, changed_queries, initial_layout_size, subsequent_layout_size, distribute_space) =
+            self.0.iter().fold(
                 (
-                    layout_ids,
-                    changed_queries,
-                    initial_layout_sizes,
-                    subsequent_layout_sizes,
-                    distribute_space,
-                )
-            },
-        );
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                    Vec::with_capacity(len),
+                ),
+                |(
+                    mut layout_ids,
+                    mut changed_queries,
+                    mut initial_layout_sizes,
+                    mut subsequent_layout_sizes,
+                    mut distribute_space,
+                ),
+                 data| {
+                    layout_ids.push(data.id);
+                    changed_queries.push((data.changed)(world));
+                    initial_layout_sizes.push((data.initial_layout_size)(world));
+                    subsequent_layout_sizes.push((data.subsequent_layout_size)(world));
+                    distribute_space.push((data.distribute_space)(world));
+
+                    (
+                        layout_ids,
+                        changed_queries,
+                        initial_layout_sizes,
+                        subsequent_layout_sizes,
+                        distribute_space,
+                    )
+                },
+            );
 
         let contains_query = QueryBuilder::new(world)
             .or(|builder| {
@@ -465,10 +444,7 @@ pub trait GuiRoot: Component {
     type Item: QueryData;
 
     /// Calculates [`GuiRootTransform`] and [`GuiRootSpace`] for each GUI root nodes.
-    fn calculate(
-        param: &mut SystemParamItem<Self::Param>,
-        item: QueryItem<Self::Item>,
-    ) -> (Vec2, Affine3A);
+    fn calculate(param: &mut SystemParamItem<Self::Param>, item: QueryItem<Self::Item>) -> (Vec2, Affine3A);
 }
 
 #[derive(Resource, Default)]

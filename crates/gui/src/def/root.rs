@@ -18,14 +18,8 @@ impl GuiRoot for FromCamera2d {
     type Item = (Read<Camera>, Read<OrthographicProjection>);
 
     #[inline]
-    fn calculate(
-        _: &mut SystemParamItem<Self::Param>,
-        (camera, projection): QueryItem<Self::Item>,
-    ) -> (Vec2, Affine3A) {
-        let size = camera
-            .physical_viewport_size()
-            .unwrap_or(UVec2::ZERO)
-            .as_vec2();
+    fn calculate(_: &mut SystemParamItem<Self::Param>, (camera, projection): QueryItem<Self::Item>) -> (Vec2, Affine3A) {
+        let size = camera.physical_viewport_size().unwrap_or(UVec2::ZERO).as_vec2();
         let size = size * camera.target_scaling_factor().unwrap_or(1.);
 
         let area = projection.area.size();
