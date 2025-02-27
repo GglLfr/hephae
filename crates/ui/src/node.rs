@@ -327,7 +327,7 @@ pub(crate) fn compute_ui_tree(
         Query<Read<Children>>,
         Query<Write<UiCache>>,
     )>,
-    propagate_state: &mut SystemState<(Query<Entity, With<UiRootSize>>, Query<&Children>)>,
+    propagate_state: &mut SystemState<(Query<(Entity, &UiRootSize)>, Query<&Children>)>,
     mut outputs: Local<EntityHashMap<(Transform, Layout)>>,
 ) {
     world.resource_scope(|world, mut measurers: Mut<Measurements>| {
@@ -361,18 +361,20 @@ pub(crate) fn compute_ui_tree(
         }
 
         let (root_query, children_query) = propagate_state.get(world);
-        for e in &root_query {
+        for (e, size) in &root_query {
             let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
+            let height = size.0.y;
 
-            let pos = Vec3::new(layout.location.x, layout.location.y - layout.size.height, 0.);
+            let pos = Vec3::new(layout.location.x, height - layout.location.y - layout.size.height, 0.);
             *trns = Transform::from_translation(pos);
 
             if let Ok(children) = children_query.get(e) {
-                propagate(pos, children, &children_query, &mut outputs)
+                propagate(height, pos, children, &children_query, &mut outputs)
             }
         }
 
         fn propagate(
+            height: f32,
             parent: Vec3,
             entities: &[Entity],
             children_query: &Query<&Children>,
@@ -382,13 +384,13 @@ pub(crate) fn compute_ui_tree(
                 let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
                 let pos = Vec3::new(
                     layout.location.x - parent.x,
-                    layout.location.y - parent.y - layout.size.height,
+                    height - layout.location.y - layout.size.height - parent.y,
                     parent.z + 0.001,
                 );
 
                 *trns = Transform::from_translation(pos);
                 if let Ok(children) = children_query.get(e) {
-                    propagate(pos, children, &children_query, outputs)
+                    propagate(height, pos, children, &children_query, outputs)
                 }
             }
         }
