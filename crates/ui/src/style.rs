@@ -48,7 +48,7 @@ impl Ui {
         min_size: UiSize::DEFAULT,
         max_size: UiSize::DEFAULT,
         aspect_ratio: None,
-        margin: UiBorder::DEFAULT,
+        margin: UiBorder::all(Val::Abs(0.)),
         padding: UiBorder::all(Val::Abs(0.)),
         border: UiBorder::all(Val::Abs(0.)),
         flex_direction: FlexDirection::DEFAULT,

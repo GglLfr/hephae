@@ -148,45 +148,51 @@ struct Color(LinearRgba);
 
 fn startup(mut commands: Commands) {
     commands.spawn(Camera2dRoot::default()).with_children(|ui| {
-        ui.spawn((Ui::FILL_PARENT, Color(LinearRgba::RED), HasDrawer::<Draw>::new()))
+        ui.spawn((
+            Ui {
+                padding: UiBorder::all(Abs(25.)),
+                ..Ui::FILL_PARENT
+            },
+            Color(LinearRgba::RED),
+            HasDrawer::<Draw>::new(),
+        ))
+        .with_children(|ui| {
+            ui.spawn((
+                Rotate,
+                Ui {
+                    max_size: UiSize::rel(0.5, 1.),
+                    flex_grow: 1.,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                Color(LinearRgba::GREEN),
+                HasDrawer::<Draw>::new(),
+            ))
             .with_children(|ui| {
                 ui.spawn((
                     Rotate,
                     Ui {
-                        max_size: UiSize::rel(0.5, 1.),
-                        flex_grow: 1.,
-                        margin: UiBorder::all(Abs(25.)),
-                        flex_direction: FlexDirection::Column,
+                        margin: UiBorder::all(Abs(10.)),
                         ..default()
                     },
-                    Color(LinearRgba::GREEN),
+                    Color(LinearRgba::BLUE),
                     HasDrawer::<Draw>::new(),
                 ))
                 .with_children(|ui| {
-                    ui.spawn((
-                        Rotate,
-                        Ui {
-                            margin: UiBorder::all(Abs(10.)),
-                            ..default()
-                        },
-                        Color(LinearRgba::BLUE),
-                        HasDrawer::<Draw>::new(),
-                    ))
-                    .with_children(|ui| {
-                        for _ in 0..3 {
-                            ui.spawn((
-                                Ui {
-                                    size: UiSize::all(Abs(40.)),
-                                    margin: UiBorder::all(Abs(10.)),
-                                    ..default()
-                                },
-                                Color(LinearRgba::WHITE),
-                                HasDrawer::<Draw>::new(),
-                            ));
-                        }
-                    });
+                    for _ in 0..3 {
+                        ui.spawn((
+                            Ui {
+                                size: UiSize::all(Abs(40.)),
+                                margin: UiBorder::all(Abs(10.)),
+                                ..default()
+                            },
+                            Color(LinearRgba::WHITE),
+                            HasDrawer::<Draw>::new(),
+                        ));
+                    }
                 });
             });
+        });
     });
 }
 
