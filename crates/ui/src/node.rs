@@ -35,7 +35,7 @@ pub struct ComputedUi {
     /// This is effectively a topological sort of each tree.
     pub order: u32,
     /// The top-left corner of the node.
-    pub location: Vec2,
+    location: Vec2,
     /// The width and height of the node.
     pub size: Vec2,
     /// The width and height of the content inside the node. This may be larger than the size of the
