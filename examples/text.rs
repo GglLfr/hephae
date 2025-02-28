@@ -33,12 +33,12 @@ use hephae::{locale::def::LocaleChangeEvent, prelude::*, text::atlas::FontAtlas}
 struct Vert {
     pos: [f32; 2],
     uv: [f32; 2],
-    col: [u8; 4],
+    col: [Nor<u8>; 4],
 }
 
 impl Vert {
     #[inline]
-    pub const fn new(xy: Vec2, uv: Vec2, col: [u8; 4]) -> Self {
+    pub const fn new(xy: Vec2, uv: Vec2, col: [Nor<u8>; 4]) -> Self {
         Self {
             pos: [xy.x, xy.y],
             uv: [uv.x, uv.y],
@@ -203,7 +203,7 @@ impl Drawer for DrawText {
             let top_right = (pos + vec2(w, h), vec2(u2, v2));
             let top_left = (pos + vec2(0., h), vec2(u, v2));
 
-            let col = [127, 255, 100, 255];
+            let col = [127, 255, 100, 255].map(Nor);
             let base = queuer.data([
                 Vert::new(bottom_left.0, bottom_left.1, col),
                 Vert::new(bottom_right.0, bottom_right.1, col),

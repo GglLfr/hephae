@@ -2,10 +2,10 @@ use bevy_color::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_reflect::prelude::*;
 use bevy_render::render_resource::{VertexAttribute, VertexFormat};
-use bytemuck::NoUninit;
+use bytemuck::{NoUninit, Pod, Zeroable};
 pub use hephae_render_derive::VertexLayout;
 
-#[derive(Reflect, Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
+#[derive(Reflect, Debug, Copy, Clone, Default, Pod, Zeroable, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
 #[repr(transparent)]
 pub struct Nor<T>(pub T);
 
