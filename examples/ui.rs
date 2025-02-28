@@ -1,5 +1,3 @@
-use std::mem::offset_of;
-
 use bevy::{
     core_pipeline::core_2d::Transparent2d,
     ecs::{
@@ -10,7 +8,7 @@ use bevy::{
     prelude::*,
     render::{
         render_phase::{DrawFunctionId, PhaseItemExtraIndex},
-        render_resource::{BufferAddress, CachedRenderPipelineId, RenderPipelineDescriptor, VertexAttribute, VertexFormat},
+        render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor},
         sync_world::MainEntity,
     },
 };
@@ -18,7 +16,7 @@ use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
 use hephae_ui::node::ComputedUi;
 
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 struct Vert {
     pos: [f32; 2],
@@ -47,18 +45,6 @@ impl Vertex for Vert {
     type RenderCommand = ();
 
     const SHADER: &'static str = "quad.wgsl";
-    const LAYOUT: &'static [VertexAttribute] = &[
-        VertexAttribute {
-            format: VertexFormat::Float32x2,
-            offset: offset_of!(Self, pos) as BufferAddress,
-            shader_location: 0,
-        },
-        VertexAttribute {
-            format: VertexFormat::Float32x4,
-            offset: offset_of!(Self, color) as BufferAddress,
-            shader_location: 1,
-        },
-    ];
 
     #[inline]
     fn init_pipeline(_: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {}
@@ -215,6 +201,7 @@ fn rotate(
         }
     }
 
+    // Just to showcase that the UI widgets don't change regardless of camera scales.
     let Ok(mut proj) = camera.get_single_mut() else {
         return;
     };

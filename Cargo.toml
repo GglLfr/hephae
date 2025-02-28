@@ -31,7 +31,9 @@ resolver = "2"
 members = [
     "crates/atlas",
     "crates/locale",
+    "crates/macros",
     "crates/render",
+    "crates/render/derive",
     "crates/text",
     "crates/ui",
     "crates/utils",
@@ -56,12 +58,12 @@ unexpected_cfgs = { level = "allow", check-cfg = ["cfg(docsrs_dep)"] }
 [workspace.dependencies]
 bevy_app = "0.15"
 bevy_asset = "0.15"
+bevy_color = "0.15"
 bevy_core_pipeline = "0.15"
 bevy_derive = "0.15"
 bevy_ecs = "0.15"
 bevy_hierarchy = "0.15"
 bevy_image = "0.15"
-bevy_macro_utils = "0.15"
 bevy_math = "0.15"
 bevy_reflect = "0.15"
 bevy_render = "0.15"
@@ -81,6 +83,7 @@ loom = { version = "0.7", features = ["checkpoint"] }
 nom = "8"
 nom-language = "0.1"
 nonmax = "0.5"
+proc-macro2 = "1"
 quote = "1"
 scopeguard = "1"
 serde = { version = "1", features = ["derive"] }
@@ -89,10 +92,12 @@ syn = { version = "2", features = ["full"] }
 sys-locale = "0.3"
 taffy = { version = "0.7", default-features = false, features = ["std", "flexbox", "block_layout", "content_size"] }
 thiserror = "2"
+toml_edit = "0.22"
 vec-belt = "1"
 
 hephae-atlas = { version = "0.6.0", path = "crates/atlas" }
 hephae-locale = { version = "0.6.0", path = "crates/locale" }
+hephae-macros = { version = "0.6.0", path = "crates/macros" }
 hephae-render = { version = "0.6.0", path = "crates/render" }
 hephae-text = { version = "0.6.0", path = "crates/text" }
 hephae-ui = { version = "0.6.0", path = "crates/ui" }
@@ -101,6 +106,7 @@ hephae-utils = { version = "0.6.0", path = "crates/utils" }
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }
 hephae-locale = { optional = true, workspace = true }
+hephae-macros.workspace = true
 hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
 hephae-ui = { optional = true, workspace = true }
@@ -115,7 +121,7 @@ bytemuck.workspace = true
 default = ["atlas", "locale", "text", "ui"]
 atlas = ["dep:hephae-atlas"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
-text = ["dep:hephae-text"] #["dep:hephae-text", "hephae-gui?/text"]
+text = ["dep:hephae-text"] # "hephae-gui?/text"
 ui = ["dep:hephae-ui"]
 
 [[example]]

@@ -1,6 +1,6 @@
 [package]
-name = "hephae-utils-derive"
-description = "Hephae's generic utility module proc-macro derive."
+name = "hephae-render-derive"
+description = "Proc-macro derives for Hephae's core rendering module"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,6 +19,8 @@ rustc-args = [
 rustdoc-args = [
     "-Zunstable-options",
     "--generate-link-to-definition",
+    "--html-after-content",
+    "docs-rs/trait-tags.html",
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 

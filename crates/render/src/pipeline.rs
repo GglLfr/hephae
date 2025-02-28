@@ -186,7 +186,7 @@ impl<T: Vertex> SpecializedRenderPipeline for VertexPipeline<T> {
                 buffers: [VertexBufferLayout {
                     array_stride: size_of::<T>() as BufferAddress,
                     step_mode: VertexStepMode::Vertex,
-                    attributes: T::LAYOUT.into(),
+                    attributes: T::ATTRIBUTES.into(),
                 }]
                 .into(),
             },

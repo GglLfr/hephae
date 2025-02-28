@@ -17,20 +17,22 @@ use bevy_render::{
     prelude::*,
     primitives::{Aabb, Frustum, Sphere},
     render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, RenderCommand, SortedPhaseItem},
-    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat, VertexAttribute},
+    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat},
     sync_world::MainEntity,
     view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
 };
 use bevy_transform::prelude::*;
 use bevy_utils::{Parallel, TypeIdMap};
-use bytemuck::NoUninit;
 use smallvec::SmallVec;
 
-use crate::drawer::{Drawer, HasDrawer};
+use crate::{
+    attribute::VertexLayout,
+    drawer::{Drawer, HasDrawer},
+};
 
 /// The heart of Hephae. Instances of `Vertex` directly represent the elements of the vertex buffer
 /// in the GPU.
-pub trait Vertex: Send + Sync + NoUninit {
+pub trait Vertex: Send + Sync + VertexLayout {
     /// System parameter to fetch when initializing
     /// [`VertexPipeline`](crate::pipeline::VertexPipeline) to create a
     /// [`PipelineProp`](Vertex::PipelineProp).
@@ -68,9 +70,6 @@ pub trait Vertex: Send + Sync + NoUninit {
     /// Path to the shader rendering vertex attributes of this type. Entry points should be
     /// `vertex(...)` and `fragment(...)`.
     const SHADER: &'static str;
-    /// Vertex attribute layout of this type. Ideally should match the fields `impl`ementors
-    /// declare.
-    const LAYOUT: &'static [VertexAttribute];
 
     /// Further customizes the application. Called in [`Plugin::finish`]. For example, this may be
     /// used to add systems extracting texture atlas pages and validating bind groups associated

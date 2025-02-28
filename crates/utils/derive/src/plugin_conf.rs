@@ -1,4 +1,4 @@
-use bevy_macro_utils::BevyManifest;
+use hephae_macros::Manifest;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
@@ -42,7 +42,7 @@ impl Parse for Syntax {
 }
 
 pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
-    let bevy_app = BevyManifest::get_path_direct("bevy_app");
+    let bevy_app = Manifest::resolve_bevy("app", &input)?;
     let Syntax {
         attrs,
         vis,

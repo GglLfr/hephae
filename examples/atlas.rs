@@ -1,5 +1,3 @@
-use std::mem::offset_of;
-
 use bevy::{
     core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
     ecs::{
@@ -17,8 +15,8 @@ use bevy::{
             DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
         },
         render_resource::{
-            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
-            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
+            BindGroupEntry, BindGroupLayout, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
+            SamplerBindingType, ShaderStages, TextureSampleType,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
@@ -29,7 +27,7 @@ use bevy::{
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
 
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 struct SpriteVertex {
     pos: [f32; 2],
@@ -60,18 +58,6 @@ impl Vertex for SpriteVertex {
     type RenderCommand = SetSpriteBindGroup<1>;
 
     const SHADER: &'static str = "sprite.wgsl";
-    const LAYOUT: &'static [VertexAttribute] = &[
-        VertexAttribute {
-            format: VertexFormat::Float32x2,
-            offset: offset_of!(Self, pos) as BufferAddress,
-            shader_location: 0,
-        },
-        VertexAttribute {
-            format: VertexFormat::Float32x2,
-            offset: offset_of!(Self, uv) as BufferAddress,
-            shader_location: 1,
-        },
-    ];
 
     #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {

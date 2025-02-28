@@ -1,5 +1,3 @@
-use std::mem::offset_of;
-
 use bevy::{
     core_pipeline::core_2d::Transparent2d,
     ecs::{
@@ -17,8 +15,8 @@ use bevy::{
             DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
         },
         render_resource::{
-            BindGroupEntry, BindGroupLayout, BufferAddress, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
-            SamplerBindingType, ShaderStages, TextureSampleType, VertexAttribute, VertexFormat,
+            BindGroupEntry, BindGroupLayout, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
+            SamplerBindingType, ShaderStages, TextureSampleType,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
@@ -30,7 +28,7 @@ use bevy::{
 use bytemuck::{Pod, Zeroable};
 use hephae::{locale::def::LocaleChangeEvent, prelude::*, text::atlas::FontAtlas};
 
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 struct Vert {
     pos: [f32; 2],
@@ -66,23 +64,6 @@ impl Vertex for Vert {
     type RenderCommand = SetTextBindGroup<1>;
 
     const SHADER: &'static str = "text.wgsl";
-    const LAYOUT: &'static [VertexAttribute] = &[
-        VertexAttribute {
-            format: VertexFormat::Float32x2,
-            offset: offset_of!(Self, pos) as BufferAddress,
-            shader_location: 0,
-        },
-        VertexAttribute {
-            format: VertexFormat::Float32x2,
-            offset: offset_of!(Self, uv) as BufferAddress,
-            shader_location: 1,
-        },
-        VertexAttribute {
-            format: VertexFormat::Unorm8x4,
-            offset: offset_of!(Self, col) as BufferAddress,
-            shader_location: 2,
-        },
-    ];
 
     #[inline]
     fn init_pipeline(render_device: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {

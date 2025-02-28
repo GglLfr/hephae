@@ -1,6 +1,6 @@
 [package]
-name = "hephae-utils-derive"
-description = "Hephae's generic utility module proc-macro derive."
+name = "hephae-macros"
+description = "Common utilities for Hephae's macros."
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,12 +22,8 @@ rustdoc-args = [
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
-[lib]
-proc-macro = true
-
 [dependencies]
-hephae-macros.workspace = true
-
-proc-macro2 = "1"
+proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
+toml_edit.workspace = true

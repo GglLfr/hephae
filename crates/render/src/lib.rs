@@ -3,6 +3,7 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 
+pub mod attribute;
 pub mod drawer;
 pub mod image_bind;
 pub mod pipeline;
@@ -18,6 +19,7 @@ pub mod prelude {
 
     pub use crate::{
         HephaeRenderSystems,
+        attribute::{IsVertexAttribute, VertexLayout},
         drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
         image_bind::ImageBindGroups,
         pipeline::{VertexPipeline, ViewBatches},

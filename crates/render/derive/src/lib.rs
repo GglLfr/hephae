@@ -1,0 +1,15 @@
+#![allow(internal_features)]
+#![cfg_attr(any(docsrs, docsrs_dep), feature(rustdoc_internals))]
+#![doc = include_str!("../README.md")]
+#![cfg_attr(doc, deny(missing_docs))]
+
+extern crate proc_macro;
+
+mod vertex_layout;
+
+#[proc_macro_derive(VertexLayout)]
+pub fn derive_vertex_layout(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    vertex_layout::parse(input.into())
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
+}
