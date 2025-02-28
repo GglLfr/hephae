@@ -30,7 +30,6 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 resolver = "2"
 members = [
     "crates/atlas",
-    "crates/gui",
     "crates/locale",
     "crates/render",
     "crates/text",
@@ -93,7 +92,6 @@ thiserror = "2"
 vec-belt = "1"
 
 hephae-atlas = { version = "0.6.0", path = "crates/atlas" }
-hephae-gui = { version = "0.6.0", path = "crates/gui" }
 hephae-locale = { version = "0.6.0", path = "crates/locale" }
 hephae-render = { version = "0.6.0", path = "crates/render" }
 hephae-text = { version = "0.6.0", path = "crates/text" }
@@ -102,7 +100,6 @@ hephae-utils = { version = "0.6.0", path = "crates/utils" }
 
 [dependencies]
 hephae-atlas = { optional = true, workspace = true }
-hephae-gui = { optional = true, workspace = true }
 hephae-locale = { optional = true, workspace = true }
 hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
@@ -115,11 +112,10 @@ bevy = { version = "0.15", default-features = false, features = ["bevy_window", 
 bytemuck.workspace = true
 
 [features]
-default = ["atlas", "gui", "locale", "text", "ui"]
+default = ["atlas", "locale", "text", "ui"]
 atlas = ["dep:hephae-atlas"]
-gui = ["dep:hephae-gui"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
-text = ["dep:hephae-text", "hephae-gui?/text"]
+text = ["dep:hephae-text"] #["dep:hephae-text", "hephae-gui?/text"]
 ui = ["dep:hephae-ui"]
 
 [[example]]
@@ -130,9 +126,9 @@ name = "atlas"
 required-features = ["atlas"]
 
 [[example]]
-name = "gui"
-required-features = ["gui", "text"]
-
-[[example]]
 name = "text"
 required-features = ["text", "locale"]
+
+[[example]]
+name = "ui"
+required-features = ["ui"]

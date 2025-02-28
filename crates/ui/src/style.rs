@@ -3,10 +3,10 @@ use bevy_reflect::prelude::*;
 use bevy_transform::prelude::*;
 use taffy::{BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle};
 
-use crate::node::{ComputedUi, UiCache};
+use crate::node::{ComputedUi, UiCaches};
 
-#[derive(Component, Reflect, Clone, Default)]
-#[require(Transform, ComputedUi, UiCache)]
+#[derive(Component, Reflect, Clone)]
+#[require(Transform, ComputedUi)]
 #[reflect(Component, Default)]
 pub struct Ui {
     pub display: Display,
@@ -35,13 +35,70 @@ pub struct Ui {
     pub align_self: AlignSelf,
 }
 
-#[derive(Reflect, Copy, Clone, Default)]
+impl Ui {
+    pub const DEFAULT: Self = Self {
+        display: Display::DEFAULT,
+        box_sizing: BoxSizing::DEFAULT,
+        overflow_x: Overflow::DEFAULT,
+        overflow_y: Overflow::DEFAULT,
+        scrollbar_width: 0.,
+        position: Position::DEFAULT,
+        inset: UiBorder::DEFAULT,
+        size: UiSize::DEFAULT,
+        min_size: UiSize::DEFAULT,
+        max_size: UiSize::DEFAULT,
+        aspect_ratio: None,
+        margin: UiBorder::DEFAULT,
+        padding: UiBorder::all(Val::Abs(0.)),
+        border: UiBorder::all(Val::Abs(0.)),
+        flex_direction: FlexDirection::DEFAULT,
+        flex_wrap: FlexWrap::DEFAULT,
+        gap: UiSize::all(Val::Abs(0.)),
+        align_content: AlignContent::DEFAULT,
+        align_items: AlignItems::DEFAULT,
+        justify_content: JustifyContent::DEFAULT,
+        flex_basis: Val::DEFAULT,
+        flex_grow: 0.,
+        flex_shrink: 1.,
+        align_self: AlignSelf::DEFAULT,
+    };
+
+    pub const FILL_PARENT: Self = Self {
+        size: UiSize::rel(1., 1.),
+        ..Self::DEFAULT
+    };
+}
+
+impl Default for Ui {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+pub(crate) fn ui_changed(query: Query<Entity, Changed<Ui>>, mut caches: UiCaches) {
+    for e in &query {
+        caches.invalidate(e)
+    }
+}
+
+#[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub enum Val {
     Abs(f32),
     Rel(f32),
-    #[default]
     Auto,
+}
+
+impl Val {
+    pub const DEFAULT: Self = Val::Auto;
+}
+
+impl Default for Val {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<Val> for taffy::Dimension {
@@ -50,7 +107,7 @@ impl From<Val> for taffy::Dimension {
         match value {
             Val::Abs(abs) => Self::Length(abs),
             Val::Rel(rel) => Self::Percent(rel),
-            Val::Auto => Self::Length(0.),
+            Val::Auto => Self::Auto,
         }
     }
 }
@@ -77,11 +134,47 @@ impl From<Val> for taffy::LengthPercentageAuto {
     }
 }
 
-#[derive(Reflect, Copy, Clone, Default)]
+#[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub struct UiSize {
     pub width: Val,
     pub height: Val,
+}
+
+impl UiSize {
+    pub const DEFAULT: Self = Self {
+        width: Val::DEFAULT,
+        height: Val::DEFAULT,
+    };
+}
+
+impl Default for UiSize {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl UiSize {
+    #[inline]
+    pub const fn new(width: Val, height: Val) -> Self {
+        Self { width, height }
+    }
+
+    #[inline]
+    pub const fn all(value: Val) -> Self {
+        Self::new(value, value)
+    }
+
+    #[inline]
+    pub const fn abs(width: f32, height: f32) -> Self {
+        Self::new(Val::Abs(width), Val::Abs(height))
+    }
+
+    #[inline]
+    pub const fn rel(width: f32, height: f32) -> Self {
+        Self::new(Val::Rel(width), Val::Rel(height))
+    }
 }
 
 impl<T: From<Val>> From<UiSize> for taffy::Size<T> {
@@ -94,13 +187,44 @@ impl<T: From<Val>> From<UiSize> for taffy::Size<T> {
     }
 }
 
-#[derive(Reflect, Copy, Clone, Default)]
+#[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub struct UiBorder {
     pub left: Val,
     pub right: Val,
     pub bottom: Val,
     pub top: Val,
+}
+
+impl UiBorder {
+    pub const DEFAULT: Self = Self {
+        left: Val::DEFAULT,
+        right: Val::DEFAULT,
+        bottom: Val::DEFAULT,
+        top: Val::DEFAULT,
+    };
+
+    #[inline]
+    pub const fn new(left: Val, right: Val, bottom: Val, top: Val) -> Self {
+        Self {
+            left,
+            right,
+            bottom,
+            top,
+        }
+    }
+
+    #[inline]
+    pub const fn all(value: Val) -> Self {
+        Self::new(value, value, value, value)
+    }
+}
+
+impl Default for UiBorder {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl<T: From<Val>> From<UiBorder> for taffy::Rect<T> {
@@ -122,13 +246,23 @@ impl<T: From<Val>> From<UiBorder> for taffy::Rect<T> {
     }
 }
 
-#[derive(Reflect, Copy, Clone, Default)]
+#[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub enum Display {
-    #[default]
     Flexbox,
     Block,
     None,
+}
+
+impl Display {
+    pub const DEFAULT: Self = Display::Flexbox;
+}
+
+impl Default for Display {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<Display> for taffy::BoxGenerationMode {
@@ -143,16 +277,26 @@ impl From<Display> for taffy::BoxGenerationMode {
 
 /// Specifies whether size styles for this node are assigned to the node's "content box" or "border
 /// box".
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq, Debug)]
 #[reflect(Default)]
 pub enum BoxSizing {
     /// Size styles such `size`, `min_size`, `max_size` specify the box's "content box" (the size
     /// excluding padding/border/margin).
-    #[default]
     BorderBox,
     /// Size styles such `size`, `min_size`, `max_size` specify the box's "border box" (the size
     /// excluding margin but including padding/border).
     ContentBox,
+}
+
+impl BoxSizing {
+    pub const DEFAULT: Self = Self::BorderBox;
+}
+
+impl Default for BoxSizing {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<BoxSizing> for taffy::BoxSizing {
@@ -166,13 +310,12 @@ impl From<BoxSizing> for taffy::BoxSizing {
 }
 
 /// How children overflowing their container should affect layout.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq, Debug)]
 #[reflect(Default)]
 pub enum Overflow {
     /// The automatic minimum size of this node as a flexbox/grid item should be based on the size
     /// of its content. Content that overflows this node *should* contribute to the scroll
     /// region of its parent.
-    #[default]
     Visible,
     /// The automatic minimum size of this node as a flexbox/grid item should be based on the size
     /// of its content. Content that overflows this node should *not* contribute to the scroll
@@ -188,6 +331,17 @@ pub enum Overflow {
     Scroll,
 }
 
+impl Overflow {
+    pub const DEFAULT: Self = Self::Visible;
+}
+
+impl Default for Overflow {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 impl From<Overflow> for taffy::Overflow {
     #[inline]
     fn from(value: Overflow) -> Self {
@@ -201,18 +355,28 @@ impl From<Overflow> for taffy::Overflow {
 }
 
 /// The positioning strategy for this item.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq)]
 #[reflect(Default)]
 pub enum Position {
     /// The offset is computed relative to the final position given by the layout algorithm.
     /// Offsets do not affect the position of any other items; they are effectively a correction
     /// factor applied at the end.
-    #[default]
     Relative,
     /// The offset is computed relative to this item's closest positioned ancestor, if any.
     /// Otherwise, it is placed relative to the origin.
     /// No space is created for the item in the page layout, and its size will not be altered.
     Absolute,
+}
+
+impl Position {
+    pub const DEFAULT: Self = Self::Relative;
+}
+
+impl Default for Position {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<Position> for taffy::Position {
@@ -301,11 +465,10 @@ impl CoreStyle for Ui {
 }
 
 /// The direction of the flexbox layout main axis.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq)]
 #[reflect(Default)]
 pub enum FlexDirection {
     /// Items will be added from left to right in a row.
-    #[default]
     Row,
     /// Items will be added from top to bottom in a column.
     Column,
@@ -313,6 +476,17 @@ pub enum FlexDirection {
     RowReverse,
     /// Items will be added from bottom to top in a column.
     ColumnReverse,
+}
+
+impl FlexDirection {
+    pub const DEFAULT: Self = Self::Row;
+}
+
+impl Default for FlexDirection {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<FlexDirection> for taffy::FlexDirection {
@@ -328,16 +502,26 @@ impl From<FlexDirection> for taffy::FlexDirection {
 }
 
 /// Controls whether flex items are forced onto one line or can wrap onto multiple lines.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq)]
 #[reflect(Default)]
 pub enum FlexWrap {
     /// Items will not wrap and stay on a single line,
-    #[default]
     NoWrap,
     /// Items will wrap according to this item's [`FlexDirection`],
     Wrap,
     /// Items will wrap in the opposite direction to this item's [`FlexDirection`].
     WrapReverse,
+}
+
+impl FlexWrap {
+    pub const DEFAULT: Self = Self::NoWrap;
+}
+
+impl Default for FlexWrap {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<FlexWrap> for taffy::FlexWrap {
@@ -354,11 +538,10 @@ impl From<FlexWrap> for taffy::FlexWrap {
 /// Sets the distribution of space between and around content items.
 /// For Flexbox it controls alignment in the cross axis.
 /// For Grid it controls alignment in the block axis.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq)]
 #[reflect(Default)]
 pub enum AlignContent {
     /// Items are placed as-is.
-    #[default]
     None,
     /// Items are packed toward the start of the axis.
     Start,
@@ -383,6 +566,17 @@ pub enum AlignContent {
     SpaceAround,
 }
 
+impl AlignContent {
+    pub const DEFAULT: Self = Self::None;
+}
+
+impl Default for AlignContent {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 impl From<AlignContent> for Option<taffy::AlignContent> {
     #[inline]
     fn from(value: AlignContent) -> Self {
@@ -404,11 +598,10 @@ impl From<AlignContent> for Option<taffy::AlignContent> {
 /// Used to control how child nodes are aligned.
 /// For Flexbox it controls alignment in the cross axis.
 /// For Grid it controls alignment in the block axis.
-#[derive(Reflect, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Reflect, Copy, Clone, PartialEq, Eq)]
 #[reflect(Default)]
 pub enum AlignItems {
     /// Items are placed as-is.
-    #[default]
     None,
     /// Items are packed toward the start of the axis.
     Start,
@@ -424,6 +617,17 @@ pub enum AlignItems {
     Baseline,
     /// Stretch to fill the container.
     Stretch,
+}
+
+impl AlignItems {
+    pub const DEFAULT: Self = Self::None;
+}
+
+impl Default for AlignItems {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl From<AlignItems> for Option<taffy::AlignItems> {

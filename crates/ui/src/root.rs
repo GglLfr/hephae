@@ -1,16 +1,12 @@
 use bevy_core_pipeline::core_2d::*;
 use bevy_ecs::{
-    component::ComponentId,
     prelude::*,
     query::{QueryData, QueryItem},
     system::{StaticSystemParam, SystemParam, SystemParamItem, lifetimeless::Read},
-    world::DeferredWorld,
 };
 use bevy_math::prelude::*;
 use bevy_render::prelude::*;
 use bevy_transform::prelude::*;
-
-use crate::node::{UiCache, UiCaches};
 
 pub trait UiRoot: Component {
     type Param: SystemParam;
@@ -24,29 +20,23 @@ pub trait UiRoot: Component {
 }
 
 #[derive(Component, Copy, Clone, Default)]
-#[component(on_add = ui_unrounded_mutated, on_remove = ui_unrounded_mutated)]
 pub struct UiUnrounded;
-fn ui_unrounded_mutated(mut world: DeferredWorld, e: Entity, _: ComponentId) {
-    if let Some(mut cache) = world.get_mut::<UiCache>(e) {
-        cache.clear()
-    }
-}
 
-#[derive(Component, Copy, Clone, Default, PartialEq)]
-pub(crate) struct UiRootSize(pub Vec2);
+#[derive(Component, Copy, Clone, Default)]
+pub(crate) struct UiRootTrns {
+    pub transform: Transform,
+    pub size: Vec2,
+}
 
 pub(crate) fn compute_root_transform<T: UiRoot>(
     mut param: StaticSystemParam<T::Param>,
-    mut query: Query<(Entity, &mut T, &mut Transform, &mut UiRootSize, T::Item)>,
-    mut caches: UiCaches,
+    mut query: Query<(&mut T, &mut UiRootTrns, T::Item)>,
 ) {
-    for (e, mut root, mut trns, mut output, item) in &mut query {
+    for (mut root, mut output, item) in &mut query {
         let (transform, size) = root.compute_root_transform(&mut param, item);
 
-        trns.set_if_neq(transform);
-        if output.set_if_neq(UiRootSize(size)) {
-            caches.invalidate(e)
-        }
+        output.bypass_change_detection().transform = transform;
+        output.map_unchanged(|trns| &mut trns.size).set_if_neq(size);
     }
 }
 

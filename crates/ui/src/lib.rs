@@ -10,6 +10,17 @@ pub mod style;
 
 use bevy_ecs::prelude::*;
 
+pub mod prelude {
+    pub use crate::{
+        root::Camera2dRoot,
+        style::{
+            AlignContent, AlignItems, AlignSelf, BoxSizing, Display, FlexDirection, FlexWrap, JustifyContent, Overflow,
+            Position, Ui, UiBorder, UiSize,
+            Val::{self, *},
+        },
+    };
+}
+
 /// App plugins for [`hephae_ui`](crate).
 pub mod plugin {
     use std::marker::PhantomData;
@@ -24,7 +35,8 @@ pub mod plugin {
         HephaeUiSystems,
         measure::{ContentSize, Measure, Measurements, on_measure_inserted},
         node::compute_ui_tree,
-        root::{Camera2dRoot, UiRoot, UiRootSize, compute_root_transform},
+        root::{Camera2dRoot, UiRoot, UiRootTrns, compute_root_transform},
+        style::ui_changed,
     };
 
     plugin_conf! {
@@ -56,7 +68,13 @@ pub mod plugin {
                                     .chain()
                                     .before(TransformSystem::TransformPropagate),
                             )
-                            .add_systems(PostUpdate, compute_ui_tree.in_set(HephaeUiSystems::ComputeUiLayout));
+                            .add_systems(
+                                PostUpdate,
+                                (
+                                    ui_changed.in_set(HephaeUiSystems::InvalidateCaches),
+                                    compute_ui_tree.in_set(HephaeUiSystems::ComputeUiLayout),
+                                ),
+                            );
                     })
                     .add(ui_root::<Camera2dRoot>());
 
@@ -81,7 +99,7 @@ pub mod plugin {
 
     pub fn ui_root<T: UiRoot>() -> impl Plugin {
         |app: &mut App| {
-            app.register_required_components::<T, UiRootSize>()
+            app.register_required_components::<T, UiRootTrns>()
                 .register_required_components::<T, Transform>()
                 .add_systems(
                     PostUpdate,

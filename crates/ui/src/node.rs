@@ -1,4 +1,4 @@
-use std::{iter::Map, ops::Index};
+use std::{iter::FilterMap, ops::Index};
 
 use bevy_ecs::{
     entity::EntityHashMap,
@@ -22,17 +22,20 @@ use taffy::{
 
 use crate::{
     measure::{ContentSize, MeasureId, Measurements, Measurer},
-    root::{UiRootSize, UiUnrounded},
+    root::{UiRootTrns, UiUnrounded},
     style::{Display, Ui},
 };
 
 #[derive(Component, Copy, Clone, Default)]
+#[require(IntermediateUi, UiCache)]
 pub struct ComputedUi {
     /// The relative ordering of the node.
     ///
     /// Nodes with a higher order should be rendered on top of those with a lower order.
     /// This is effectively a topological sort of each tree.
     pub order: u32,
+    /// The top-left corner of the node.
+    pub location: Vec2,
     /// The width and height of the node.
     pub size: Vec2,
     /// The width and height of the content inside the node. This may be larger than the size of the
@@ -49,6 +52,9 @@ pub struct ComputedUi {
     /// The size of the margin of the node.
     pub margin: Border,
 }
+
+#[derive(Component, Copy, Clone, Default)]
+pub(crate) struct IntermediateUi(Layout);
 
 #[derive(Reflect, Copy, Clone, Default)]
 #[reflect(Default)]
@@ -90,19 +96,17 @@ impl UiCache {
 #[derive(SystemParam)]
 pub struct UiCaches<'w, 's> {
     pub parent_query: Query<'w, 's, Read<Parent>>,
-    cache_query: Query<'w, 's, (Write<UiCache>, Has<UiRootSize>)>,
+    cache_query: Query<'w, 's, Write<UiCache>>,
 }
 
 impl UiCaches<'_, '_> {
     #[inline]
     pub fn invalidate(&mut self, mut e: Entity) {
         loop {
-            let Ok((mut cache, has_root)) = self.cache_query.get_mut(e) else {
-                break
-            };
+            let Ok(mut cache) = self.cache_query.get_mut(e) else { break };
 
             cache.clear();
-            if let Some(parent) = (!has_root).then(|| self.parent_query.get(e).ok()).flatten() {
+            if let Ok(parent) = self.parent_query.get(e) {
                 e = **parent
             } else {
                 break
@@ -113,25 +117,26 @@ impl UiCaches<'_, '_> {
 
 pub(crate) struct UiTree<'w, 's, M> {
     measurements: M,
-    ui_query: Query<'w, 's, (Entity, Read<Ui>, Option<Read<ContentSize>>), Without<UiRootSize>>,
+    ui_query: Query<'w, 's, (Entity, Has<UiRootTrns>, Read<Ui>, Option<Read<ContentSize>>)>,
     children_query: Query<'w, 's, Read<Children>>,
+    intermediate_query: Query<'w, 's, Write<IntermediateUi>>,
     cache_query: Query<'w, 's, Write<UiCache>>,
-    outputs: &'s mut EntityHashMap<(Transform, Layout)>,
+    outputs: &'s mut EntityHashMap<Layout>,
 }
 
 impl<M> TraverseTree for UiTree<'_, '_, M> {}
 
 impl<M> TraversePartialTree for UiTree<'_, '_, M> {
     type ChildIter<'a>
-        = Map<
+        = FilterMap<
         QueryManyIter<
             'a,
             'a,
-            (Entity, Read<Ui>, Option<Read<ContentSize>>),
-            Without<UiRootSize>,
+            (Entity, Has<UiRootTrns>, Read<Ui>, Option<Read<ContentSize>>),
+            (),
             std::slice::Iter<'a, Entity>,
         >,
-        fn((Entity, &Ui, Option<&ContentSize>)) -> NodeId,
+        fn((Entity, bool, &Ui, Option<&ContentSize>)) -> Option<NodeId>,
     >
     where
         Self: 'a;
@@ -142,10 +147,12 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
             .children_query
             .get(Entity::from_bits(parent_node_id.into()))
             .map(|children| &**children)
-            .unwrap_or(const { &[] })
+            .unwrap_or(&[])
             .iter();
 
-        self.ui_query.iter_many(children).map(|(e, ..)| NodeId::from(e.to_bits()))
+        self.ui_query
+            .iter_many(children)
+            .filter_map(|(e, is_root, ..)| (!is_root).then_some(NodeId::from(e.to_bits())))
     }
 
     #[inline]
@@ -167,13 +174,13 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_
 
     #[inline]
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
-        self.ui_query.get(Entity::from_bits(node_id.into())).unwrap().1
+        let e = Entity::from_bits(node_id.into());
+        self.ui_query.get(e).unwrap().2
     }
 
     #[inline]
     fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
-        self.outputs
-            .insert(Entity::from_bits(node_id.into()), (Transform::IDENTITY, *layout));
+        self.intermediate_query.get_mut(Entity::from_bits(node_id.into())).unwrap().0 = *layout
     }
 
     #[inline]
@@ -211,20 +218,20 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_
 impl<M> RoundTree for UiTree<'_, '_, M> {
     #[inline]
     fn get_unrounded_layout(&self, node_id: NodeId) -> &Layout {
-        &self.outputs[&Entity::from_bits(node_id.into())].1
+        &self.intermediate_query.get(Entity::from_bits(node_id.into())).unwrap().0
     }
 
     #[inline]
     fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
-        self.outputs
-            .insert(Entity::from_bits(node_id.into()), (Transform::IDENTITY, *layout));
+        let e = Entity::from_bits(node_id.into());
+        self.outputs.insert(e, *layout);
     }
 }
 
 impl<M> PrintTree for UiTree<'_, '_, M> {
     #[inline]
     fn get_debug_label(&self, node_id: NodeId) -> &'static str {
-        let node = self.ui_query.get(Entity::from_bits(node_id.into())).unwrap().1;
+        let node = self.ui_query.get(Entity::from_bits(node_id.into())).unwrap().2;
         match node.display {
             Display::Flexbox => "flexbox",
             Display::Block => "block",
@@ -234,7 +241,7 @@ impl<M> PrintTree for UiTree<'_, '_, M> {
 
     #[inline]
     fn get_final_layout(&self, node_id: NodeId) -> &Layout {
-        &self.outputs[&Entity::from_bits(node_id.into())].1
+        &self.outputs[&Entity::from_bits(node_id.into())]
     }
 }
 
@@ -306,7 +313,8 @@ impl<M> CacheTree for UiTree<'_, '_, M> {
         run_mode: RunMode,
         layout_output: LayoutOutput,
     ) {
-        if let Ok(mut cache) = self.cache_query.get_mut(Entity::from_bits(node_id.into())) {
+        let e = Entity::from_bits(node_id.into());
+        if let Ok(mut cache) = self.cache_query.get_mut(e) {
             cache.0.store(known_dimensions, available_space, run_mode, layout_output)
         }
     }
@@ -322,94 +330,89 @@ impl<M> CacheTree for UiTree<'_, '_, M> {
 pub(crate) fn compute_ui_tree(
     world: &mut World,
     compute_state: &mut SystemState<(
-        Query<(Entity, &UiRootSize, Has<UiUnrounded>), Changed<UiCache>>,
-        Query<(Entity, Read<Ui>, Option<Read<ContentSize>>), Without<UiRootSize>>,
+        Query<(Ref<UiRootTrns>, &Children, Has<UiUnrounded>)>,
+        Query<(Entity, Has<UiRootTrns>, Read<Ui>, Option<Read<ContentSize>>)>,
         Query<Read<Children>>,
+        Query<Write<IntermediateUi>>,
         Query<Write<UiCache>>,
     )>,
-    propagate_state: &mut SystemState<(Query<(Entity, &UiRootSize)>, Query<&Children>)>,
-    mut outputs: Local<EntityHashMap<(Transform, Layout)>>,
+    propagate_state: &mut SystemState<(
+        Query<(&UiRootTrns, &Children)>,
+        Query<(&mut Transform, &ComputedUi)>,
+        Query<&Children>,
+    )>,
+    mut outputs: Local<EntityHashMap<Layout>>,
 ) {
     world.resource_scope(|world, mut measurers: Mut<Measurements>| {
         {
             let cell = world.as_unsafe_world_cell();
 
             compute_state.update_archetypes_unsafe_world_cell(cell);
-            let ((root_query, ui_query, children_query, cache_query), measurements) =
+            let ((root_query, ui_query, children_query, intermediate_query, cache_query), measurements) =
                 unsafe { (compute_state.get_unchecked_manual(cell), measurers.get_measurers(cell)) };
 
-            let outputs = &mut *outputs;
             let mut tree = UiTree {
                 measurements,
                 ui_query,
                 children_query,
+                intermediate_query,
                 cache_query,
-                outputs,
+                outputs: &mut outputs,
             };
 
-            for (e, &trns, is_unrounded) in &root_query {
-                let node_id = NodeId::from(e.to_bits());
-                compute_root_layout(&mut tree, node_id, taffy::Size {
-                    width: taffy::AvailableSpace::Definite(trns.0.x),
-                    height: taffy::AvailableSpace::Definite(trns.0.y),
-                });
+            for (trns, roots, is_unrounded) in &root_query {
+                for &root in roots {
+                    if trns.is_changed() || tree.cache_query.get_mut(root).is_ok_and(|cache| cache.is_changed()) {
+                        let node_id = NodeId::from(root.to_bits());
+                        compute_root_layout(&mut tree, node_id, Size {
+                            width: AvailableSpace::Definite(trns.size.x),
+                            height: AvailableSpace::Definite(trns.size.y),
+                        });
 
-                if !is_unrounded {
-                    round_layout(&mut tree, node_id);
+                        if !is_unrounded {
+                            round_layout(&mut tree, node_id)
+                        }
+                    }
                 }
             }
         }
 
-        let (root_query, children_query) = propagate_state.get(world);
-        for (e, size) in &root_query {
-            let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
-            let height = size.0.y;
-
-            let pos = Vec3::new(layout.location.x, height - layout.location.y - layout.size.height, 0.);
-            *trns = Transform::from_translation(pos);
-
-            if let Ok(children) = children_query.get(e) {
-                propagate(height, pos, children, &children_query, &mut outputs)
-            }
-        }
-
-        fn propagate(
-            height: f32,
-            parent: Vec3,
-            entities: &[Entity],
-            children_query: &Query<&Children>,
-            outputs: &mut EntityHashMap<(Transform, Layout)>,
-        ) {
-            for &e in entities {
-                let Some((trns, layout)) = outputs.get_mut(&e) else { continue };
-                let pos = Vec3::new(
-                    layout.location.x - parent.x,
-                    height - layout.location.y - layout.size.height - parent.y,
-                    parent.z + 0.001,
-                );
-
-                *trns = Transform::from_translation(pos);
-                if let Ok(children) = children_query.get(e) {
-                    propagate(height, pos, children, &children_query, outputs)
-                }
-            }
-        }
-
-        world.insert_batch(outputs.drain().map(|(e, (trns, layout))| {
-            (
-                e,
-                (trns, ComputedUi {
-                    order: layout.order,
-                    size: Vec2::new(layout.size.width, layout.size.height),
-                    content_size: Vec2::new(layout.content_size.width, layout.content_size.height),
-                    scrollbar_size: Vec2::new(layout.scrollbar_size.width, layout.scrollbar_size.height),
-                    border: layout.border.into(),
-                    padding: layout.padding.into(),
-                    margin: layout.margin.into(),
-                }),
-            )
+        world.insert_batch(outputs.drain().map(|(e, layout)| {
+            (e, ComputedUi {
+                order: layout.order,
+                location: Vec2::new(layout.location.x, layout.location.y),
+                size: Vec2::new(layout.size.width, layout.size.height),
+                content_size: Vec2::new(layout.content_size.width, layout.content_size.height),
+                scrollbar_size: Vec2::new(layout.scrollbar_size.width, layout.scrollbar_size.height),
+                border: layout.border.into(),
+                padding: layout.padding.into(),
+                margin: layout.margin.into(),
+            })
         }));
 
         measurers.apply_measurers(world);
+
+        let (root_query, mut query, children_query) = propagate_state.get_mut(world);
+        for (trns, roots) in &root_query {
+            propagate(trns.transform, trns.size.y, roots, &mut query, &children_query);
+        }
+
+        fn propagate(
+            root_transform: Transform,
+            parent_height: f32,
+            entities: &[Entity],
+            query: &mut Query<(&mut Transform, &ComputedUi)>,
+            children_query: &Query<&Children>,
+        ) {
+            for &e in entities {
+                let Ok((mut trns, layout)) = query.get_mut(e) else { continue };
+                let pos = Vec3::new(layout.location.x, parent_height - layout.location.y - layout.size.y, 0.001);
+
+                trns.set_if_neq(root_transform * Transform::from_translation(pos));
+                if let Ok(children) = children_query.get(e) {
+                    propagate(Transform::IDENTITY, layout.size.y, children, query, children_query)
+                }
+            }
+        }
     })
 }
