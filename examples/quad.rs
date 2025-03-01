@@ -51,6 +51,7 @@ impl Vertex for Vert {
     #[inline]
     fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
 
+    #[inline]
     fn create_item(
         layer: f32,
         entity: (Entity, MainEntity),

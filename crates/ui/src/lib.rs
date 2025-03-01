@@ -12,6 +12,7 @@ use bevy_ecs::prelude::*;
 
 pub mod prelude {
     pub use crate::{
+        node::{Border, ComputedUi, UiCaches},
         root::Camera2dRoot,
         style::{
             AlignContent, AlignItems, AlignSelf, BoxSizing, Display, FlexDirection, FlexWrap, JustifyContent, Overflow,

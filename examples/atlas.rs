@@ -76,6 +76,7 @@ impl Vertex for SpriteVertex {
         desc.layout.push(material_bind_group.clone());
     }
 
+    #[inline]
     fn create_item(
         layer: f32,
         entity: (Entity, MainEntity),

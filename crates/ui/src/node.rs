@@ -94,23 +94,16 @@ impl UiCache {
 }
 
 #[derive(SystemParam)]
-pub struct UiCaches<'w, 's> {
-    pub parent_query: Query<'w, 's, Read<Parent>>,
-    cache_query: Query<'w, 's, Write<UiCache>>,
-}
+pub struct UiCaches<'w, 's>(Query<'w, 's, (Write<UiCache>, Option<Read<Parent>>)>);
 
 impl UiCaches<'_, '_> {
     #[inline]
     pub fn invalidate(&mut self, mut e: Entity) {
         loop {
-            let Ok(mut cache) = self.cache_query.get_mut(e) else { break };
-
+            let Ok((mut cache, parent)) = self.0.get_mut(e) else { break };
             cache.clear();
-            if let Ok(parent) = self.parent_query.get(e) {
-                e = **parent
-            } else {
-                break
-            }
+
+            if let Some(parent) = parent { e = **parent } else { break }
         }
     }
 }

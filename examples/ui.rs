@@ -14,7 +14,6 @@ use bevy::{
 };
 use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
-use hephae_ui::node::ComputedUi;
 
 #[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
@@ -52,6 +51,7 @@ impl Vertex for Vert {
     #[inline]
     fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
 
+    #[inline]
     fn create_item(
         layer: f32,
         entity: (Entity, MainEntity),
