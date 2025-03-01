@@ -156,7 +156,8 @@ impl Measurements {
 
             #[inline]
             fn index(&self, index: MeasureId) -> &Self::Output {
-                &*self.measurers[index.0]
+                // Safety: `init_fetch` has been called.
+                unsafe { self.measurers[index.0].as_measurer() }
             }
         }
 
@@ -211,6 +212,8 @@ unsafe trait MeasureDyn: Measurer {
 
     unsafe fn finish_fetch(&mut self);
 
+    unsafe fn as_measurer(&self) -> &dyn Measurer;
+
     fn apply(&mut self, world: &mut World);
 }
 
@@ -252,6 +255,11 @@ unsafe impl<T: Measure> MeasureDyn for MeasureImpl<T> {
     #[inline]
     unsafe fn finish_fetch(&mut self) {
         unsafe { self.fetch.assume_init_drop() }
+    }
+
+    #[inline]
+    unsafe fn as_measurer(&self) -> &dyn Measurer {
+        self as &dyn Measurer
     }
 
     #[inline]
