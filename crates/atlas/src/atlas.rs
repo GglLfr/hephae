@@ -46,7 +46,7 @@ pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
     /// List of sprite rectangle placements in the page; may be looked up from
-    /// [TextureAtlas::sprite_map].
+    /// [`TextureAtlas::sprite_map`].
     pub sprites: Vec<URect>,
 }
 
