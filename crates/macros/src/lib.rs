@@ -1,3 +1,8 @@
+#![allow(internal_features)]
+#![cfg_attr(any(docsrs, docsrs_dep), feature(rustdoc_internals))]
+#![doc = include_str!("../README.md")]
+#![cfg_attr(doc, deny(missing_docs))]
+
 use std::{path::PathBuf, sync::OnceLock};
 
 pub use proc_macro2;
@@ -7,6 +12,8 @@ pub use syn;
 use syn::Path;
 use toml_edit::{DocumentMut, Item};
 
+/// Represents `Cargo.toml`, providing functions to resolve library paths under Bevy or similar
+/// library-containing crates.
 pub struct Manifest(DocumentMut);
 impl Manifest {
     fn new() -> Self {
@@ -28,22 +35,26 @@ impl Manifest {
         )
     }
 
+    /// Gets a lazily-initialized static instance of [`Manifest`].
     #[inline]
     pub fn get() -> &'static Self {
         static INSTANCE: OnceLock<Manifest> = OnceLock::new();
         INSTANCE.get_or_init(Self::new)
     }
 
+    /// Resolves `bevy::{sub}`.
     #[inline]
     pub fn resolve_bevy(sub: impl AsRef<str>, tokens: impl ToTokens) -> syn::Result<Path> {
         Self::get().resolve("bevy", sub, tokens)
     }
 
+    /// Resolves `hephae::{sub}`.
     #[inline]
     pub fn resolve_hephae(sub: impl AsRef<str>, tokens: impl ToTokens) -> syn::Result<Path> {
         Self::get().resolve("hephae", sub, tokens)
     }
 
+    /// Resolves a sub-crate under the base crate, i.e., `render` under `bevy`.
     pub fn resolve(&self, base: impl AsRef<str>, sub: impl AsRef<str>, tokens: impl ToTokens) -> syn::Result<Path> {
         let name = |dep: &Item, name: &str| -> String {
             if dep.as_str().is_some() {

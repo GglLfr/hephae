@@ -7,6 +7,8 @@ extern crate proc_macro;
 
 mod vertex_layout;
 
+/// Derives `VertexLayout`. Note that this also requires `NoUninit`, which you can derive with
+/// `hephae-render`'s re-export: `#[bytemuck(crate = "hephae::render::bytemuck")]`.
 #[proc_macro_derive(VertexLayout)]
 pub fn derive_vertex_layout(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     vertex_layout::parse(input.into())

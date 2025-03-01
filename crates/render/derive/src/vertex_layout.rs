@@ -1,7 +1,9 @@
-use hephae_macros::Manifest;
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{Data, DeriveInput, Fields, parse_quote, punctuated::Punctuated};
+use hephae_macros::{
+    Manifest,
+    proc_macro2::TokenStream,
+    quote::quote,
+    syn::{self, Data, DeriveInput, Fields, parse_quote, punctuated::Punctuated},
+};
 
 pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
     let bevy_render = Manifest::resolve_bevy("render", &input)?;

@@ -1,10 +1,16 @@
+//! Defines functionalitie associated with vertex attributes and their respective layouts and
+//! formats.
+
 use bevy_color::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_reflect::prelude::*;
 use bevy_render::render_resource::{VertexAttribute, VertexFormat};
-use bytemuck::{NoUninit, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable};
 pub use hephae_render_derive::VertexLayout;
 
+/// Represents values that, when passed to shaders as vertex attributes, are to be treated as
+/// normalized floating point numbers. For example, `[u8; 2]`'s format is [`VertexFormat::Uint8x2`],
+/// while `[Nor<u8>; 2]`'s format is [`VertexFormat::Unorm8x2`].
 #[derive(Reflect, Debug, Copy, Clone, Default, Pod, Zeroable, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
 #[repr(transparent)]
 pub struct Nor<T>(pub T);
@@ -16,7 +22,10 @@ impl<T> From<T> for Nor<T> {
     }
 }
 
+/// Extension trait for `LinearRgba`.
 pub trait LinearRgbaExt {
+    /// [`to_u8_array`](LinearRgba::to_u8_array), treated as normalized values. Useful for
+    /// byte-color vertex attributes.
     fn to_nor_array(self) -> [Nor<u8>; 4];
 }
 
@@ -27,7 +36,14 @@ impl LinearRgbaExt for LinearRgba {
     }
 }
 
-pub unsafe trait IsVertexAttribute: Sized {
+/// Marks the type as acceptable by shader programs as vertex attributes. You shouldn't implement
+/// this manually, as this crate already does that for you.
+///
+/// # Safety
+///
+/// [`FORMAT::size()`](VertexFormat::size) == [`size_of::<Self>()`](size_of).
+pub unsafe trait IsVertexAttribute: Pod {
+    /// The associated vertex format of this vertex attribute.
     const FORMAT: VertexFormat;
 }
 
@@ -86,6 +102,15 @@ impl_is_vertex_attribute! {
     LinearRgba => Float32x4
 }
 
-pub unsafe trait VertexLayout: NoUninit {
+/// Represents vertex values in a [vertex buffer object](bevy_render::render_resource::Buffer).
+///
+/// # Safety
+///
+/// - The sum of `ATTRIBUTES`'s [size](VertexFormat::size) must be equal to
+///   [`size_of::<Self>()`](size_of).
+/// - Each `ATTRIBUTES`'s [offset](`VertexAttribute::offset`) must be equal to [`offset_of!(Self,
+///   field)`](std::mem::offset_of), where `field` is the field represented by the attribute.
+pub unsafe trait VertexLayout: Pod {
+    /// The attributes of this layout.
     const ATTRIBUTES: &'static [VertexAttribute];
 }

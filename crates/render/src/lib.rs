@@ -20,7 +20,7 @@ pub mod prelude {
 
     pub use crate::{
         HephaeRenderSystems,
-        attribute::{IsVertexAttribute, Nor, VertexLayout},
+        attribute::{IsVertexAttribute, LinearRgbaExt as _, Nor, VertexLayout},
         drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
         image_bind::ImageBindGroups,
         pipeline::{VertexPipeline, ViewBatches},
