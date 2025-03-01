@@ -25,10 +25,10 @@ use bevy::{
     },
     window::PrimaryWindow,
 };
-use bytemuck::{Pod, Zeroable};
 use hephae::{locale::def::LocaleChangeEvent, prelude::*, text::atlas::FontAtlas};
 
 #[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
+#[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct Vert {
     pos: [f32; 2],

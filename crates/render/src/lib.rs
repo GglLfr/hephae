@@ -12,6 +12,7 @@ pub mod vertex;
 use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_render::prelude::*;
+pub use bytemuck;
 
 /// Common imports for [`hephae_render`](crate).
 pub mod prelude {

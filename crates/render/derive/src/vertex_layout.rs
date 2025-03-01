@@ -25,6 +25,10 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
         Fields::Unit => &Punctuated::new(),
     };
 
+    where_clause
+        .predicates
+        .push(parse_quote! { Self: #hephae_render::bytemuck::NoUninit });
+
     for field in fields {
         let ty = &field.ty;
         where_clause

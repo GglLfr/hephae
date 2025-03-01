@@ -24,10 +24,10 @@ use bevy::{
         texture::GpuImage,
     },
 };
-use bytemuck::{Pod, Zeroable};
 use hephae::prelude::*;
 
 #[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
+#[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct SpriteVertex {
     pos: [f32; 2],
