@@ -1,6 +1,6 @@
 [package]
 name = "hephae-ui"
-description = "Hephae's Graphical User Interface abstract layout module."
+description = "Hephae's UI module, powered by Taffy."
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,3 +1,5 @@
+//! Defines UI leaf node measurers.
+
 use std::{
     any::type_name,
     mem::MaybeUninit,
@@ -18,10 +20,22 @@ use bevy_ecs::{
 };
 use bevy_math::prelude::*;
 
+/// Content-size measurer component.
+///
+/// # Note
+///
+/// When something might cause this measurer to output a different size, e.g. when a text span is
+/// modified, users should take care to call
+/// [`UiCaches::invalidate`](crate::node::UiCaches::invalidate) on its entity so the UI tree will be
+/// recomputed.
 pub trait Measure: Component {
+    /// The parameter required for measuring.
     type Param: ReadOnlySystemParam;
+    /// Necessary neighbor components required for measuring. Failing to fetch these will make the
+    /// measure output as zero on both axes.
     type Item: ReadOnlyQueryData;
 
+    /// Measures the UI leaf node.
     fn measure(
         &self,
         param: &SystemParamItem<Self::Param>,
@@ -45,9 +59,12 @@ pub(crate) fn on_measure_inserted<T: Measure>(
     ));
 }
 
+/// Type-erased container of [`Measure`]s. Note that this component is automatically registered as
+/// required by [`Measure`] when configured.
 #[derive(Component, Copy, Clone)]
 pub struct ContentSize(MeasureId);
 impl ContentSize {
+    /// Gets the measure ID for use with [`Measurements`].
     #[inline]
     pub const fn get(self) -> MeasureId {
         self.0
@@ -61,16 +78,23 @@ impl Default for ContentSize {
     }
 }
 
+/// Opaque ID of a [`Measure`] in an entity.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MeasureId(usize);
 impl MeasureId {
     pub const INVALID: Self = Self(usize::MAX);
 }
 
+/// The amount of space available to a node in a given axis.
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
 pub enum AvailableSpace {
+    /// The amount of space available is the specified number of pixels.
     Definite(f32),
+    /// The amount of space available is indefinite and the node should be laid out under a
+    /// min-content constraint.
     MinContent,
+    /// The amount of space available is indefinite and the node should be laid out under a
+    /// max-content constraint.
     MaxContent,
 }
 
@@ -85,6 +109,7 @@ impl From<taffy::AvailableSpace> for AvailableSpace {
     }
 }
 
+/// Stores data required for each [`Measure`]s globally.
 #[derive(Resource, Default)]
 pub struct Measurements {
     ids: SparseSet<ComponentId, MeasureId>,
@@ -92,6 +117,7 @@ pub struct Measurements {
 }
 
 impl Measurements {
+    /// Registers a [`Measure`], making it require a [`ContentSize`].
     #[inline]
     pub fn register<T: Measure>(&mut self, world: &mut World) -> MeasureId {
         *self.ids.get_or_insert_with(world.register_component::<T>(), || {
@@ -104,11 +130,20 @@ impl Measurements {
         })
     }
 
+    /// Gets an ID for a [`Measure`] component.
     #[inline]
     pub fn get(&self, id: ComponentId) -> Option<MeasureId> {
         self.ids.get(id).copied()
     }
 
+    /// Gets all the [`Measure`] data, fetching their system params to the given `world`.
+    ///
+    /// # Safety
+    ///
+    /// - `world` must be able to access any component and resources immutably, except for
+    ///   components that are private and inaccessible to implementors of [`Measure`].
+    /// - The drop glue of the returned container must run before trying to access resources and
+    ///   components mutably, or making structural ECS changes.
     #[inline]
     pub unsafe fn get_measurers(&mut self, world: UnsafeWorldCell) -> impl Index<MeasureId, Output = dyn Measurer> {
         struct Guard<'a> {
@@ -147,6 +182,7 @@ impl Measurements {
         }
     }
 
+    /// Calls [`SystemState::apply`] for each [`Measure`] data.
     pub fn apply_measurers(&mut self, world: &mut World) {
         for data in &mut self.data {
             data.apply(world)
@@ -154,7 +190,9 @@ impl Measurements {
     }
 }
 
+/// Type returned by [`Measurements::get_measurers`].
 pub trait Measurer: 'static + Send + Sync {
+    /// Type-erased version of [`Measure::measure`].
     fn measure(
         &self,
         known_size: (Option<f32>, Option<f32>),

@@ -1,3 +1,5 @@
+//! Defines everything necessary to style a [`Ui`] node.
+
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bevy_transform::prelude::*;
@@ -5,37 +7,65 @@ use taffy::{BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyl
 
 use crate::node::{ComputedUi, UiCaches};
 
+/// A [`Ui`] node, complete with its styling information.
 #[derive(Component, Reflect, Clone)]
 #[require(Transform, ComputedUi)]
 #[reflect(Component, Default)]
 pub struct Ui {
+    /// Layout strategy to be used when laying out this node.
     pub display: Display,
+    /// Defines whether size styles apply to the content box or the border box of the node.
     pub box_sizing: BoxSizing,
+    /// How children overflowing their container should affect layout in the X axis.
     pub overflow_x: Overflow,
+    /// How children overflowing their container should affect layout in the Y axis.
     pub overflow_y: Overflow,
+    /// How much space (in pixels) should be reserved for the scrollbars of [`Overflow::Scroll`].
     pub scrollbar_width: f32,
+    /// Determines what the `inset` value use as a base offset.
     pub position: Position,
+    /// Determines how the position of this element should be tweaked relative to the layout
+    /// defined.
     pub inset: UiBorder,
+    /// Sets the initial size of the node.
     pub size: UiSize,
+    /// Controls the minimum size of the node.
     pub min_size: UiSize,
+    /// Controls the maximum size of the node.
     pub max_size: UiSize,
+    /// Sets the preferred aspect ratio for the node, calculated as width divided by height.
     pub aspect_ratio: Option<f32>,
+    /// How large the margin should be on each side.
     pub margin: UiBorder,
+    /// How large the padding should be on each side.
     pub padding: UiBorder,
+    /// How large the border should be on each side.
     pub border: UiBorder,
+    /// Defines which direction the main axis flows in.
     pub flex_direction: FlexDirection,
+    /// Defines wrapping behavior for when children nodes exhaust their available space.
     pub flex_wrap: FlexWrap,
+    /// Determines ow large the gaps between nodes. in the container should be.
     pub gap: UiSize,
+    /// Determines how content contained within this node should be aligned in the cross/block axis.
     pub align_content: AlignContent,
+    /// Determines how this node's children should be aligned in the cross/block axis.
     pub align_items: AlignItems,
+    /// Determines how content contained within this node should be aligned in the main/inline axis.
     pub justify_content: JustifyContent,
+    /// Sets the initial main axis size of the node.
     pub flex_basis: Val,
+    /// The relative rate at which this node grows when it is expanding to fill space.
     pub flex_grow: f32,
+    /// The relative rate at which this node shrinks when it is contracting to fit into space.
     pub flex_shrink: f32,
+    /// Determines how this node should be aligned in the cross/block axis, falling back to the
+    /// parent's [`AlignItems`] if not set.
     pub align_self: AlignSelf,
 }
 
 impl Ui {
+    /// The default value.
     pub const DEFAULT: Self = Self {
         display: Display::DEFAULT,
         box_sizing: BoxSizing::DEFAULT,
@@ -62,11 +92,6 @@ impl Ui {
         flex_shrink: 1.,
         align_self: AlignSelf::DEFAULT,
     };
-
-    pub const FILL_PARENT: Self = Self {
-        size: UiSize::rel(1., 1.),
-        ..Self::DEFAULT
-    };
 }
 
 impl Default for Ui {
@@ -82,15 +107,31 @@ pub(crate) fn ui_changed(query: Query<Entity, Changed<Ui>>, mut caches: UiCaches
     }
 }
 
+#[derive(Copy, Clone)]
+pub(crate) struct WithCtx<T> {
+    pub width: f32,
+    pub height: f32,
+    pub item: T,
+}
+
+/// UI dimension values.
 #[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub enum Val {
+    /// Absolute pixel units.
     Abs(f32),
+    /// Ratio of parent's units.
     Rel(f32),
+    /// Ratio of viewport width.
+    Vw(f32),
+    /// Ratio of viewport height.
+    Vh(f32),
+    /// Should be automatically computed.
     Auto,
 }
 
 impl Val {
+    /// The default value for [`Val`].
     pub const DEFAULT: Self = Val::Auto;
 }
 
@@ -101,47 +142,57 @@ impl Default for Val {
     }
 }
 
-impl From<Val> for taffy::Dimension {
+impl From<WithCtx<Val>> for taffy::Dimension {
     #[inline]
-    fn from(value: Val) -> Self {
-        match value {
+    fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
+        match item {
             Val::Abs(abs) => Self::Length(abs),
             Val::Rel(rel) => Self::Percent(rel),
+            Val::Vw(w) => Self::Length(width * w),
+            Val::Vh(h) => Self::Length(height * h),
             Val::Auto => Self::Auto,
         }
     }
 }
 
-impl From<Val> for taffy::LengthPercentage {
+impl From<WithCtx<Val>> for taffy::LengthPercentage {
     #[inline]
-    fn from(value: Val) -> Self {
-        match value {
+    fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
+        match item {
             Val::Abs(abs) => Self::Length(abs),
             Val::Rel(rel) => Self::Percent(rel),
+            Val::Vw(w) => Self::Length(width * w),
+            Val::Vh(h) => Self::Length(height * h),
             Val::Auto => Self::Length(0.),
         }
     }
 }
 
-impl From<Val> for taffy::LengthPercentageAuto {
+impl From<WithCtx<Val>> for taffy::LengthPercentageAuto {
     #[inline]
-    fn from(value: Val) -> Self {
-        match value {
+    fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
+        match item {
             Val::Abs(abs) => Self::Length(abs),
             Val::Rel(rel) => Self::Percent(rel),
+            Val::Vw(w) => Self::Length(width * w),
+            Val::Vh(h) => Self::Length(height * h),
             Val::Auto => Self::Auto,
         }
     }
 }
 
+/// A two-dimensional [`Val`], defining the area of a rectangle.
 #[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub struct UiSize {
+    /// The width of the area.
     pub width: Val,
+    /// The height of the area.
     pub height: Val,
 }
 
 impl UiSize {
+    /// The default value for [`UiSize`].
     pub const DEFAULT: Self = Self {
         width: Val::DEFAULT,
         height: Val::DEFAULT,
@@ -156,47 +207,67 @@ impl Default for UiSize {
 }
 
 impl UiSize {
+    /// Creates a new [`UiSize`].
     #[inline]
     pub const fn new(width: Val, height: Val) -> Self {
         Self { width, height }
     }
 
+    /// Creates a new [`UiSize`] that has the same values for all axes.
     #[inline]
     pub const fn all(value: Val) -> Self {
         Self::new(value, value)
     }
 
+    /// Creates a new [`UiSize`] that has all [absolute](Val::Abs) values.
     #[inline]
     pub const fn abs(width: f32, height: f32) -> Self {
         Self::new(Val::Abs(width), Val::Abs(height))
     }
 
+    /// Creates a new [`UiSize`] that has all [relative](Val::Rel) values.
     #[inline]
     pub const fn rel(width: f32, height: f32) -> Self {
         Self::new(Val::Rel(width), Val::Rel(height))
     }
 }
 
-impl<T: From<Val>> From<UiSize> for taffy::Size<T> {
+impl<T: From<WithCtx<Val>>> From<WithCtx<UiSize>> for taffy::Size<T> {
     #[inline]
-    fn from(UiSize { width, height }: UiSize) -> Self {
+    fn from(WithCtx { width, height, item }: WithCtx<UiSize>) -> Self {
         Self {
-            width: width.into(),
-            height: height.into(),
+            width: WithCtx {
+                width,
+                height,
+                item: item.width,
+            }
+            .into(),
+            height: WithCtx {
+                width,
+                height,
+                item: item.height,
+            }
+            .into(),
         }
     }
 }
 
+/// A rectangle defined by its borders.
 #[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub struct UiBorder {
+    /// The left offset or position of this border.
     pub left: Val,
+    /// The right offset or position of this border.
     pub right: Val,
+    /// The bottom offset or position of this border.
     pub bottom: Val,
+    /// The top offset or position of this border.
     pub top: Val,
 }
 
 impl UiBorder {
+    /// The default value of [`UiBorder`].
     pub const DEFAULT: Self = Self {
         left: Val::DEFAULT,
         right: Val::DEFAULT,
@@ -204,6 +275,7 @@ impl UiBorder {
         top: Val::DEFAULT,
     };
 
+    /// Creates a new [`UiBorder`].
     #[inline]
     pub const fn new(left: Val, right: Val, bottom: Val, top: Val) -> Self {
         Self {
@@ -214,6 +286,7 @@ impl UiBorder {
         }
     }
 
+    /// Creates a new [`UiBorder`] that has the same values for all sides.
     #[inline]
     pub const fn all(value: Val) -> Self {
         Self::new(value, value, value, value)
@@ -227,34 +300,64 @@ impl Default for UiBorder {
     }
 }
 
-impl<T: From<Val>> From<UiBorder> for taffy::Rect<T> {
+impl<T: From<WithCtx<Val>>> From<WithCtx<UiBorder>> for taffy::Rect<T> {
     #[inline]
     fn from(
-        UiBorder {
-            left,
-            right,
-            bottom,
-            top,
-        }: UiBorder,
+        WithCtx {
+            width,
+            height,
+            item:
+                UiBorder {
+                    left,
+                    right,
+                    bottom,
+                    top,
+                },
+        }: WithCtx<UiBorder>,
     ) -> Self {
         Self {
-            left: left.into(),
-            right: right.into(),
-            bottom: bottom.into(),
-            top: top.into(),
+            left: WithCtx {
+                width,
+                height,
+                item: left,
+            }
+            .into(),
+            right: WithCtx {
+                width,
+                height,
+                item: right,
+            }
+            .into(),
+            bottom: WithCtx {
+                width,
+                height,
+                item: bottom,
+            }
+            .into(),
+            top: WithCtx {
+                width,
+                height,
+                item: top,
+            }
+            .into(),
         }
     }
 }
 
+/// Layout strategy to be used when laying out this node.
 #[derive(Reflect, Copy, Clone)]
 #[reflect(Default)]
 pub enum Display {
+    /// Use `flex` layout.
     Flexbox,
+    /// Use `block` layout.
     Block,
+    /// Collapse this node recursively, making it look like it doesn't exist at all.
     None,
 }
 
 impl Display {
+    /// The default value of [`Display`].
     pub const DEFAULT: Self = Display::Flexbox;
 }
 
@@ -289,6 +392,7 @@ pub enum BoxSizing {
 }
 
 impl BoxSizing {
+    /// The default value of [`BoxSizing`].
     pub const DEFAULT: Self = Self::BorderBox;
 }
 
@@ -332,6 +436,7 @@ pub enum Overflow {
 }
 
 impl Overflow {
+    /// The default value of [`Overflow`].
     pub const DEFAULT: Self = Self::Visible;
 }
 
@@ -369,6 +474,7 @@ pub enum Position {
 }
 
 impl Position {
+    /// The default value of [`Position`].
     pub const DEFAULT: Self = Self::Relative;
 }
 
@@ -389,78 +495,113 @@ impl From<Position> for taffy::Position {
     }
 }
 
-impl CoreStyle for Ui {
+impl CoreStyle for WithCtx<&Ui> {
     #[inline]
     fn box_generation_mode(&self) -> taffy::BoxGenerationMode {
-        self.display.into()
+        self.item.display.into()
     }
 
     #[inline]
     fn is_block(&self) -> bool {
-        matches!(self.display, Display::Block)
+        matches!(self.item.display, Display::Block)
     }
 
     #[inline]
     fn box_sizing(&self) -> taffy::BoxSizing {
-        self.box_sizing.into()
+        self.item.box_sizing.into()
     }
 
     #[inline]
     fn overflow(&self) -> taffy::Point<taffy::Overflow> {
         taffy::Point {
-            x: self.overflow_x.into(),
-            y: self.overflow_y.into(),
+            x: self.item.overflow_y.into(),
+            y: self.item.overflow_y.into(),
         }
     }
 
     #[inline]
     fn scrollbar_width(&self) -> f32 {
-        self.scrollbar_width
+        self.item.scrollbar_width
     }
 
     #[inline]
     fn position(&self) -> taffy::Position {
-        self.position.into()
+        self.item.position.into()
     }
 
     #[inline]
     fn inset(&self) -> taffy::Rect<taffy::LengthPercentageAuto> {
-        self.inset.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.inset,
+        }
+        .into()
     }
 
     #[inline]
     fn size(&self) -> taffy::Size<taffy::Dimension> {
-        self.size.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.size,
+        }
+        .into()
     }
 
     #[inline]
     fn min_size(&self) -> taffy::Size<taffy::Dimension> {
-        self.min_size.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.min_size,
+        }
+        .into()
     }
 
     #[inline]
     fn max_size(&self) -> taffy::Size<taffy::Dimension> {
-        self.max_size.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.max_size,
+        }
+        .into()
     }
 
     #[inline]
     fn aspect_ratio(&self) -> Option<f32> {
-        self.aspect_ratio
+        self.item.aspect_ratio
     }
 
     #[inline]
     fn margin(&self) -> taffy::Rect<taffy::LengthPercentageAuto> {
-        self.margin.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.margin,
+        }
+        .into()
     }
 
     #[inline]
     fn padding(&self) -> taffy::Rect<taffy::LengthPercentage> {
-        self.padding.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.padding,
+        }
+        .into()
     }
 
     #[inline]
     fn border(&self) -> taffy::Rect<taffy::LengthPercentage> {
-        self.border.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.border,
+        }
+        .into()
     }
 }
 
@@ -479,6 +620,7 @@ pub enum FlexDirection {
 }
 
 impl FlexDirection {
+    /// The default value of [`FlexDirection`].
     pub const DEFAULT: Self = Self::Row;
 }
 
@@ -514,6 +656,7 @@ pub enum FlexWrap {
 }
 
 impl FlexWrap {
+    /// The default value of [`FlexWrap`].
     pub const DEFAULT: Self = Self::NoWrap;
 }
 
@@ -567,6 +710,7 @@ pub enum AlignContent {
 }
 
 impl AlignContent {
+    /// The default value of [`AlignContent`].
     pub const DEFAULT: Self = Self::None;
 }
 
@@ -620,6 +764,7 @@ pub enum AlignItems {
 }
 
 impl AlignItems {
+    /// The default value of [`AlignItems`].
     pub const DEFAULT: Self = Self::None;
 }
 
@@ -651,71 +796,81 @@ impl From<AlignItems> for Option<taffy::AlignItems> {
 /// For Grid it controls alignment in the inline axis.
 pub type JustifyContent = AlignContent;
 
-impl FlexboxContainerStyle for Ui {
+impl FlexboxContainerStyle for WithCtx<&Ui> {
     #[inline]
     fn flex_direction(&self) -> taffy::FlexDirection {
-        self.flex_direction.into()
+        self.item.flex_direction.into()
     }
 
     #[inline]
     fn flex_wrap(&self) -> taffy::FlexWrap {
-        self.flex_wrap.into()
+        self.item.flex_wrap.into()
     }
 
     #[inline]
     fn gap(&self) -> taffy::Size<taffy::LengthPercentage> {
-        self.gap.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.gap,
+        }
+        .into()
     }
 
     #[inline]
     fn align_content(&self) -> Option<taffy::AlignContent> {
-        self.align_content.into()
+        self.item.align_content.into()
     }
 
     #[inline]
     fn align_items(&self) -> Option<taffy::AlignItems> {
-        self.align_items.into()
+        self.item.align_items.into()
     }
 
     #[inline]
     fn justify_content(&self) -> Option<taffy::JustifyContent> {
-        self.justify_content.into()
+        self.item.justify_content.into()
     }
 }
 
 /// Controls alignment of an individual node.
 pub type AlignSelf = AlignItems;
 
-impl FlexboxItemStyle for Ui {
+impl FlexboxItemStyle for WithCtx<&Ui> {
     #[inline]
     fn flex_basis(&self) -> taffy::Dimension {
-        self.flex_basis.into()
+        WithCtx {
+            width: self.width,
+            height: self.height,
+            item: self.item.flex_basis,
+        }
+        .into()
     }
 
     #[inline]
     fn flex_grow(&self) -> f32 {
-        self.flex_grow
+        self.item.flex_grow
     }
 
     #[inline]
     fn flex_shrink(&self) -> f32 {
-        self.flex_shrink
+        self.item.flex_shrink
     }
 
     #[inline]
     fn align_self(&self) -> Option<taffy::AlignSelf> {
-        self.align_self.into()
+        self.item.align_self.into()
     }
 }
 
-impl BlockContainerStyle for Ui {
+impl BlockContainerStyle for WithCtx<&Ui> {
     #[inline]
     fn text_align(&self) -> taffy::TextAlign {
         taffy::TextAlign::Auto
     }
 }
 
-impl BlockItemStyle for Ui {
+impl BlockItemStyle for WithCtx<&Ui> {
     #[inline]
     fn is_table(&self) -> bool {
         false

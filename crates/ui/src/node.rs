@@ -1,3 +1,5 @@
+//! Defines everything related to UI tree computations.
+
 use std::{iter::FilterMap, ops::Index};
 
 use bevy_ecs::{
@@ -23,9 +25,10 @@ use taffy::{
 use crate::{
     measure::{ContentSize, MeasureId, Measurements, Measurer},
     root::{UiRootTrns, UiUnrounded},
-    style::{Display, Ui},
+    style::{Display, Ui, WithCtx},
 };
 
+/// The computed layout values of a [`Ui`] node.
 #[derive(Component, Copy, Clone, Default)]
 #[require(IntermediateUi, UiCache)]
 pub struct ComputedUi {
@@ -56,12 +59,17 @@ pub struct ComputedUi {
 #[derive(Component, Copy, Clone, Default)]
 pub(crate) struct IntermediateUi(Layout);
 
+/// A border rectangle.
 #[derive(Reflect, Copy, Clone, Default)]
 #[reflect(Default)]
 pub struct Border {
+    /// X-coordinate or padding width on the left side.
     pub left: f32,
+    /// X-coordinate or padding width on the right side.
     pub right: f32,
+    /// Y-coordinate or padding height on the top side.
     pub top: f32,
+    /// Y-coordinate or padding height on the bottom side.
     pub bottom: f32,
 }
 
@@ -93,10 +101,13 @@ impl UiCache {
     }
 }
 
+/// A system parameter used for invalidating UI caches. Use if you need a [`Ui`] node to be
+/// recomputed.
 #[derive(SystemParam)]
 pub struct UiCaches<'w, 's>(Query<'w, 's, (Write<UiCache>, Option<Read<Parent>>)>);
 
 impl UiCaches<'_, '_> {
+    /// Invalidates a [`Ui`] node's cache recursively to its root.
     #[inline]
     pub fn invalidate(&mut self, mut e: Entity) {
         loop {
@@ -110,6 +121,7 @@ impl UiCaches<'_, '_> {
 
 pub(crate) struct UiTree<'w, 's, M> {
     measurements: M,
+    viewport_size: Vec2,
     ui_query: Query<'w, 's, (Entity, Has<UiRootTrns>, Read<Ui>, Option<Read<ContentSize>>)>,
     children_query: Query<'w, 's, Read<Children>>,
     intermediate_query: Query<'w, 's, Write<IntermediateUi>>,
@@ -161,14 +173,18 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
 
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_, '_, M> {
     type CoreContainerStyle<'a>
-        = &'a Ui
+        = WithCtx<&'a Ui>
     where
         Self: 'a;
 
     #[inline]
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
         let e = Entity::from_bits(node_id.into());
-        self.ui_query.get(e).unwrap().2
+        WithCtx {
+            width: self.viewport_size.x,
+            height: self.viewport_size.y,
+            item: self.ui_query.get(e).unwrap().2,
+        }
     }
 
     #[inline]
@@ -187,22 +203,30 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_
                 (Display::Flexbox, true) => compute_flexbox_layout(tree, node_id, inputs),
                 (Display::Block, true) => compute_block_layout(tree, node_id, inputs),
                 (Display::None, _) => compute_hidden_layout(tree, node_id),
-                (_, false) => compute_leaf_layout(inputs, node, |known_size, available_space| {
-                    if let Some(measure) = measure.and_then(|id| match id.get() {
-                        MeasureId::INVALID => None,
-                        id => Some(id),
-                    }) {
-                        let Vec2 { x: width, y: height } = tree.measurements[measure].measure(
-                            (known_size.width, known_size.height),
-                            (available_space.width.into(), available_space.height.into()),
-                            e,
-                        );
+                (_, false) => compute_leaf_layout(
+                    inputs,
+                    &WithCtx {
+                        width: tree.viewport_size.x,
+                        height: tree.viewport_size.y,
+                        item: node,
+                    },
+                    |known_size, available_space| {
+                        if let Some(measure) = measure.and_then(|id| match id.get() {
+                            MeasureId::INVALID => None,
+                            id => Some(id),
+                        }) {
+                            let Vec2 { x: width, y: height } = tree.measurements[measure].measure(
+                                (known_size.width, known_size.height),
+                                (available_space.width.into(), available_space.height.into()),
+                                e,
+                            );
 
-                        Size { width, height }
-                    } else {
-                        Size::ZERO
-                    }
-                }),
+                            Size { width, height }
+                        } else {
+                            Size::ZERO
+                        }
+                    },
+                ),
             }
         })
     }
@@ -240,12 +264,12 @@ impl<M> PrintTree for UiTree<'_, '_, M> {
 
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTree<'_, '_, M> {
     type FlexboxContainerStyle<'a>
-        = &'a Ui
+        = WithCtx<&'a Ui>
     where
         Self: 'a;
 
     type FlexboxItemStyle<'a>
-        = &'a Ui
+        = WithCtx<&'a Ui>
     where
         Self: 'a;
 
@@ -262,12 +286,12 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTr
 
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutBlockContainer for UiTree<'_, '_, M> {
     type BlockContainerStyle<'a>
-        = &'a Ui
+        = WithCtx<&'a Ui>
     where
         Self: 'a;
 
     type BlockItemStyle<'a>
-        = &'a Ui
+        = WithCtx<&'a Ui>
     where
         Self: 'a;
 
@@ -346,6 +370,7 @@ pub(crate) fn compute_ui_tree(
 
             let mut tree = UiTree {
                 measurements,
+                viewport_size: Vec2::ZERO,
                 ui_query,
                 children_query,
                 intermediate_query,
@@ -354,6 +379,7 @@ pub(crate) fn compute_ui_tree(
             };
 
             for (trns, roots, is_unrounded) in &root_query {
+                tree.viewport_size = trns.size;
                 for &root in roots {
                     if trns.is_changed() || tree.cache_query.get_mut(root).is_ok_and(|cache| cache.is_changed()) {
                         let node_id = NodeId::from(root.to_bits());

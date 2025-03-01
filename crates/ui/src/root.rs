@@ -1,3 +1,7 @@
+//! Defines UI root components.
+//!
+//! See [`UiRoot`] for more information.
+
 use bevy_core_pipeline::core_2d::*;
 use bevy_ecs::{
     prelude::*,
@@ -8,10 +12,24 @@ use bevy_math::prelude::*;
 use bevy_render::prelude::*;
 use bevy_transform::prelude::*;
 
+/// UI root component.
+///
+/// These provide root transforms and available space for UI nodes. For example, [`Camera2dRoot`]
+/// provides a bottom-left transform and physical viewport size as available space.
+///
+/// # Note
+///
+/// Do not add [`Ui`](crate::style::Ui) nodes to the same entity as UI roots. Instead, spawn them as
+/// children entities.
 pub trait UiRoot: Component {
+    /// The parameter required for computing the transform and available space.
     type Param: SystemParam;
+    /// Necessary neighbor components. Failing to fetch these will make the
+    /// measure output as zero.
     type Item: QueryData;
 
+    /// Computes the root transform. The returned [`Transform`] should be located at the bottom-left
+    /// vertex of the available space box.
     fn compute_root_transform(
         &mut self,
         param: &mut SystemParamItem<Self::Param>,
@@ -19,6 +37,8 @@ pub trait UiRoot: Component {
     ) -> (Transform, Vec2);
 }
 
+/// Additional component that, when added to [`UiRoot`]s, will skip rounding the layout for UI
+/// nodes.
 #[derive(Component, Copy, Clone, Default)]
 pub struct UiUnrounded;
 
@@ -40,10 +60,15 @@ pub(crate) fn compute_root_transform<T: UiRoot>(
     }
 }
 
+/// A [`UiRoot`] implementation based on [`Camera2d`]. The available space is the physical viewport
+/// size, scaled as necessary.
 #[derive(Component, Copy, Clone)]
 #[require(Camera2d)]
 pub struct Camera2dRoot {
+    /// Value used to divide the physical viewport size. I.e., `scale: 2.` will make UI nodes twice
+    /// as big.
     pub scale: f32,
+    /// Z-layer offset for UI nodes.
     pub offset: f32,
 }
 

@@ -136,8 +136,9 @@ fn startup(mut commands: Commands) {
     commands.spawn(Camera2dRoot::default()).with_children(|ui| {
         ui.spawn((
             Ui {
+                size: UiSize::new(Vw(1.), Vh(0.8)),
                 padding: UiBorder::all(Abs(25.)),
-                ..Ui::FILL_PARENT
+                ..default()
             },
             Color(LinearRgba::RED),
             HasDrawer::<Draw>::new(),

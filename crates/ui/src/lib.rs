@@ -10,6 +10,7 @@ pub mod style;
 
 use bevy_ecs::prelude::*;
 
+/// Common imports for [`hephae-ui`](crate).
 pub mod prelude {
     pub use crate::{
         node::{Border, ComputedUi, UiCaches},
@@ -50,6 +51,8 @@ pub mod plugin {
         pub trait RootConf for UiRoot, T => ui_root::<T>()
     }
 
+    /// Configures Hephae UI in your application. Pass additional user-defined leaf node measurers
+    /// and UI roots as pleased.
     pub fn ui<M: MeasureConf, R: RootConf>() -> impl PluginGroup {
         struct UiGroup<M: MeasureConf, R: RootConf>(PhantomData<(M, R)>);
         impl<M: MeasureConf, R: RootConf> PluginGroup for UiGroup<M, R> {
@@ -87,6 +90,7 @@ pub mod plugin {
         UiGroup::<M, R>(PhantomData)
     }
 
+    /// Configures a custom UI leaf node measurer.
     pub fn ui_measure<T: Measure>() -> impl Plugin {
         |app: &mut App| {
             app.register_required_components::<T, ContentSize>()
@@ -98,6 +102,7 @@ pub mod plugin {
         }
     }
 
+    /// Configures a custom UI root component.
     pub fn ui_root<T: UiRoot>() -> impl Plugin {
         |app: &mut App| {
             app.register_required_components::<T, UiRootTrns>()
