@@ -202,6 +202,10 @@ pub trait Measurer: 'static + Send + Sync {
     ) -> Vec2;
 }
 
+/// # Safety
+///
+/// - `init_fetch` must fetch data that lives as long as `'w`.
+/// - `finish_fetch` must drop all data fetched by `init_fetch`.
 unsafe trait MeasureDyn: Measurer {
     unsafe fn init_fetch<'w>(&'w mut self, world: UnsafeWorldCell<'w>);
 

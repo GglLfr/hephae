@@ -68,15 +68,11 @@ impl Manifest {
         let sub = sub.as_ref();
 
         let find = |deps: &Item| -> Option<syn::Result<syn::Path>> {
-            if let Some(dep) = deps.get(&format!("{base}_{sub}")) {
+            if let Some(dep) = deps.get(format!("{base}_{sub}")) {
                 Some(syn::parse_str(&format!("{}_{sub}", name(dep, base))))
-            } else if let Some(dep) = deps.get(&format!("{base}-{sub}")) {
+            } else if let Some(dep) = deps.get(format!("{base}-{sub}")) {
                 Some(syn::parse_str(&format!("{}_{sub}", name(dep, base))))
-            } else if let Some(dep) = deps.get(base) {
-                Some(syn::parse_str(&format!("{}::{sub}", name(dep, base))))
-            } else {
-                None
-            }
+            } else { deps.get(base).map(|dep| syn::parse_str(&format!("{}::{sub}", name(dep, base)))) }
         };
 
         match self
