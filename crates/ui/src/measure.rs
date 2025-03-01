@@ -82,6 +82,7 @@ impl Default for ContentSize {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MeasureId(usize);
 impl MeasureId {
+    /// Invalid measure ID. Content size will be zero.
     pub const INVALID: Self = Self(usize::MAX);
 }
 
