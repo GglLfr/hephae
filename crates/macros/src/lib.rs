@@ -72,7 +72,10 @@ impl Manifest {
                 Some(syn::parse_str(&format!("{}_{sub}", name(dep, base))))
             } else if let Some(dep) = deps.get(format!("{base}-{sub}")) {
                 Some(syn::parse_str(&format!("{}_{sub}", name(dep, base))))
-            } else { deps.get(base).map(|dep| syn::parse_str(&format!("{}::{sub}", name(dep, base)))) }
+            } else {
+                deps.get(base)
+                    .map(|dep| syn::parse_str(&format!("{}::{sub}", name(dep, base))))
+            }
         };
 
         match self
