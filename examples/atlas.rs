@@ -172,7 +172,7 @@ impl Drawer for DrawSprite {
             let atlas = atlases.get(&atlas.atlas)?;
             let (page_index, rect_index) = index.indices()?;
 
-            let (page, rect) = atlas
+            let (page, (rect, ..)) = atlas
                 .pages
                 .get(page_index)
                 .and_then(|page| Some((page.image.id(), *page.sprites.get(rect_index)?)))?;

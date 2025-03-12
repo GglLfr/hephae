@@ -46,8 +46,22 @@ pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
     /// List of sprite rectangle placements in the page; may be looked up from
-    /// [`TextureAtlas::sprite_map`].
-    pub sprites: Vec<URect>,
+    /// [`TextureAtlas::sprite_map`]. Each elements consist of the sprite's placement in the page,
+    /// and a nine-slice cuts if any.
+    pub sprites: Vec<(URect, Option<NineSliceCuts>)>,
+}
+
+/// Defines horizontal and vertical slashes that split a sprite into nine patches.
+#[derive(Reflect, Copy, Clone)]
+pub struct NineSliceCuts {
+    /// The leftmost vertical cut. Pixels that `x < left` are considered the left side edge.
+    pub left: u32,
+    /// The rightmost vertical cut. Pixels that `x > right` are considered the right side edge.
+    pub right: u32,
+    /// The topmost vertical cut. Pixels that `y < top` are considered the top side edge.
+    pub top: u32,
+    /// The bottommost vertical cut. Pixels that `y > bottom` are considered the bottom side edge.
+    pub bottom: u32,
 }
 
 /// Component denoting a texture atlas sprite lookup key. See the [module-level](crate::atlas)

@@ -40,7 +40,7 @@ use serde::{
 };
 use thiserror::Error;
 
-use crate::atlas::{AtlasPage, TextureAtlas};
+use crate::atlas::{AtlasPage, NineSliceCuts, TextureAtlas};
 
 /// Asset file representation of [`TextureAtlas`].
 ///
@@ -279,14 +279,14 @@ impl AssetLoader for TextureAtlasLoader {
         } = ron::de::from_bytes(&bytes)?;
 
         drop(bytes);
-        let padding = padding as usize;
-        let bleeding = (bleeding as usize).min(padding);
+        let pad = padding as usize;
+        let bleed = (bleeding as usize).min(pad);
 
         async fn collect(
             entry: TextureAtlasEntry,
             base: &AssetPath<'_>,
             load_context: &mut LoadContext<'_>,
-            accum: &mut Vec<(String, Image)>,
+            accum: &mut Vec<(String, Image, bool)>,
         ) -> Result<(), TextureAtlasError> {
             match entry {
                 TextureAtlasEntry::File(path) => {
@@ -295,17 +295,21 @@ impl AssetLoader for TextureAtlasLoader {
                         return Ok(());
                     };
 
-                    let name = name.to_string_lossy().into_owned();
-                    accum.push((
-                        name.clone(),
-                        load_context
-                            .loader()
-                            .immediate()
-                            .load::<Image>(&path)
-                            .await
-                            .map_err(|e| TextureAtlasError::InvalidImage { name, error: e.error })?
-                            .take(),
-                    ));
+                    let mut name = name.to_string_lossy().into_owned();
+                    let has_nine_slice = if let Some((split, "9")) = name.rsplit_once('.') {
+                        name = String::from(split);
+                        true
+                    } else {
+                        false
+                    };
+
+                    let src = match load_context.loader().immediate().load::<Image>(&path).await {
+                        Err(e) => return Err(TextureAtlasError::InvalidImage { name, error: e.error }),
+                        Ok(src) => src,
+                    }
+                    .take();
+
+                    accum.push((name, src, has_nine_slice));
                 }
                 TextureAtlasEntry::Directory(dir, paths) => {
                     let base = base.resolve(&dir)?;
@@ -329,8 +333,13 @@ impl AssetLoader for TextureAtlasLoader {
             .await?;
         }
 
-        entries.sort_by_key(|(.., texture)| {
-            let UVec2 { x, y } = texture.size();
+        entries.sort_by_key(|&(.., ref texture, has_nine_slice)| {
+            let UVec2 { mut x, mut y } = texture.size();
+            if has_nine_slice {
+                x = x.saturating_sub(2);
+                y = y.saturating_sub(2);
+            }
+
             2 * (x + y)
         });
 
@@ -339,15 +348,14 @@ impl AssetLoader for TextureAtlasLoader {
             sprite_map: HashMap::new(),
         };
 
-        let mut end = |ids: HashMap<AllocId, (String, Image)>, packer: AtlasAllocator| {
+        let mut end = |ids: HashMap<AllocId, (String, Image, bool)>, packer: AtlasAllocator| {
             let Size2D {
                 width: page_width,
                 height: page_height,
                 ..
             } = packer.size().to_u32();
 
-            let size = TextureFormat::Rgba8UnormSrgb.pixel_size();
-            let page_row_size = page_width as usize * size;
+            let pixel_size = TextureFormat::Rgba8UnormSrgb.pixel_size();
             let mut image = Image::new(
                 Extent3d {
                     width: page_width,
@@ -355,20 +363,15 @@ impl AssetLoader for TextureAtlasLoader {
                     depth_or_array_layers: 1,
                 },
                 TextureDimension::D2,
-                vec![0; page_row_size * page_height as usize],
+                vec![0; page_width as usize * page_height as usize * pixel_size],
                 TextureFormat::Rgba8UnormSrgb,
                 usages,
             );
+
             let mut sprites = Vec::new();
-
-            for (id, (name, texture)) in ids {
+            for (id, (name, texture, has_nine_slice)) in ids {
                 let Box2D { min, max } = packer[id].to_usize();
-                let min_x = min.x + padding;
-                let min_y = min.y + padding;
-                let max_x = max.x - padding;
-                let max_y = max.y - padding;
-
-                let src_row_size = (max_x - min_x) * size;
+                let nine_offset = usize::from(has_nine_slice);
 
                 let Some(texture) = texture.convert(TextureFormat::Rgba8UnormSrgb) else {
                     return Err(TextureAtlasError::UnsupportedFormat {
@@ -377,64 +380,103 @@ impl AssetLoader for TextureAtlasLoader {
                     });
                 };
 
-                // Mem-set topleft-wards bleeding to topleft-most pixel and topright-wards
-                // bleeding to topright-most pixel. This is so that the
-                // subsequent bleeding operation may just use a split-off `copy_from_slice`.
-                for bleed_x in 0..bleeding {
-                    let left_x = (min_y - bleeding) * page_row_size + (min_x - bleed_x - 1) * size;
-                    image.data[left_x..left_x + size].copy_from_slice(&texture.data[..size]);
+                let rect_width = max.x - min.x;
+                let rect_height = max.y - min.y;
 
-                    let right_x = (min_y - bleeding) * page_row_size + (max_x + bleed_x) * size;
-                    image.data[right_x..right_x + size].copy_from_slice(&texture.data[src_row_size - size..src_row_size]);
+                let src_row = rect_width - 2 * pad;
+                let src_pos = |x, y| ((y + nine_offset) * (src_row + nine_offset) + (x + nine_offset)) * pixel_size;
+
+                let dst_row = page_width as usize;
+                let dst_pos = |x, y| ((min.y + y) * dst_row + (min.y + x)) * pixel_size;
+
+                // Set topleft-wards bleeding to topleft pixel and topright-wards bleeding to topright pixel. This
+                // is so that the subsequent bleeding operation may just use a split-off copy.
+                for bleed_x in 0..bleed {
+                    image.data[dst_pos(pad - bleed_x - 1, pad - bleed)..][..pixel_size]
+                        .copy_from_slice(&texture.data[src_pos(0, 0)..][..pixel_size]);
+
+                    image.data[dst_pos(rect_width - pad + bleed_x, pad - bleed)..][..pixel_size]
+                        .copy_from_slice(&texture.data[src_pos(src_row - 1, 0)..][..pixel_size]);
                 }
 
                 // Copy top-most edge to bleed upwards.
-                image.data
-                    [(min_y - bleeding) * page_row_size + min_x * size..(min_y - bleeding) * page_row_size + max_x * size]
-                    .copy_from_slice(&texture.data[..src_row_size]);
-                for bleed_y in 1..bleeding {
-                    let (src, dst) = image
-                        .data
-                        .split_at_mut((min_y - bleeding + bleed_y) * page_row_size + (min_x - bleeding) * size);
-                    dst[..src_row_size + 2 * bleeding * size].copy_from_slice(
-                        &src[(min_y - bleeding + bleed_y - 1) * page_row_size + (min_x - bleeding) * size..
-                            (min_y - bleeding + bleed_y - 1) * page_row_size + (max_x + bleeding) * size],
-                    );
+                image.data[dst_pos(pad, pad - bleed)..][..src_row * pixel_size]
+                    .copy_from_slice(&texture.data[src_pos(0, 0)..][..src_row * pixel_size]);
+                for bleed_y in 1..bleed {
+                    let split = dst_pos(pad - bleed, pad - bleed + bleed_y);
+                    let (src, dst) = image.data.split_at_mut(split);
+
+                    let count = (src_row + 2 * bleed) * pixel_size;
+                    dst[..count].copy_from_slice(&src[split - dst_row * pixel_size..][..count]);
                 }
 
                 // Copy the actual image, while performing sideways bleeding.
-                for (src_y, dst_y) in (min_y..max_y).enumerate() {
-                    let dst_row = dst_y * page_row_size;
-                    image.data[dst_row + min_x * size..dst_row + max_x * size]
-                        .copy_from_slice(&texture.data[src_y * src_row_size..(src_y + 1) * src_row_size]);
+                for y in 0..rect_height - 2 * pad {
+                    let count = src_row * pixel_size;
+                    image.data[dst_pos(pad, pad + y)..][..count].copy_from_slice(&texture.data[src_pos(0, y)..][..count]);
 
-                    for bleed_x in 0..bleeding {
-                        let left_x = dst_y * page_row_size + (min_x - bleed_x - 1) * size;
-                        image.data[left_x..left_x + size]
-                            .copy_from_slice(&texture.data[src_y * src_row_size..src_y * src_row_size + size]);
+                    for bleed_x in 0..bleed {
+                        image.data[dst_pos(pad - bleed_x - 1, pad + y)..][..pixel_size]
+                            .copy_from_slice(&texture.data[src_pos(0, y)..][..pixel_size]);
 
-                        let right_x = dst_y * page_row_size + (max_x + bleed_x) * size;
-                        image.data[right_x..right_x + size]
-                            .copy_from_slice(&texture.data[(src_y + 1) * src_row_size - size..(src_y + 1) * src_row_size]);
+                        image.data[dst_pos(rect_width - pad + bleed_x, pad + y)..][..pixel_size]
+                            .copy_from_slice(&texture.data[src_pos(src_row - 1, y)..][..pixel_size]);
                     }
                 }
 
                 // Copy the bottom-most edge to bleed downwards.
-                for bleed_y in 0..bleeding {
-                    let (src, dst) = image
-                        .data
-                        .split_at_mut((max_y + bleed_y) * page_row_size + (min_x - bleeding) * size);
-                    dst[..src_row_size + 2 * bleeding * size].copy_from_slice(
-                        &src[(max_y + bleed_y - 1) * page_row_size + (min_x - bleeding) * size..
-                            (max_y + bleed_y - 1) * page_row_size + (max_x + bleeding) * size],
-                    );
+                for bleed_y in 0..bleed {
+                    let split = dst_pos(pad - bleed, rect_height - pad + bleed_y);
+                    let (src, dst) = image.data.split_at_mut(split);
+
+                    let count = (src_row + 2 * bleed) * pixel_size;
+                    dst[..count].copy_from_slice(&src[split - dst_row * pixel_size..][..count]);
                 }
 
+                // Finally, insert to the sprite map.
                 atlas.sprite_map.insert(name, (atlas.pages.len(), sprites.len()));
-                sprites.push(URect {
-                    min: uvec2(min_x as u32, min_y as u32),
-                    max: uvec2(max_x as u32, max_y as u32),
-                });
+                sprites.push((
+                    URect {
+                        min: uvec2(min.x as u32 + padding, min.y as u32 + padding),
+                        max: uvec2(max.x as u32 - padding, max.y as u32 - padding),
+                    },
+                    if has_nine_slice {
+                        let mut cuts = NineSliceCuts {
+                            left: 0,
+                            right: 0,
+                            top: src_row as u32,
+                            bottom: rect_height as u32 - 2 * padding,
+                        };
+
+                        let mut found_left = false;
+                        for x in 1..src_row + 1 {
+                            let alpha = texture.data[x * pixel_size + 3];
+                            if !found_left && alpha >= 127 {
+                                found_left = true;
+                                cuts.left = x as u32;
+                            } else if found_left && alpha < 127 {
+                                cuts.right = x as u32;
+                                break
+                            }
+                        }
+
+                        let mut found_top = false;
+                        for y in 1..rect_height - 2 * pad + 1 {
+                            let alpha = texture.data[y * (src_row + nine_offset) * pixel_size + 3];
+                            if !found_top && alpha >= 127 {
+                                found_top = true;
+                                cuts.top = y as u32;
+                            } else if found_top && alpha < 127 {
+                                cuts.bottom = y as u32;
+                                break
+                            }
+                        }
+
+                        Some(cuts)
+                    } else {
+                        None
+                    },
+                ));
             }
 
             let page_num = atlas.pages.len();
@@ -448,20 +490,25 @@ impl AssetLoader for TextureAtlasLoader {
 
         'pages: while !entries.is_empty() {
             let mut packer = AtlasAllocator::new(size2(init_width as i32, init_height as i32));
-            let mut ids = HashMap::<AllocId, (String, Image)>::new();
+            let mut ids = HashMap::<AllocId, (String, Image, bool)>::new();
 
-            while let Some((name, texture)) = entries.pop() {
+            while let Some((name, texture, has_nine_slice)) = entries.pop() {
                 let UVec2 {
-                    x: base_width,
-                    y: base_height,
+                    x: mut base_width,
+                    y: mut base_height,
                 } = texture.size();
 
+                if has_nine_slice {
+                    base_width = base_width.saturating_sub(1);
+                    base_height = base_height.saturating_sub(1);
+                }
+
                 match packer.allocate(size2(
-                    (base_width + 2 * padding as u32) as i32,
-                    (base_height + 2 * padding as u32) as i32,
+                    (base_width + 2 * pad as u32) as i32,
+                    (base_height + 2 * pad as u32) as i32,
                 )) {
                     Some(alloc) => {
-                        ids.insert(alloc.id, (name, texture));
+                        ids.insert(alloc.id, (name, texture, has_nine_slice));
                     }
                     None => {
                         let Size2D { width, height, .. } = packer.size();
@@ -478,7 +525,7 @@ impl AssetLoader for TextureAtlasLoader {
                                 end(ids, packer)?;
 
                                 // Re-insert the entry to the back, since we didn't end up packing that one.
-                                entries.push((name, texture));
+                                entries.push((name, texture, has_nine_slice));
                                 continue 'pages;
                             }
                         }
@@ -494,8 +541,8 @@ impl AssetLoader for TextureAtlasLoader {
 
                         let mut id_map = HashMap::new();
                         for Change { old, new } in changes {
-                            let (name, texture) = ids.remove(&old.id).unwrap();
-                            id_map.insert(new.id, (name, texture));
+                            let rect = ids.remove(&old.id).unwrap();
+                            id_map.insert(new.id, rect);
                         }
 
                         if !ids.is_empty() {
