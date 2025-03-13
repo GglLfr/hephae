@@ -1,6 +1,8 @@
 //! Defines functionalitie associated with vertex attributes and their respective layouts and
 //! formats.
 
+use std::borrow::{Borrow, BorrowMut};
+
 use bevy_color::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_math::prelude::*;
@@ -15,11 +17,38 @@ pub use hephae_render_derive::VertexLayout;
 #[derive(Reflect, Debug, Copy, Clone, Default, Pod, Zeroable, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
 #[repr(transparent)]
 pub struct Nor<T>(pub T);
-
 impl<T> From<T> for Nor<T> {
     #[inline]
     fn from(value: T) -> Self {
         Self(value)
+    }
+}
+
+impl<T> AsRef<T> for Nor<T> {
+    #[inline]
+    fn as_ref(&self) -> &T {
+        self
+    }
+}
+
+impl<T> AsMut<T> for Nor<T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut T {
+        self
+    }
+}
+
+impl<T> Borrow<T> for Nor<T> {
+    #[inline]
+    fn borrow(&self) -> &T {
+        self
+    }
+}
+
+impl<T> BorrowMut<T> for Nor<T> {
+    #[inline]
+    fn borrow_mut(&mut self) -> &mut T {
+        self
     }
 }
 
