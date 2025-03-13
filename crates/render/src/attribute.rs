@@ -3,6 +3,7 @@
 
 use bevy_color::prelude::*;
 use bevy_derive::{Deref, DerefMut};
+use bevy_math::prelude::*;
 use bevy_reflect::prelude::*;
 use bevy_render::render_resource::{VertexAttribute, VertexFormat};
 use bytemuck::{Pod, Zeroable};
@@ -77,7 +78,7 @@ impl_is_vertex_attribute! {
     [Nor<u16>; 4] => Unorm16x4
     [Nor<i16>; 2] => Snorm16x2
     [Nor<i16>; 4] => Snorm16x4
-    // Currently, `Float16x2` and `Float16x4` is ignored.
+    // Currently, `Float16x2` and `Float16x4` are ignored.
     f32 => Float32
     [f32; 1] => Float32
     [f32; 2] => Float32x2
@@ -99,6 +100,9 @@ impl_is_vertex_attribute! {
     [f64; 3] => Float64x3
     [f64; 4] => Float64x4
     // Currently, `Unorm10_10_10_2` is ignored.
+    Vec2 => Float32x2
+    Vec3 => Float32x3
+    Vec4 => Float32x4
     LinearRgba => Float32x4
 }
 
