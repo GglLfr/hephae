@@ -133,9 +133,7 @@ fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>
                             };
 
                             // Safety: We just set `fmt` to variant `Formatted` above.
-                            let LocaleFmt::Formatted { format, args } = &mut fmt else {
-                                unsafe { unreachable_unchecked() }
-                            };
+                            let LocaleFmt::Formatted { format, args } = &mut fmt else { unsafe { unreachable_unchecked() } };
                             (format.len(), args)
                         }
                         LocaleFmt::Formatted {
