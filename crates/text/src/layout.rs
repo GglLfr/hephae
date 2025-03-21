@@ -7,6 +7,7 @@ use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
 use bevy_math::prelude::*;
+use bevy_tasks::IoTaskPool;
 use bevy_utils::HashMap;
 use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
@@ -70,27 +71,36 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
     let fonts = fonts.get_mut();
     while let Ok((bytes, sender)) = fonts.pending_fonts.try_recv() {
         if let Err(e) = Face::parse(&bytes, 0) {
-            _ = sender.send_blocking(Err(e));
-            continue;
+            IoTaskPool::get().spawn(async move { _ = sender.send(Err(e)).await }).detach();
+            continue
         }
 
         // None of these unwraps should fail, as `Face::parse` has already ensured a valid 0th face.
         let src = Arc::new(bytes.into_boxed_slice());
         let id = fonts.sys.db_mut().load_font_source(Source::Binary(src))[0];
-        let info = fonts.sys.db().face(id).unwrap();
 
-        _ = sender.send_blocking(Ok(Font {
-            id,
-            name: info
-                .families
-                .first()
-                .map(|(name, _)| name)
-                .cloned()
-                .unwrap_or("Times New Roman".into()),
-            style: info.style,
-            weight: info.weight,
-            stretch: info.stretch,
-        }));
+        let info = fonts.sys.db().face(id).unwrap();
+        let name = info
+            .families
+            .first()
+            .map(|(name, _)| name)
+            .cloned()
+            .unwrap_or("Times New Roman".into());
+        let style = info.style;
+        let weight = info.weight;
+        let stretch = info.stretch;
+
+        IoTaskPool::get()
+            .spawn(async move {
+                _ = sender.send(Ok(Font {
+                    id,
+                    name,
+                    style,
+                    weight,
+                    stretch,
+                }))
+            })
+            .detach()
     }
 }
 
@@ -291,11 +301,8 @@ impl FontLayoutInner {
             }),
             Attrs::new(),
             Shaping::Advanced,
+            Some(align.into()),
         );
-
-        for line in &mut buffer.lines {
-            line.set_align(Some(align.into()));
-        }
 
         buffer.shape_until_scroll(false);
         Ok(())

@@ -34,6 +34,7 @@ bevy_image.workspace = true
 bevy_math.workspace = true
 bevy_reflect.workspace = true
 bevy_render.workspace = true
+bevy_tasks.workspace = true
 bevy_utils.workspace = true
 
 async-channel.workspace = true
