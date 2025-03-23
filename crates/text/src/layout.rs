@@ -92,13 +92,15 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
 
         IoTaskPool::get()
             .spawn(async move {
-                _ = sender.send(Ok(Font {
-                    id,
-                    name,
-                    style,
-                    weight,
-                    stretch,
-                }))
+                _ = sender
+                    .send(Ok(Font {
+                        id,
+                        name,
+                        style,
+                        weight,
+                        stretch,
+                    }))
+                    .await
             })
             .detach()
     }
