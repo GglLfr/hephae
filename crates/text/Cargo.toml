@@ -46,5 +46,9 @@ smallvec.workspace = true
 sys-locale.workspace = true
 thiserror.workspace = true
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+cosmic-text = { workspace = true, features = ["wasm-web"] }
+sys-locale = { workspace = true, features = ["js"] }
+
 [features]
 locale = ["dep:hephae-locale"]

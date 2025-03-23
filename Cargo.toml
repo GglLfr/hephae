@@ -27,7 +27,7 @@ rustdoc-args = [
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "crates/atlas",
     "crates/locale",
@@ -110,13 +110,11 @@ hephae-utils.workspace = true
 [dev-dependencies]
 bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "png"] }
 
-bytemuck.workspace = true
-
 [features]
 default = ["atlas", "locale", "text", "ui"]
 atlas = ["dep:hephae-atlas"]
 locale = ["dep:hephae-locale", "hephae-text?/locale"]
-text = ["dep:hephae-text"]
+text = ["dep:hephae-text", "hephae-ui?/text"]
 ui = ["dep:hephae-ui"]
 
 [[example]]

@@ -34,7 +34,6 @@ bevy_math.workspace = true
 bevy_reflect.workspace = true
 bevy_render.workspace = true
 bevy_transform.workspace = true
-bevy_utils.workspace = true
 
 taffy.workspace = true
 

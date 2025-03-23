@@ -25,6 +25,4 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 [dependencies]
 hephae-utils-derive = { version = "0.7.1", path = "derive" }
 
-bevy_app.workspace = true
 bevy_ecs.workspace = true
-bevy_utils.workspace = true
