@@ -23,6 +23,6 @@ rustdoc-args = [
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [dependencies]
-hephae-utils-derive = { version = "0.7.1", path = "derive" }
+hephae-utils-derive = { version = "0.7.2", path = "derive" }
 
 bevy_ecs.workspace = true
