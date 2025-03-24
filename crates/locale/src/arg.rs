@@ -1,6 +1,6 @@
 //! Defines [`LocaleTarget`] and [`LocaleArg`], both configurable by
-//! [`locale_target`](crate::plugin::locale_target) and [`locale_arg`](crate::plugin::locale_arg),
-//! respectively.
+//! [`LocaleTargetPlugin`](crate::LocaleTargetPlugin) and
+//! [`LocaleArgPlugin`](crate::LocaleArgPlugin), respectively.
 //!
 //! See each type-level documentations for more information.
 
@@ -17,7 +17,7 @@ use crate::def::{Locale, LocaleFmt, LocaleResult};
 
 /// Components that are localizable. For example, this may be a text widget component. You may
 /// configure Hephae to register this type for updating using
-/// [`locale_target`](crate::plugin::locale_target).
+/// [`LocaleTargetPlugin`](crate::LocaleTargetPlugin).
 pub trait LocaleTarget: Component {
     /// Receiver for localized strings result. Calling [`str::clone_into`] is recommended.
     fn update(&mut self, src: &str);
@@ -30,7 +30,7 @@ pub(crate) fn localize_target<T: LocaleTarget>(mut query: Query<(&mut T, &Locale
 }
 
 /// Locale arguments that may be used in positional format locale templates. You may configure
-/// Hephae to register this argument using [`locale_arg`](crate::plugin::locale_arg).
+/// Hephae to register this argument using [`LocaleArgPlugin`](crate::LocaleArgPlugin).
 pub trait LocaleArg: 'static + FromReflect + Reflectable + Send + Sync {
     /// Extracts this argument into a writable string.
     fn localize_into(&self, locale: &Locale, out: &mut impl Write) -> Result<(), FmtError>;

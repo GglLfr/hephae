@@ -219,12 +219,11 @@ impl Drawer for DrawText {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins.set(ImagePlugin::default_nearest()),
-            hephae::render::<Vert, DrawText>(),
-            hephae::locales::<(), ()>(),
-            hephae::text(),
-        ))
+        .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), hephae! {
+            render: (Vert, DrawText),
+            locale,
+            text,
+        }))
         .add_systems(Startup, startup)
         .add_systems(Update, (move_camera, update, switch_locale))
         .run();

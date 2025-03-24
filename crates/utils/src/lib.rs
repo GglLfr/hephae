@@ -11,5 +11,8 @@ pub use query_ext::*;
 
 /// Common imports for [`hephae_utils`](crate).
 pub mod prelude {
-    pub use crate::{ComponentOption as _, derive::plugin_conf};
+    pub use crate::{
+        ComponentOption as _,
+        derive::{plugin_conf, plugin_def},
+    };
 }

@@ -175,6 +175,7 @@ impl VisitAssetDependencies for LocaleCollection {
 
 /// Firing this event will cause all [`LocaleKey`]s to update their results for the new locale code.
 #[derive(Event, Reflect, Clone, Debug)]
+#[reflect(Debug)]
 pub struct LocaleChangeEvent(pub String);
 
 /// Stores the locale key and the handle to a [`LocaleCollection`] as a component to be processed in

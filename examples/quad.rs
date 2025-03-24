@@ -105,7 +105,7 @@ impl Drawer for Draw {
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, hephae::render::<Vert, Draw>()))
+        .add_plugins((DefaultPlugins, hephae! { render: (Vert, Draw) }))
         .add_systems(Startup, startup)
         .run();
 }

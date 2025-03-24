@@ -28,8 +28,8 @@ use nonmax::NonMaxUsize;
 /// A list of textures packed into one large texture. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Asset, Reflect, Clone)]
-#[reflect(Asset)]
+#[derive(Asset, Reflect, Clone, Debug)]
+#[reflect(Asset, Debug)]
 pub struct TextureAtlas {
     /// The list of pages contained in this atlas. Items may be modified, but growing or shrinking
     /// this vector is **discouraged**.
@@ -41,7 +41,8 @@ pub struct TextureAtlas {
 
 /// A page located in a [`TextureAtlas`]. Contains the handle to the page image, and rectangle
 /// placements of each sprites.
-#[derive(Reflect, Clone)]
+#[derive(Reflect, Clone, Debug)]
+#[reflect(Debug)]
 pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
@@ -52,7 +53,8 @@ pub struct AtlasPage {
 }
 
 /// Defines horizontal and vertical slashes that split a sprite into nine patches.
-#[derive(Reflect, Copy, Clone)]
+#[derive(Reflect, Copy, Clone, Debug)]
+#[reflect(Debug)]
 pub struct NineSliceCuts {
     /// The leftmost vertical cut. Pixels that `x < left` are considered the left side edge.
     pub left: u32,
@@ -67,8 +69,8 @@ pub struct NineSliceCuts {
 /// Component denoting a texture atlas sprite lookup key. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Reflect, Component, Clone)]
-#[reflect(Component)]
+#[derive(Reflect, Component, Clone, Debug)]
+#[reflect(Component, Debug)]
 #[require(AtlasIndex)]
 pub struct AtlasEntry {
     /// The handle to the texture atlas.
@@ -80,7 +82,7 @@ pub struct AtlasEntry {
 /// Component denoting a texture atlas cached sprite index. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
 /// framework.
-#[derive(Component, Default, Copy, Clone)]
+#[derive(Component, Default, Copy, Clone, Debug)]
 pub struct AtlasIndex {
     page_index: Option<NonMaxUsize>,
     sprite_index: Option<NonMaxUsize>,

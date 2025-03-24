@@ -120,7 +120,7 @@ impl Drawer for Draw {
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, hephae::render::<Vert, Draw>(), hephae::ui::<(), ()>()))
+        .add_plugins((DefaultPlugins, hephae! { render: (Vert, Draw), ui }))
         .add_systems(Startup, startup)
         .add_systems(Update, rotate)
         .run();

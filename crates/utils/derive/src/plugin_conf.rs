@@ -1,9 +1,12 @@
-use hephae_macros::Manifest;
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{
-    Attribute, Block, Ident, Meta, Path, Stmt, Token, Visibility,
-    parse::{Parse, ParseStream},
+use hephae_macros::{
+    Manifest,
+    proc_macro2::TokenStream,
+    quote::quote,
+    syn,
+    syn::{
+        Attribute, Block, Ident, Meta, Path, Stmt, Token, Visibility,
+        parse::{Parse, ParseStream},
+    },
 };
 
 struct Syntax {
@@ -25,7 +28,6 @@ impl Parse for Syntax {
         input.parse::<Token![for]>()?;
         let target = input.parse()?;
         input.parse::<Token![,]>()?;
-
         let param = input.parse()?;
         input.parse::<Token![=>]>()?;
 

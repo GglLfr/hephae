@@ -83,8 +83,12 @@ impl Manifest {
             .get("dependencies")
             .and_then(find)
             .or_else(|| self.0.get("dev-dependencies").and_then(find))
-            .ok_or_else(|| syn::Error::new_spanned(&tokens, format!("Missing dependency `{base}::{sub}`")))
-        {
+            .ok_or_else(|| {
+                syn::Error::new_spanned(
+                    &tokens,
+                    format!("missing dependency `{base}::{sub}`; have you enabled the `{sub}` feature in `{base}`?"),
+                )
+            }) {
             Ok(Ok(path)) => Ok(path),
             Ok(Err(error)) | Err(error) => Err(error),
         }

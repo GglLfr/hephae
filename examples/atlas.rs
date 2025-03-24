@@ -213,11 +213,10 @@ impl Drawer for DrawSprite {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins.set(ImagePlugin::default_nearest()),
-            hephae::render::<SpriteVertex, DrawSprite>(),
-            hephae::atlas(),
-        ))
+        .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), hephae! {
+            atlas,
+            render: (SpriteVertex, DrawSprite),
+        }))
         .add_systems(Startup, startup)
         .run();
 }

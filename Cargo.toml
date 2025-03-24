@@ -29,6 +29,7 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 [workspace]
 resolver = "3"
 members = [
+    "plugins",
     "crates/atlas",
     "crates/locale",
     "crates/macros",
@@ -106,16 +107,17 @@ hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
 hephae-ui = { optional = true, workspace = true }
 hephae-utils.workspace = true
+hephae-plugins = { version = "0.7.1", path = "plugins" }
 
 [dev-dependencies]
 bevy = { version = "0.15", default-features = false, features = ["bevy_window", "bevy_winit", "bevy_core_pipeline", "png"] }
 
 [features]
 default = ["atlas", "locale", "text", "ui"]
-atlas = ["dep:hephae-atlas"]
-locale = ["dep:hephae-locale", "hephae-text?/locale"]
-text = ["dep:hephae-text", "hephae-ui?/text"]
-ui = ["dep:hephae-ui"]
+atlas = ["dep:hephae-atlas", "hephae-plugins/atlas"]
+locale = ["dep:hephae-locale", "hephae-text?/locale", "hephae-plugins/locale"]
+text = ["dep:hephae-text", "hephae-ui?/text", "hephae-plugins/text"]
+ui = ["dep:hephae-ui", "hephae-plugins/ui"]
 
 [[example]]
 name = "quad"

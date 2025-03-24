@@ -24,6 +24,7 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [dependencies]
 hephae-locale = { workspace = true, optional = true }
+hephae-utils.workspace = true
 
 bevy_app.workspace = true
 bevy_asset.workspace = true

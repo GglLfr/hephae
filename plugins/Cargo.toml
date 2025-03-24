@@ -1,6 +1,6 @@
 [package]
-name = "hephae-utils-derive"
-description = "Hephae's generic utility module proc-macro derive."
+name = "hephae-plugins"
+description = "Provides the `hephae! { ... }` macro to easily define plugins."
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -27,3 +27,9 @@ proc-macro = true
 
 [dependencies]
 hephae-macros.workspace = true
+
+[features]
+atlas = []
+locale = []
+text = []
+ui = []

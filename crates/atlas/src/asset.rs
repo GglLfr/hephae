@@ -249,6 +249,7 @@ pub enum TextureAtlasError {
 /// `"page-{i}"` (without the brackets). Therefore, doing (for example)
 /// `server.load::<Image>("sprites.atlas.ron#page-0")` is possible and will return the 0th page
 /// image of the atlas, provided the atlas actually has a 0th page.
+#[derive(Debug, Copy, Clone, Default)]
 pub struct TextureAtlasLoader;
 impl AssetLoader for TextureAtlasLoader {
     type Asset = TextureAtlas;
