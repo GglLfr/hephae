@@ -1,13 +1,12 @@
-//! Defines functionalitie associated with vertex attributes and their respective layouts and
+//! Defines functionalities associated with vertex attributes and their respective layouts and
 //! formats.
 
 use std::borrow::{Borrow, BorrowMut};
 
-use bevy_color::prelude::*;
-use bevy_derive::{Deref, DerefMut};
-use bevy_math::prelude::*;
-use bevy_reflect::prelude::*;
-use bevy_render::render_resource::{VertexAttribute, VertexFormat};
+use bevy::{
+    prelude::*,
+    render::render_resource::{VertexAttribute, VertexFormat},
+};
 use bytemuck::{Pod, Zeroable};
 pub use hephae_render_derive::VertexLayout;
 

@@ -4,31 +4,79 @@
 
 use std::{any::TypeId, hash::Hash, marker::PhantomData, ops::Range, sync::Mutex};
 
-use bevy_app::prelude::*;
-use bevy_ecs::{
-    component::ComponentId,
-    entity::EntityHashMap,
+use bevy::{
+    core_pipeline::core_2d::{CORE_2D_DEPTH_FORMAT, Transparent2d},
+    ecs::{
+        component::ComponentId,
+        entity::EntityHashMap,
+        storage::SparseSet,
+        system::{ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
+        world::FilteredEntityRef,
+    },
+    math::FloatOrd,
     prelude::*,
-    storage::SparseSet,
-    system::{ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState, lifetimeless::Read},
-    world::FilteredEntityRef,
+    render::{
+        primitives::{Aabb, Frustum},
+        render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, PhaseItemExtraIndex, RenderCommand, SortedPhaseItem},
+        render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat},
+        sync_world::MainEntity,
+        view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
+    },
+    utils::{Parallel, TypeIdMap},
 };
-use bevy_render::{
-    prelude::*,
-    primitives::{Aabb, Frustum, Sphere},
-    render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, RenderCommand, SortedPhaseItem},
-    render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat},
-    sync_world::MainEntity,
-    view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
-};
-use bevy_transform::prelude::*;
-use bevy_utils::{Parallel, TypeIdMap};
 use smallvec::SmallVec;
 
 use crate::{
     attribute::VertexLayout,
     drawer::{Drawer, HasDrawer},
 };
+
+/// A [`PhaseItem`](bevy_render::render_phase::PhaseItem) that works with [`Vertex`].
+///
+/// The phase item is special in that it's aware of which draw request from a [`Drawer`] it's
+/// actually rendering. This means, multiple [`DrawerPhaseItem`]s may point to the same entities but
+/// draw different things.
+pub trait DrawerPhaseItem: CachedRenderPipelinePhaseItem + SortedPhaseItem {
+    /// Creates the phase item associated with a [`Drawer`] based on its layer, render and main
+    /// entity, rendering pipeline ID, draw function ID, and command index.
+    fn create(
+        layer: f32,
+        entity: (Entity, MainEntity),
+        pipeline: CachedRenderPipelineId,
+        draw_function: DrawFunctionId,
+        command: usize,
+    ) -> Self;
+
+    /// Returns the associated draw request index.
+    fn command(&self) -> usize;
+}
+
+impl DrawerPhaseItem for Transparent2d {
+    #[inline]
+    fn create(
+        layer: f32,
+        entity: (Entity, MainEntity),
+        pipeline: CachedRenderPipelineId,
+        draw_function: DrawFunctionId,
+        command: usize,
+    ) -> Self {
+        Self {
+            sort_key: FloatOrd(layer),
+            entity,
+            pipeline,
+            draw_function,
+            batch_range: 0..0,
+            extracted_index: command,
+            extra_index: PhaseItemExtraIndex::None,
+            indexed: true,
+        }
+    }
+
+    #[inline]
+    fn command(&self) -> usize {
+        self.extracted_index
+    }
+}
 
 /// The heart of Hephae. Instances of `Vertex` directly represent the elements of the vertex buffer
 /// in the GPU.
@@ -49,7 +97,7 @@ pub trait Vertex: Send + Sync + VertexLayout {
     /// Format of the depth-stencil pass supplied to the rendering pipeline creation parameters.
     /// Defaults to [`Some(TextureFormat::Depth32Float)`], which is the default for 2D core pipeline
     /// depth-stencil format. [`None`] means the pipeline will not have a depth-stencil state.
-    const DEPTH_FORMAT: Option<TextureFormat> = Some(TextureFormat::Depth32Float);
+    const DEPTH_FORMAT: Option<TextureFormat> = Some(CORE_2D_DEPTH_FORMAT);
 
     /// System parameter to fetch when [creating the batch](Vertex::create_batch).
     type BatchParam: SystemParam;
@@ -61,7 +109,7 @@ pub trait Vertex: Send + Sync + VertexLayout {
     type BatchProp: Send + Sync;
 
     /// The [`PhaseItem`](bevy_render::render_phase::PhaseItem) that this vertex works with.
-    type Item: CachedRenderPipelinePhaseItem + SortedPhaseItem;
+    type Item: DrawerPhaseItem;
     /// Additional GPU render commands to invoke before actually drawing the vertex and index
     /// buffers. For example, this may be used to set the texture-sampling bind group provided by
     /// [`BatchProp`](Vertex::BatchProp).
@@ -74,8 +122,7 @@ pub trait Vertex: Send + Sync + VertexLayout {
     /// Further customizes the application. Called in [`Plugin::finish`]. For example, this may be
     /// used to add systems extracting texture atlas pages and validating bind groups associated
     /// with them.
-    #[allow(unused)]
-    fn setup(app: &mut App) {}
+    fn setup(#[allow(unused)] app: &mut App) {}
 
     /// Creates the additional render pipeline property for use in
     /// [specialization](Vertex::specialize_pipeline).
@@ -83,17 +130,8 @@ pub trait Vertex: Send + Sync + VertexLayout {
 
     /// Specializes the render pipeline descriptor based off of the [key](Vertex::PipelineKey) and
     /// [prop](Vertex::PipelineProp) of the common render pipeline descriptor.
-    fn specialize_pipeline(key: Self::PipelineKey, prop: &Self::PipelineProp, desc: &mut RenderPipelineDescriptor);
-
-    /// Creates the phase item associated with a [`Drawer`] based on its layer, render and
-    /// main entity, rendering pipeline ID, draw function ID, and command index.
-    fn create_item(
-        layer: f32,
-        entity: (Entity, MainEntity),
-        pipeline: CachedRenderPipelineId,
-        draw_function: DrawFunctionId,
-        command: usize,
-    ) -> Self::Item;
+    #[allow(unused)]
+    fn specialize_pipeline(key: Self::PipelineKey, prop: &Self::PipelineProp, desc: &mut RenderPipelineDescriptor) {}
 
     /// Creates additional batch property for use in rendering.
     fn create_batch(param: &mut SystemParamItem<Self::BatchParam>, key: Self::PipelineKey) -> Self::BatchProp;
@@ -138,13 +176,7 @@ pub fn check_visibilities<T: Vertex>(
     world: &mut World,
     visibility: &mut QueryState<FilteredEntityRef>,
     views: &mut SystemState<(
-        Query<(
-            Entity,
-            Read<Frustum>,
-            Option<Read<RenderLayers>>,
-            Read<Camera>,
-            Has<NoCpuCulling>,
-        )>,
+        Query<(Entity, &Frustum, Option<&RenderLayers>, &Camera, Has<NoCpuCulling>)>,
         Query<(
             Entity,
             &InheritedVisibility,
@@ -218,7 +250,7 @@ pub fn check_visibilities<T: Vertex>(
                 if !no_frustum_culling && !no_cpu_culling {
                     if let Some(model_aabb) = maybe_model_aabb {
                         let world_from_local = transform.affine();
-                        let model_sphere = Sphere {
+                        let model_sphere = bevy::render::primitives::Sphere {
                             center: world_from_local.transform_point3a(model_aabb.center),
                             radius: transform.radius_vec3a(model_aabb.half_extents),
                         };

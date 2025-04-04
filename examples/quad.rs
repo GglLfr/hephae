@@ -4,13 +4,7 @@ use bevy::{
         query::QueryItem,
         system::{SystemParamItem, lifetimeless::SRes},
     },
-    math::FloatOrd,
     prelude::*,
-    render::{
-        render_phase::{DrawFunctionId, PhaseItemExtraIndex},
-        render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor},
-        sync_world::MainEntity,
-    },
 };
 use hephae::prelude::*;
 
@@ -47,27 +41,6 @@ impl Vertex for Vert {
 
     #[inline]
     fn init_pipeline(_: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {}
-
-    #[inline]
-    fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
-
-    #[inline]
-    fn create_item(
-        layer: f32,
-        entity: (Entity, MainEntity),
-        pipeline: CachedRenderPipelineId,
-        draw_function: DrawFunctionId,
-        command: usize,
-    ) -> Self::Item {
-        Transparent2d {
-            sort_key: FloatOrd(layer),
-            entity,
-            pipeline,
-            draw_function,
-            batch_range: 0..0,
-            extra_index: PhaseItemExtraIndex(command as u32),
-        }
-    }
 
     #[inline]
     fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}

@@ -4,13 +4,8 @@ use bevy::{
         query::QueryItem,
         system::{SystemParamItem, lifetimeless::Read},
     },
-    math::{Affine3A, FloatOrd},
+    math::Affine3A,
     prelude::*,
-    render::{
-        render_phase::{DrawFunctionId, PhaseItemExtraIndex},
-        render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor},
-        sync_world::MainEntity,
-    },
 };
 use hephae::prelude::*;
 
@@ -47,27 +42,6 @@ impl Vertex for Vert {
 
     #[inline]
     fn init_pipeline(_: SystemParamItem<Self::PipelineParam>) -> Self::PipelineProp {}
-
-    #[inline]
-    fn specialize_pipeline(_: Self::PipelineKey, _: &Self::PipelineProp, _: &mut RenderPipelineDescriptor) {}
-
-    #[inline]
-    fn create_item(
-        layer: f32,
-        entity: (Entity, MainEntity),
-        pipeline: CachedRenderPipelineId,
-        draw_function: DrawFunctionId,
-        command: usize,
-    ) -> Self::Item {
-        Transparent2d {
-            sort_key: FloatOrd(layer),
-            entity,
-            pipeline,
-            draw_function,
-            batch_range: 0..0,
-            extra_index: PhaseItemExtraIndex(command as u32),
-        }
-    }
 
     #[inline]
     fn create_batch(_: &mut SystemParamItem<Self::BatchParam>, _: Self::PipelineKey) -> Self::BatchProp {}
@@ -183,12 +157,7 @@ fn startup(mut commands: Commands) {
     });
 }
 
-fn rotate(
-    time: Res<Time>,
-    mut camera: Query<&mut OrthographicProjection>,
-    mut rotate: Query<&mut Ui, With<Rotate>>,
-    mut timer: Local<f64>,
-) {
+fn rotate(time: Res<Time>, mut rotate: Query<&mut Ui, With<Rotate>>, mut timer: Local<f64>) {
     *timer += time.delta_secs_f64();
     if *timer >= 1. {
         *timer -= 1.;
@@ -201,10 +170,4 @@ fn rotate(
             }
         }
     }
-
-    // Just to showcase that the UI widgets don't change regardless of camera scales.
-    let Ok(mut proj) = camera.get_single_mut() else {
-        return;
-    };
-    proj.scale = 1.5 + ((time.elapsed_secs() * 4.).sin() + 1.0) * 0.25;
 }

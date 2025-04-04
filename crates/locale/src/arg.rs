@@ -9,16 +9,14 @@ use std::{
     fmt::{Error as FmtError, Write},
 };
 
-use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::prelude::*;
-use bevy_reflect::{Reflectable, prelude::*};
+use bevy::{ecs::component::Mutable, prelude::*, reflect::Reflectable};
 
 use crate::def::{Locale, LocaleFmt, LocaleResult};
 
 /// Components that are localizable. For example, this may be a text widget component. You may
 /// configure Hephae to register this type for updating using
 /// [`LocaleTargetPlugin`](crate::LocaleTargetPlugin).
-pub trait LocaleTarget: Component {
+pub trait LocaleTarget: Component<Mutability = Mutable> {
     /// Receiver for localized strings result. Calling [`str::clone_into`] is recommended.
     fn update(&mut self, src: &str);
 }

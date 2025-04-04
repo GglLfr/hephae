@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use bevy_ecs::prelude::*;
+use bevy::prelude::*;
 
 /// Extension traits for `Option<&T>`, `Option<&mut T>`, and `Option<Ref<T>>`.
 pub trait ComponentOption<T: Deref<Target: Component + Sized>>: Sized {

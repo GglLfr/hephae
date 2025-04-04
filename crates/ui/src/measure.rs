@@ -7,18 +7,19 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
 };
 
-use bevy_ecs::{
-    component::{ComponentId, ComponentIdFor},
-    prelude::*,
-    query::{QueryItem, ReadOnlyQueryData},
-    storage::SparseSet,
-    system::{
-        ReadOnlySystemParam, SystemParamItem, SystemState,
-        lifetimeless::{Read, SQuery},
+use bevy::{
+    ecs::{
+        component::{ComponentId, ComponentIdFor},
+        query::{QueryItem, ReadOnlyQueryData},
+        storage::SparseSet,
+        system::{
+            ReadOnlySystemParam, SystemParamItem, SystemState,
+            lifetimeless::{Read, SQuery},
+        },
+        world::unsafe_world_cell::UnsafeWorldCell,
     },
-    world::unsafe_world_cell::UnsafeWorldCell,
+    prelude::*,
 };
-use bevy_math::prelude::*;
 
 /// Content-size measurer component.
 ///
@@ -51,7 +52,7 @@ pub(crate) fn on_measure_inserted<T: Measure>(
     measurements: Res<Measurements>,
     id: ComponentIdFor<T>,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
     commands.entity(e).insert(ContentSize(
         measurements
             .get(id.get())

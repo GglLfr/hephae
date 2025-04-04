@@ -5,7 +5,7 @@
 //! This means integrating a texture atlas into `Vertex` rendering will significantly increase
 //! batching potential, leading to fewer GPU render calls.
 //!
-//! This module provides the [`TextureAtlas`] type. See [this module](crate::asset) for more
+//! This module provides the [`Atlas`] type. See [this module](crate::asset) for more
 //! information on how the atlas implements [`Asset`].
 //!
 //! This module provides [`AtlasEntry`] and [`AtlasIndex`] components; the former being the
@@ -17,12 +17,11 @@
 
 use std::borrow::Cow;
 
-use bevy_asset::{ReflectAsset, prelude::*};
-use bevy_ecs::prelude::*;
-use bevy_image::prelude::*;
-use bevy_math::prelude::*;
-use bevy_reflect::prelude::*;
-use bevy_utils::{HashMap, HashSet, prelude::*};
+use bevy::{
+    asset::ReflectAsset,
+    platform_support::collections::{HashMap, HashSet},
+    prelude::*,
+};
 use nonmax::NonMaxUsize;
 
 /// A list of textures packed into one large texture. See the [module-level](crate::atlas)
@@ -30,7 +29,7 @@ use nonmax::NonMaxUsize;
 /// framework.
 #[derive(Asset, Reflect, Clone, Debug)]
 #[reflect(Asset, Debug)]
-pub struct TextureAtlas {
+pub struct Atlas {
     /// The list of pages contained in this atlas. Items may be modified, but growing or shrinking
     /// this vector is **discouraged**.
     pub pages: Vec<AtlasPage>,
@@ -39,7 +38,7 @@ pub struct TextureAtlas {
     pub sprite_map: HashMap<String, (usize, usize)>,
 }
 
-/// A page located in a [`TextureAtlas`]. Contains the handle to the page image, and rectangle
+/// A page located in a [`Atlas`]. Contains the handle to the page image, and rectangle
 /// placements of each sprites.
 #[derive(Reflect, Clone, Debug)]
 #[reflect(Debug)]
@@ -47,7 +46,7 @@ pub struct AtlasPage {
     /// The page handle.
     pub image: Handle<Image>,
     /// List of sprite rectangle placements in the page; may be looked up from
-    /// [`TextureAtlas::sprite_map`]. Each elements consist of the sprite's placement in the page,
+    /// [`Atlas::sprite_map`]. Each elements consist of the sprite's placement in the page,
     /// and a nine-slice cuts if any.
     pub sprites: Vec<(URect, Option<NineSliceCuts>)>,
 }
@@ -74,7 +73,7 @@ pub struct NineSliceCuts {
 #[require(AtlasIndex)]
 pub struct AtlasEntry {
     /// The handle to the texture atlas.
-    pub atlas: Handle<TextureAtlas>,
+    pub atlas: Handle<Atlas>,
     /// The lookup key.
     pub key: Cow<'static, str>,
 }
@@ -89,7 +88,7 @@ pub struct AtlasIndex {
 }
 
 impl AtlasIndex {
-    /// Obtains the [page index](TextureAtlas::pages) and [sprite index](AtlasPage::sprites), or
+    /// Obtains the [page index](Atlas::pages) and [sprite index](AtlasPage::sprites), or
     /// [`None`] if the [key](AtlasIndex) is invalid.
     #[inline]
     pub const fn indices(self) -> Option<(usize, usize)> {
@@ -100,20 +99,20 @@ impl AtlasIndex {
     }
 }
 
-/// System to update [`AtlasIndex`] according to changes [`AtlasEntry`] and [`TextureAtlas`] assets.
+/// System to update [`AtlasIndex`] according to changes [`AtlasEntry`] and [`Atlas`] assets.
 pub fn update_atlas_index(
-    mut events: EventReader<AssetEvent<TextureAtlas>>,
-    atlases: Res<Assets<TextureAtlas>>,
+    mut events: EventReader<AssetEvent<Atlas>>,
+    atlases: Res<Assets<Atlas>>,
     mut entries: ParamSet<(
         Query<(&AtlasEntry, &mut AtlasIndex), Or<(Changed<AtlasEntry>, Added<AtlasIndex>)>>,
         Query<(&AtlasEntry, &mut AtlasIndex)>,
     )>,
-    mut changed: Local<HashSet<AssetId<TextureAtlas>>>,
+    mut changed: Local<HashSet<AssetId<Atlas>>>,
 ) {
     changed.clear();
     for &event in events.read() {
         if let AssetEvent::Added { id } | AssetEvent::Modified { id } = event {
-            changed.insert(id);
+            changed.insert(id.clone());
         }
     }
 

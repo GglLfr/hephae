@@ -1,4 +1,4 @@
-//! [`AssetLoader`] implementation for loading [`TextureAtlas`].
+//! [`AssetLoader`] implementation for loading [`Atlas`].
 //!
 //! Format is as the following example:
 //! ```ron
@@ -18,16 +18,19 @@
 //! )
 //! ```
 
-use std::io::Error as IoError;
+use std::io;
 
-use bevy_asset::{
-    AssetLoadError, AssetLoader, AssetPath, LoadContext, ParseAssetPathError, RenderAssetUsages, io::Reader, ron,
-    ron::error::SpannedError,
+use bevy::{
+    asset::{
+        AssetLoader, AssetPath, LoadContext, LoadDirectError, ParseAssetPathError, RenderAssetUsages, io::Reader, ron,
+        ron::error::SpannedError,
+    },
+    image::TextureFormatPixelInfo,
+    platform_support::{collections::HashMap, hash::FixedHasher},
+    prelude::*,
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use bevy_image::{TextureFormatPixelInfo, prelude::*};
-use bevy_math::{prelude::*, uvec2};
-use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy_utils::HashMap;
+use derive_more::{Display, Error, From};
 use guillotiere::{
     AllocId, AtlasAllocator, Change, ChangeList,
     euclid::{Box2D, Size2D},
@@ -38,32 +41,31 @@ use serde::{
     de::{Error as DeError, MapAccess, Visitor},
     ser::SerializeStruct,
 };
-use thiserror::Error;
 
-use crate::atlas::{AtlasPage, NineSliceCuts, TextureAtlas};
+use crate::atlas::{Atlas, AtlasPage, NineSliceCuts};
 
-/// Asset file representation of [`TextureAtlas`].
+/// Asset file representation of [`Atlas`].
 ///
 /// This struct `impl`s [`Serialize`] and
 /// [`Deserialize`], which means it may be (de)serialized into any implementation, albeit
-/// [`TextureAtlasLoader`] uses [RON](ron) format specifically.
+/// [`AtlasLoader`] uses [RON](ron) format specifically.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TextureAtlasFile {
+pub struct AtlasFile {
     /// How far away the edges of one sprite to another and to the page boundaries, in pixels. This
     /// may be utilized to mitigate the imperfect precision with texture sampling where a fraction
     /// of neighboring sprites actually get sampled instead.
-    #[serde(default = "TextureAtlasFile::default_padding")]
+    #[serde(default = "AtlasFile::default_padding")]
     pub padding: u32,
     /// How much the sprites will "bleed" outside its edge. That is, how much times the edges of a
     /// sprite is copied to its surrounding border, creating a bleeding effect. This may be utilized
     /// to mitigate the imperfect precision with texture sampling where the edge of a sprite doesn't
     /// quite reach the edge of the vertices.
-    #[serde(default = "TextureAtlasFile::default_bleeding")]
+    #[serde(default = "AtlasFile::default_bleeding")]
     pub bleeding: u32,
     #[serde(
-        default = "TextureAtlasFile::default_usages",
-        serialize_with = "TextureAtlasFile::serialize_usages",
-        deserialize_with = "TextureAtlasFile::deserialize_usages"
+        default = "AtlasFile::default_usages",
+        serialize_with = "AtlasFile::serialize_usages",
+        deserialize_with = "AtlasFile::deserialize_usages"
     )]
     /// Defines the usages for the resulting atlas pages.
     pub usages: RenderAssetUsages,
@@ -71,7 +73,7 @@ pub struct TextureAtlasFile {
     pub entries: Vec<TextureAtlasEntry>,
 }
 
-impl TextureAtlasFile {
+impl AtlasFile {
     /// Default padding of a texture atlas is 4 pixels.
     #[inline]
     pub const fn default_padding() -> u32 {
@@ -148,7 +150,7 @@ impl TextureAtlasFile {
     }
 }
 
-/// A [TextureAtlas] file entry. May either be a file or a directory containing files.
+/// A [Atlas] file entry. May either be a file or a directory containing files.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum TextureAtlasEntry {
@@ -165,7 +167,7 @@ impl<T: ToString> From<T> for TextureAtlasEntry {
     }
 }
 
-/// Additional settings that may be adjusted when loading a [TextureAtlas]. This is typically used
+/// Additional settings that may be adjusted when loading a [Atlas]. This is typically used
 /// to limit texture sizes to what the rendering backend supports.
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub struct TextureAtlasSettings {
@@ -191,11 +193,11 @@ impl Default for TextureAtlasSettings {
     }
 }
 
-/// Errors that may arise when loading a [`TextureAtlas`].
-#[derive(Error, Debug)]
+/// Errors that may arise when loading a [`Atlas`].
+#[derive(Error, Debug, Display, From)]
 pub enum TextureAtlasError {
     /// Error that arises when a texture is larger than the maximum size of the atlas page.
-    #[error("Texture '{name}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]")]
+    #[display("Texture '{name}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]")]
     TooLarge {
         /// The sprite lookup key.
         name: String,
@@ -210,7 +212,7 @@ pub enum TextureAtlasError {
     },
     /// Error that arises when the texture couldn't be converted into
     /// [`TextureFormat::Rgba8UnormSrgb`].
-    #[error("Texture '{name}' has an unsupported format: {format:?}")]
+    #[display("Texture '{name}' has an unsupported format: {format:?}")]
     UnsupportedFormat {
         /// The sprite lookup key.
         name: String,
@@ -218,27 +220,27 @@ pub enum TextureAtlasError {
         format: TextureFormat,
     },
     /// Error that arises when the texture couldn't be loaded at all.
-    #[error("Texture '{name}' failed to load: {error}")]
+    #[display("Texture '{name}' failed to load: {error}")]
     InvalidImage {
         /// The sprite lookup key.
         name: String,
         /// The error that arises when trying to load the texture.
-        error: AssetLoadError,
+        error: LoadDirectError,
     },
     /// Error that arises when a texture has an invalid path string.
-    #[error(transparent)]
+    #[display("{_0}")]
     InvalidPath(#[from] ParseAssetPathError),
     /// Error that arises when the `.atlas` file has an invalid RON syntax.
-    #[error(transparent)]
+    #[display("{_0}")]
     InvalidFile(#[from] SpannedError),
     /// Error that arises when an IO error occurs.
-    #[error(transparent)]
-    Io(#[from] IoError),
+    #[display("{_0}")]
+    Io(#[from] io::Error),
 }
 
-/// Dedicated [`AssetLoader`] to load [`TextureAtlas`].
+/// Dedicated [`AssetLoader`] to load [`Atlas`].
 ///
-/// Parses file into [`TextureAtlasFile`]
+/// Parses file into [`AtlasFile`]
 /// representation, and accepts [`TextureAtlasSettings`] as additional optional configuration. May
 /// throw [`TextureAtlasError`] for erroneous assets.
 ///
@@ -250,9 +252,9 @@ pub enum TextureAtlasError {
 /// `server.load::<Image>("sprites.atlas.ron#page-0")` is possible and will return the 0th page
 /// image of the atlas, provided the atlas actually has a 0th page.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct TextureAtlasLoader;
-impl AssetLoader for TextureAtlasLoader {
-    type Asset = TextureAtlas;
+pub struct AtlasLoader;
+impl AssetLoader for AtlasLoader {
+    type Asset = Atlas;
     type Settings = TextureAtlasSettings;
     type Error = TextureAtlasError;
 
@@ -272,7 +274,7 @@ impl AssetLoader for TextureAtlasLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
 
-        let TextureAtlasFile {
+        let AtlasFile {
             padding,
             bleeding,
             usages,
@@ -305,7 +307,7 @@ impl AssetLoader for TextureAtlasLoader {
                     };
 
                     let src = match load_context.loader().immediate().load::<Image>(&path).await {
-                        Err(e) => return Err(TextureAtlasError::InvalidImage { name, error: e.error }),
+                        Err(error) => return Err(TextureAtlasError::InvalidImage { name, error }),
                         Ok(src) => src,
                     }
                     .take();
@@ -344,9 +346,9 @@ impl AssetLoader for TextureAtlasLoader {
             2 * (x + y)
         });
 
-        let mut atlas = TextureAtlas {
+        let mut atlas = Atlas {
             pages: Vec::new(),
-            sprite_map: HashMap::new(),
+            sprite_map: HashMap::with_hasher(FixedHasher),
         };
 
         let mut end = |ids: HashMap<AllocId, (String, Image, bool)>, packer: AtlasAllocator| {
@@ -357,19 +359,10 @@ impl AssetLoader for TextureAtlasLoader {
             } = packer.size().to_u32();
 
             let pixel_size = TextureFormat::Rgba8UnormSrgb.pixel_size();
-            let mut image = Image::new(
-                Extent3d {
-                    width: page_width,
-                    height: page_height,
-                    depth_or_array_layers: 1,
-                },
-                TextureDimension::D2,
-                vec![0; page_width as usize * page_height as usize * pixel_size],
-                TextureFormat::Rgba8UnormSrgb,
-                usages,
-            );
 
             let mut sprites = Vec::new();
+            let mut data = vec![0; page_width as usize * page_height as usize * pixel_size];
+
             for (id, (name, texture, has_nine_slice)) in ids {
                 let Box2D { min, max } = packer[id].to_usize();
                 let nine_offset = usize::from(has_nine_slice);
@@ -380,6 +373,8 @@ impl AssetLoader for TextureAtlasLoader {
                         format: texture.texture_descriptor.format,
                     });
                 };
+
+                let texture = texture.data.as_ref().unwrap();
 
                 let rect_width = max.x - min.x;
                 let rect_height = max.y - min.y;
@@ -393,19 +388,19 @@ impl AssetLoader for TextureAtlasLoader {
                 // Set topleft-wards bleeding to topleft pixel and topright-wards bleeding to topright pixel. This
                 // is so that the subsequent bleeding operation may just use a split-off copy.
                 for bleed_x in 0..bleed {
-                    image.data[dst_pos(pad - bleed_x - 1, pad - bleed)..][..pixel_size]
-                        .copy_from_slice(&texture.data[src_pos(0, 0)..][..pixel_size]);
+                    data[dst_pos(pad - bleed_x - 1, pad - bleed)..][..pixel_size]
+                        .copy_from_slice(&texture[src_pos(0, 0)..][..pixel_size]);
 
-                    image.data[dst_pos(rect_width - pad + bleed_x, pad - bleed)..][..pixel_size]
-                        .copy_from_slice(&texture.data[src_pos(src_row - 1, 0)..][..pixel_size]);
+                    data[dst_pos(rect_width - pad + bleed_x, pad - bleed)..][..pixel_size]
+                        .copy_from_slice(&texture[src_pos(src_row - 1, 0)..][..pixel_size]);
                 }
 
                 // Copy top-most edge to bleed upwards.
-                image.data[dst_pos(pad, pad - bleed)..][..src_row * pixel_size]
-                    .copy_from_slice(&texture.data[src_pos(0, 0)..][..src_row * pixel_size]);
+                data[dst_pos(pad, pad - bleed)..][..src_row * pixel_size]
+                    .copy_from_slice(&texture[src_pos(0, 0)..][..src_row * pixel_size]);
                 for bleed_y in 1..bleed {
                     let split = dst_pos(pad - bleed, pad - bleed + bleed_y);
-                    let (src, dst) = image.data.split_at_mut(split);
+                    let (src, dst) = data.split_at_mut(split);
 
                     let count = (src_row + 2 * bleed) * pixel_size;
                     dst[..count].copy_from_slice(&src[split - dst_row * pixel_size..][..count]);
@@ -414,21 +409,21 @@ impl AssetLoader for TextureAtlasLoader {
                 // Copy the actual image, while performing sideways bleeding.
                 for y in 0..rect_height - 2 * pad {
                     let count = src_row * pixel_size;
-                    image.data[dst_pos(pad, pad + y)..][..count].copy_from_slice(&texture.data[src_pos(0, y)..][..count]);
+                    data[dst_pos(pad, pad + y)..][..count].copy_from_slice(&texture[src_pos(0, y)..][..count]);
 
                     for bleed_x in 0..bleed {
-                        image.data[dst_pos(pad - bleed_x - 1, pad + y)..][..pixel_size]
-                            .copy_from_slice(&texture.data[src_pos(0, y)..][..pixel_size]);
+                        data[dst_pos(pad - bleed_x - 1, pad + y)..][..pixel_size]
+                            .copy_from_slice(&texture[src_pos(0, y)..][..pixel_size]);
 
-                        image.data[dst_pos(rect_width - pad + bleed_x, pad + y)..][..pixel_size]
-                            .copy_from_slice(&texture.data[src_pos(src_row - 1, y)..][..pixel_size]);
+                        data[dst_pos(rect_width - pad + bleed_x, pad + y)..][..pixel_size]
+                            .copy_from_slice(&texture[src_pos(src_row - 1, y)..][..pixel_size]);
                     }
                 }
 
                 // Copy the bottom-most edge to bleed downwards.
                 for bleed_y in 0..bleed {
                     let split = dst_pos(pad - bleed, rect_height - pad + bleed_y);
-                    let (src, dst) = image.data.split_at_mut(split);
+                    let (src, dst) = data.split_at_mut(split);
 
                     let count = (src_row + 2 * bleed) * pixel_size;
                     dst[..count].copy_from_slice(&src[split - dst_row * pixel_size..][..count]);
@@ -451,7 +446,7 @@ impl AssetLoader for TextureAtlasLoader {
 
                         let mut found_left = false;
                         for x in 1..src_row + 1 {
-                            let alpha = texture.data[x * pixel_size + 3];
+                            let alpha = texture[x * pixel_size + 3];
                             if !found_left && alpha >= 127 {
                                 found_left = true;
                                 cuts.left = x as u32;
@@ -463,7 +458,7 @@ impl AssetLoader for TextureAtlasLoader {
 
                         let mut found_top = false;
                         for y in 1..rect_height - 2 * pad + 1 {
-                            let alpha = texture.data[y * (src_row + nine_offset) * pixel_size + 3];
+                            let alpha = texture[y * (src_row + nine_offset) * pixel_size + 3];
                             if !found_top && alpha >= 127 {
                                 found_top = true;
                                 cuts.top = y as u32;
@@ -482,7 +477,20 @@ impl AssetLoader for TextureAtlasLoader {
 
             let page_num = atlas.pages.len();
             atlas.pages.push(AtlasPage {
-                image: load_context.add_labeled_asset(format!("page-{page_num}"), image),
+                image: load_context.add_labeled_asset(
+                    format!("page-{page_num}"),
+                    Image::new(
+                        Extent3d {
+                            width: page_width,
+                            height: page_height,
+                            depth_or_array_layers: 1,
+                        },
+                        TextureDimension::D2,
+                        data,
+                        TextureFormat::Rgba8UnormSrgb,
+                        usages,
+                    ),
+                ),
                 sprites,
             });
 
@@ -491,7 +499,7 @@ impl AssetLoader for TextureAtlasLoader {
 
         'pages: while !entries.is_empty() {
             let mut packer = AtlasAllocator::new(size2(init_width as i32, init_height as i32));
-            let mut ids = HashMap::<AllocId, (String, Image, bool)>::new();
+            let mut ids = HashMap::<AllocId, (String, Image, bool)>::with_hasher(FixedHasher);
 
             while let Some((name, texture, has_nine_slice)) = entries.pop() {
                 let UVec2 {
@@ -540,7 +548,7 @@ impl AssetLoader for TextureAtlasLoader {
                             unreachable!("resizing shouldn't cause rectangles to become unfittable")
                         }
 
-                        let mut id_map = HashMap::new();
+                        let mut id_map = HashMap::with_hasher(FixedHasher);
                         for Change { old, new } in changes {
                             let rect = ids.remove(&old.id).unwrap();
                             id_map.insert(new.id, rect);

@@ -2,17 +2,18 @@
 
 use std::{marker::PhantomData, sync::PoisonError};
 
-use bevy_ecs::{
+use bevy::{
+    ecs::{
+        component::Mutable,
+        query::{QueryFilter, QueryItem, ReadOnlyQueryData},
+        system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
+    },
     prelude::*,
-    query::{QueryFilter, QueryItem, ReadOnlyQueryData},
-    system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
-};
-use bevy_reflect::prelude::*;
-use bevy_render::{
-    self, Extract,
-    prelude::*,
-    sync_world::RenderEntity,
-    view::{ExtractedView, RenderVisibleEntities},
+    render::{
+        Extract,
+        sync_world::RenderEntity,
+        view::{ExtractedView, RenderVisibleEntities},
+    },
 };
 use fixedbitset::FixedBitSet;
 use vec_belt::Transfer;
@@ -24,7 +25,7 @@ use crate::{
 
 /// A render world [`Component`] extracted from the main world that will be used to issue draw
 /// requests.
-pub trait Drawer: TypePath + Component + Sized {
+pub trait Drawer: TypePath + Component<Mutability = Mutable> + Sized {
     /// The type of vertex this drawer works with.
     type Vertex: Vertex;
 

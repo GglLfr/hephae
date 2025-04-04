@@ -15,47 +15,46 @@
 
 use std::{marker::PhantomData, ops::Range, sync::PoisonError};
 
-use bevy_asset::prelude::*;
-use bevy_core_pipeline::tonemapping::{
-    DebandDither, Tonemapping, TonemappingLuts, get_lut_bind_group_layout_entries, get_lut_bindings,
-};
-use bevy_ecs::{
-    entity::EntityHashMap,
+use bevy::{
+    core_pipeline::tonemapping::{
+        DebandDither, Tonemapping, TonemappingLuts, get_lut_bind_group_layout_entries, get_lut_bindings,
+    },
+    ecs::{
+        query::ROQueryItem,
+        system::{
+            StaticSystemParam, SystemParamItem, SystemState,
+            lifetimeless::{Read, SRes},
+        },
+    },
+    platform_support::collections::HashMap,
     prelude::*,
-    query::ROQueryItem,
-    system::{
-        StaticSystemParam, SystemParamItem, SystemState,
-        lifetimeless::{Read, SRes},
+    render::{
+        Extract,
+        render_asset::RenderAssets,
+        render_phase::{
+            DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult, SetItemPipeline, TrackedRenderPass,
+            ViewSortedRenderPhases,
+        },
+        render_resource::{
+            BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer, BufferAddress, BufferBinding,
+            BufferDescriptor, BufferId, BufferInitDescriptor, BufferSize, BufferUsages, ColorTargetState, ColorWrites,
+            CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace, IndexFormat, MultisampleState,
+            PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor, SamplerId,
+            ShaderDefVal, ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState,
+            StencilState, TextureFormat, TextureViewId, VertexBufferLayout, VertexState, VertexStepMode,
+            binding_types::uniform_buffer,
+        },
+        renderer::{RenderDevice, RenderQueue},
+        sync_world::MainEntity,
+        texture::{FallbackImage, GpuImage},
+        view::{ExtractedView, RetainedViewEntity, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
     },
 };
-use bevy_image::BevyDefault;
-use bevy_render::{
-    Extract,
-    prelude::*,
-    render_asset::RenderAssets,
-    render_phase::{
-        DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, SetItemPipeline,
-        TrackedRenderPass, ViewSortedRenderPhases,
-    },
-    render_resource::{
-        BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, BlendState, Buffer, BufferAddress, BufferBinding,
-        BufferDescriptor, BufferId, BufferInitDescriptor, BufferSize, BufferUsages, ColorTargetState, ColorWrites,
-        CompareFunction, DepthBiasState, DepthStencilState, FragmentState, FrontFace, IndexFormat, MultisampleState,
-        PipelineCache, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor, SamplerId, ShaderDefVal,
-        ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-        TextureFormat, TextureViewId, VertexBufferLayout, VertexState, VertexStepMode, binding_types::uniform_buffer,
-    },
-    renderer::{RenderDevice, RenderQueue},
-    sync_world::MainEntity,
-    texture::{FallbackImage, GpuImage},
-    view::{ExtractedView, ViewTarget, ViewUniform, ViewUniformOffset, ViewUniforms},
-};
-use bevy_utils::default;
 use bytemuck::cast_slice;
 use fixedbitset::FixedBitSet;
 use vec_belt::VecBelt;
 
-use crate::vertex::{DrawItems, Vertex};
+use crate::vertex::{DrawItems, DrawerPhaseItem, Vertex};
 
 /// Common pipeline descriptor for use in [specialization](Vertex::specialize_pipeline). See the
 /// module-level documentation.
@@ -264,13 +263,83 @@ impl<T: Vertex> FromWorld for DrawBuffers<T> {
     }
 }
 
-/// Render phase items associated with each views that are responsible over batching draw calls.
 #[derive(Component)]
-pub struct ViewBatches<T: Vertex>(pub EntityHashMap<(T::BatchProp, Range<u32>)>);
-impl<T: Vertex> Default for ViewBatches<T> {
+pub(crate) struct VisibleDrawers<T: Vertex>(pub VecBelt<Entity>, PhantomData<fn() -> T>);
+impl<T: Vertex> Default for VisibleDrawers<T> {
     #[inline]
     fn default() -> Self {
-        Self(default())
+        Self(VecBelt::new(1024), PhantomData)
+    }
+}
+
+pub(crate) fn queue_vertices<T: Vertex>(
+    draw_functions: Res<DrawFunctions<T::Item>>,
+    pipeline: Res<VertexPipeline<T>>,
+    shader: Res<PipelineShader<T>>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<VertexPipeline<T>>>,
+    pipeline_cache: Res<PipelineCache>,
+    mut transparent_phases: ResMut<ViewSortedRenderPhases<T::Item>>,
+    mut views: Query<(
+        &mut VisibleDrawers<T>,
+        &ExtractedView,
+        &Msaa,
+        Option<&Tonemapping>,
+        Option<&DebandDither>,
+    )>,
+    mut items: Query<(Entity, &MainEntity, &mut DrawItems<T>)>,
+    mut iterated: Local<FixedBitSet>,
+) {
+    let draw_function = draw_functions.read().id::<DrawRequests<T>>();
+    for item in &mut views {
+        let (mut visible_drawers, view, &msaa, tonemapping, dither): (
+            Mut<VisibleDrawers<T>>,
+            &ExtractedView,
+            &Msaa,
+            Option<&Tonemapping>,
+            Option<&DebandDither>,
+        ) = item;
+
+        let Some(transparent_phase) = transparent_phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+
+        let view_key = ViewKey {
+            hdr: view.hdr,
+            msaa: msaa.samples().trailing_zeros() as u8,
+            tonemapping: (!view.hdr).then_some(tonemapping.copied()).flatten(),
+            dither: !view.hdr && dither.copied().unwrap_or_default() == DebandDither::Enabled,
+            shader: shader.0.id(),
+        };
+
+        iterated.clear();
+        visible_drawers.0.clear(|entities| {
+            let mut iter = items.iter_many_mut(entities);
+            while let Some((e, &main_e, mut items)) = iter.fetch_next() {
+                let index = e.index() as usize;
+                if iterated[index] {
+                    continue;
+                }
+
+                iterated.grow_and_insert(index);
+                transparent_phase.items.extend(
+                    items
+                        .0
+                        .get_mut()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .iter_mut()
+                        .enumerate()
+                        .map(|(i, &mut (.., layer, ref key))| {
+                            T::Item::create(
+                                layer,
+                                (e, main_e),
+                                pipelines.specialize(&pipeline_cache, &pipeline, (view_key, key.clone())),
+                                draw_function,
+                                i,
+                            )
+                        }),
+                );
+            }
+        });
     }
 }
 
@@ -303,85 +372,13 @@ impl<T: Vertex> Default for ViewIndexBuffer<T> {
     }
 }
 
-#[derive(Component)]
-pub(crate) struct VisibleDrawers<T: Vertex>(pub VecBelt<Entity>, PhantomData<fn() -> T>);
-impl<T: Vertex> Default for VisibleDrawers<T> {
+/// Render phase items associated with each views that are responsible over batching draw calls.
+#[derive(Resource, Deref)]
+pub struct ViewBatches<T: Vertex>(HashMap<(RetainedViewEntity, Entity), (T::BatchProp, Range<u32>)>);
+impl<T: Vertex> Default for ViewBatches<T> {
     #[inline]
     fn default() -> Self {
-        Self(VecBelt::new(1024), PhantomData)
-    }
-}
-
-pub(crate) fn queue_vertices<T: Vertex>(
-    draw_functions: Res<DrawFunctions<T::Item>>,
-    pipeline: Res<VertexPipeline<T>>,
-    shader: Res<PipelineShader<T>>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<VertexPipeline<T>>>,
-    pipeline_cache: Res<PipelineCache>,
-    mut transparent_phases: ResMut<ViewSortedRenderPhases<T::Item>>,
-    mut views: Query<(
-        Entity,
-        &mut VisibleDrawers<T>,
-        &ExtractedView,
-        &Msaa,
-        Option<&Tonemapping>,
-        Option<&DebandDither>,
-    )>,
-    mut items: Query<(Entity, &MainEntity, &mut DrawItems<T>)>,
-    mut iterated: Local<FixedBitSet>,
-) {
-    let draw_function = draw_functions.read().id::<DrawRequests<T>>();
-    for item in &mut views {
-        let (view_entity, mut visible_drawers, view, &msaa, tonemapping, dither): (
-            Entity,
-            Mut<VisibleDrawers<T>>,
-            &ExtractedView,
-            &Msaa,
-            Option<&Tonemapping>,
-            Option<&DebandDither>,
-        ) = item;
-
-        let Some(transparent_phase) = transparent_phases.get_mut(&view_entity) else {
-            continue;
-        };
-
-        let view_key = ViewKey {
-            hdr: view.hdr,
-            msaa: msaa.samples().trailing_zeros() as u8,
-            tonemapping: (!view.hdr).then_some(tonemapping.copied()).flatten(),
-            dither: !view.hdr && dither.copied().unwrap_or_default() == DebandDither::Enabled,
-            shader: shader.0.id(),
-        };
-
-        iterated.clear();
-        visible_drawers.0.clear(|entities| {
-            let mut iter = items.iter_many_mut(entities);
-            while let Some((e, &main_e, mut items)) = iter.fetch_next() {
-                let index = e.index() as usize;
-                if iterated[index] {
-                    continue;
-                }
-
-                iterated.grow_and_insert(index);
-                transparent_phase.items.extend(
-                    items
-                        .0
-                        .get_mut()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .iter_mut()
-                        .enumerate()
-                        .map(|(i, &mut (.., layer, ref key))| {
-                            T::create_item(
-                                layer,
-                                (e, main_e),
-                                pipelines.specialize(&pipeline_cache, &pipeline, (view_key, key.clone())),
-                                draw_function,
-                                i,
-                            )
-                        }),
-                );
-            }
-        });
+        Self(default())
     }
 }
 
@@ -392,25 +389,25 @@ pub(crate) fn prepare_indices<T: Vertex>(
             Res<RenderQueue>,
             ResMut<DrawBuffers<T>>,
             ResMut<ViewSortedRenderPhases<T::Item>>,
-            Query<(Entity, &mut ViewIndexBuffer<T>)>,
+            Query<(&ExtractedView, &mut ViewIndexBuffer<T>)>,
             Query<&mut DrawItems<T>>,
         ),
         StaticSystemParam<T::BatchParam>,
-        Query<&mut ViewBatches<T>>,
+        ResMut<ViewBatches<T>>,
     )>,
-    mut batched_entities: Local<Vec<(Entity, Entity, T::PipelineKey, Range<u32>)>>,
-    mut batched_results: Local<Vec<(Entity, Entity, T::BatchProp, Range<u32>)>>,
+    mut batches: Local<HashMap<(RetainedViewEntity, Entity), (T::PipelineKey, Range<u32>)>>,
+    mut batched_results: Local<HashMap<(RetainedViewEntity, Entity), (T::BatchProp, Range<u32>)>>,
 ) {
     let (device, queue, buffers, mut transparent_phases, mut views, mut items): (
         Res<RenderDevice>,
         Res<RenderQueue>,
         ResMut<DrawBuffers<T>>,
         ResMut<ViewSortedRenderPhases<T::Item>>,
-        Query<(Entity, &mut ViewIndexBuffer<T>)>,
+        Query<(&ExtractedView, &mut ViewIndexBuffer<T>)>,
         Query<&mut DrawItems<T>>,
     ) = param_set.p0();
 
-    batched_entities.clear();
+    batches.clear();
 
     let buffers = buffers.into_inner();
     buffers.vertices.clear(|vertices| {
@@ -430,14 +427,15 @@ pub(crate) fn prepare_indices<T: Vertex>(
     });
 
     buffers.indices.clear(|indices| {
-        for (view_entity, view_indices) in &mut views {
-            let Some(transparent_phase) = transparent_phases.get_mut(&view_entity) else {
+        for (view, view_indices) in &mut views {
+            let Some(transparent_phase) = transparent_phases.get_mut(&view.retained_view_entity) else {
                 continue;
             };
 
             let view_indices = view_indices.into_inner();
             view_indices.indices.clear();
 
+            let mut current_batch = None;
             let mut batch_item_index = 0;
             let mut batch_index_range = 0;
             let mut batch_key = None::<T::PipelineKey>;
@@ -449,12 +447,9 @@ pub(crate) fn prepare_indices<T: Vertex>(
                     continue;
                 };
 
-                let Some((range, .., key)) =
-                    items.0.get_mut().unwrap_or_else(PoisonError::into_inner).get(
-                        std::mem::replace(item.batch_range_and_extra_index_mut().1, PhaseItemExtraIndex::NONE).0 as usize,
-                    )
+                let Some((range, .., key)) = items.0.get_mut().unwrap_or_else(PoisonError::into_inner).get(item.command())
                 else {
-                    continue;
+                    continue
                 };
 
                 view_indices.indices.extend(&indices[range.clone()]);
@@ -463,12 +458,17 @@ pub(crate) fn prepare_indices<T: Vertex>(
                     Some(ref batch_key) => batch_key != key,
                 } {
                     batch_item_index = item_index;
-                    batched_entities.push((view_entity, item.entity(), key.clone(), batch_index_range..batch_index_range));
+                    current_batch = Some(
+                        batches
+                            .entry((view.retained_view_entity, item.entity()))
+                            .insert((key.clone(), batch_index_range..batch_index_range))
+                            .into_mut(),
+                    );
                 }
 
                 batch_index_range = view_indices.indices.len() as u32;
                 transparent_phase.items[batch_item_index].batch_range_mut().end += 1;
-                batched_entities.last_mut().unwrap().3.end = batch_index_range;
+                current_batch.as_mut().unwrap().1.end = batch_index_range;
 
                 batch_key = Some(key.clone());
             }
@@ -498,24 +498,17 @@ pub(crate) fn prepare_indices<T: Vertex>(
     }
 
     let mut param = param_set.p1();
-    batched_results.extend(batched_entities.drain(..).map(|(view_entity, batch_entity, key, range)| {
-        (view_entity, batch_entity, T::create_batch(&mut param, key), range)
-    }));
+    batched_results.extend(
+        batches
+            .drain()
+            .map(|((view, batch_entity), (key, range))| ((view, batch_entity), (T::create_batch(&mut param, key), range))),
+    );
 
     drop(param);
 
     let mut batches = param_set.p2();
-    for mut view_batches in &mut batches {
-        view_batches.0.clear();
-    }
-
-    for (view_entity, batch_entity, prop, range) in batched_results.drain(..) {
-        let Ok(mut view_batches) = batches.get_mut(view_entity) else {
-            continue;
-        };
-
-        view_batches.0.insert(batch_entity, (prop, range));
-    }
+    std::mem::swap(&mut batches.0, &mut batched_results);
+    batched_results.clear();
 }
 
 /// Assigns [`ViewBindGroup`]s into each views.
@@ -606,19 +599,19 @@ impl<P: PhaseItem, T: Vertex, const I: usize> RenderCommand<P> for SetViewBindGr
 /// Renders each sprite batch entities.
 pub struct DrawBatch<T: Vertex>(PhantomData<fn() -> T>);
 impl<P: PhaseItem, T: Vertex> RenderCommand<P> for DrawBatch<T> {
-    type Param = SRes<DrawBuffers<T>>;
-    type ViewQuery = (Read<ViewBatches<T>>, Read<ViewIndexBuffer<T>>);
+    type Param = (SRes<DrawBuffers<T>>, SRes<ViewBatches<T>>);
+    type ViewQuery = (Read<ExtractedView>, Read<ViewIndexBuffer<T>>);
     type ItemQuery = ();
 
     #[inline]
     fn render<'w>(
         item: &P,
-        (batches, index_buffer): ROQueryItem<'w, Self::ViewQuery>,
+        (view, index_buffer): ROQueryItem<'w, Self::ViewQuery>,
         _: Option<ROQueryItem<'w, Self::ItemQuery>>,
-        buffers: SystemParamItem<'w, '_, Self::Param>,
+        (buffers, batches): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let Some((.., range)) = batches.0.get(&item.entity()) else {
+        let Some((.., range)) = batches.get(&(view.retained_view_entity, item.entity())) else {
             return RenderCommandResult::Skip;
         };
 

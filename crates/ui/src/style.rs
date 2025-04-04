@@ -1,8 +1,6 @@
 //! Defines everything necessary to style a [`Ui`] node.
 
-use bevy_ecs::prelude::*;
-use bevy_reflect::prelude::*;
-use bevy_transform::prelude::*;
+use bevy::prelude::*;
 use taffy::{BlockContainerStyle, BlockItemStyle, CoreStyle, FlexboxContainerStyle, FlexboxItemStyle};
 
 use crate::node::{ComputedUi, UiCaches};
@@ -146,11 +144,11 @@ impl From<WithCtx<Val>> for taffy::Dimension {
     #[inline]
     fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
         match item {
-            Val::Abs(abs) => Self::Length(abs),
-            Val::Rel(rel) => Self::Percent(rel),
-            Val::Vw(w) => Self::Length(width * w),
-            Val::Vh(h) => Self::Length(height * h),
-            Val::Auto => Self::Auto,
+            Val::Abs(abs) => Self::length(abs),
+            Val::Rel(rel) => Self::percent(rel),
+            Val::Vw(w) => Self::length(width * w),
+            Val::Vh(h) => Self::length(height * h),
+            Val::Auto => Self::auto(),
         }
     }
 }
@@ -159,11 +157,11 @@ impl From<WithCtx<Val>> for taffy::LengthPercentage {
     #[inline]
     fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
         match item {
-            Val::Abs(abs) => Self::Length(abs),
-            Val::Rel(rel) => Self::Percent(rel),
-            Val::Vw(w) => Self::Length(width * w),
-            Val::Vh(h) => Self::Length(height * h),
-            Val::Auto => Self::Length(0.),
+            Val::Abs(abs) => Self::length(abs),
+            Val::Rel(rel) => Self::percent(rel),
+            Val::Vw(w) => Self::length(width * w),
+            Val::Vh(h) => Self::length(height * h),
+            Val::Auto => Self::length(0.),
         }
     }
 }
@@ -172,11 +170,11 @@ impl From<WithCtx<Val>> for taffy::LengthPercentageAuto {
     #[inline]
     fn from(WithCtx { width, height, item }: WithCtx<Val>) -> Self {
         match item {
-            Val::Abs(abs) => Self::Length(abs),
-            Val::Rel(rel) => Self::Percent(rel),
-            Val::Vw(w) => Self::Length(width * w),
-            Val::Vh(h) => Self::Length(height * h),
-            Val::Auto => Self::Auto,
+            Val::Abs(abs) => Self::length(abs),
+            Val::Rel(rel) => Self::percent(rel),
+            Val::Vw(w) => Self::length(width * w),
+            Val::Vh(h) => Self::length(height * h),
+            Val::Auto => Self::auto(),
         }
     }
 }
@@ -302,19 +300,14 @@ impl Default for UiBorder {
 
 impl<T: From<WithCtx<Val>>> From<WithCtx<UiBorder>> for taffy::Rect<T> {
     #[inline]
-    fn from(
-        WithCtx {
-            width,
-            height,
-            item:
-                UiBorder {
-                    left,
-                    right,
-                    bottom,
-                    top,
-                },
-        }: WithCtx<UiBorder>,
-    ) -> Self {
+    fn from(WithCtx { width, height, item }: WithCtx<UiBorder>) -> Self {
+        let UiBorder {
+            left,
+            right,
+            bottom,
+            top,
+        } = item;
+
         Self {
             left: WithCtx {
                 width,

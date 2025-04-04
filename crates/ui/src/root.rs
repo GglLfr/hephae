@@ -2,15 +2,14 @@
 //!
 //! See [`UiRoot`] for more information.
 
-use bevy_core_pipeline::core_2d::*;
-use bevy_ecs::{
+use bevy::{
+    ecs::{
+        component::Mutable,
+        query::{QueryData, QueryItem},
+        system::{StaticSystemParam, SystemParam, SystemParamItem, lifetimeless::Read},
+    },
     prelude::*,
-    query::{QueryData, QueryItem},
-    system::{StaticSystemParam, SystemParam, SystemParamItem, lifetimeless::Read},
 };
-use bevy_math::prelude::*;
-use bevy_render::prelude::*;
-use bevy_transform::prelude::*;
 
 /// UI root component.
 ///
@@ -21,7 +20,7 @@ use bevy_transform::prelude::*;
 ///
 /// Do not add [`Ui`](crate::style::Ui) nodes to the same entity as UI roots. Instead, spawn them as
 /// children entities.
-pub trait UiRoot: Component {
+pub trait UiRoot: Component<Mutability = Mutable> {
     /// The parameter required for computing the transform and available space.
     type Param: SystemParam;
     /// Necessary neighbor components. Failing to fetch these will make the
@@ -84,7 +83,7 @@ impl Default for Camera2dRoot {
 
 impl UiRoot for Camera2dRoot {
     type Param = ();
-    type Item = (Read<Camera>, Read<OrthographicProjection>, Has<UiUnrounded>);
+    type Item = (Read<Camera>, Read<Projection>, Has<UiUnrounded>);
 
     #[inline]
     fn compute_root_transform(
@@ -92,6 +91,10 @@ impl UiRoot for Camera2dRoot {
         _: &mut SystemParamItem<Self::Param>,
         (camera, projection, is_unrounded): QueryItem<Self::Item>,
     ) -> (Transform, Vec2) {
+        let Projection::Orthographic(projection) = projection else {
+            return (Transform::IDENTITY, Vec2::ZERO)
+        };
+
         let area = projection.area;
         let size = (camera.physical_viewport_size().unwrap_or_default().as_vec2() / self.scale)
             .map(|value| if !is_unrounded { value.round() } else { value });

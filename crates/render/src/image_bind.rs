@@ -2,18 +2,15 @@
 //!
 //! See `examples/atlas.rs` for example usage.
 
-use bevy_asset::prelude::*;
-use bevy_ecs::{
-    event::EventReader,
-    prelude::{Resource, *},
+use bevy::{
+    platform_support::collections::{HashMap, hash_map::Entry},
+    prelude::*,
+    render::{
+        Extract,
+        render_resource::{BindGroup, BindGroupEntry, BindGroupLayout},
+        renderer::RenderDevice,
+    },
 };
-use bevy_image::prelude::*;
-use bevy_render::{
-    Extract,
-    render_resource::{BindGroup, BindGroupEntry, BindGroupLayout},
-    renderer::RenderDevice,
-};
-use bevy_utils::{Entry, HashMap};
 
 /// Extracts [`AssetEvent<Image>`]s from the main world to the render world.
 #[derive(Resource, Default)]

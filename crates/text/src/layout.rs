@@ -3,19 +3,18 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use async_channel::{Receiver, Sender};
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_image::prelude::*;
-use bevy_math::prelude::*;
-use bevy_tasks::IoTaskPool;
-use bevy_utils::HashMap;
+use bevy::{
+    platform_support::{collections::HashMap, hash::FixedHasher},
+    prelude::*,
+    tasks::IoTaskPool,
+};
 use cosmic_text::{
     Attrs, Buffer, CacheKey, Family, FontSystem, Metrics, Shaping, SwashCache,
     fontdb::{Database, Source},
     ttf_parser::{Face, FaceParsingError},
 };
+use derive_more::{Display, Error};
 use scopeguard::{Always, ScopeGuard};
-use thiserror::Error;
 
 use crate::{
     atlas::{FontAtlas, FontAtlasKey, FontAtlases},
@@ -58,7 +57,7 @@ impl FontLayoutInner {
             sys: FontSystem::new_with_locale_and_db(locale, Database::new()),
             cache: SwashCache::new(),
             pending_fonts,
-            font_atlases: HashMap::new(),
+            font_atlases: HashMap::with_hasher(FixedHasher),
             spans: Vec::new(),
             glyph_spans: Vec::new(),
         }
@@ -107,14 +106,14 @@ pub fn load_fonts_to_database(mut fonts: ResMut<FontLayout>) {
 }
 
 /// Errors that may arise from font computations.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Display)]
 pub enum FontLayoutError {
     /// A font has not been loaded yet.
-    #[error("required font hasn't been loaded yet or has failed loading")]
-    FontNotLoaded(AssetId<Font>),
+    #[display("required font hasn't been loaded yet or has failed loading")]
+    FontNotLoaded(#[error(not(source))] AssetId<Font>),
     /// Couldn't get an image for a glyph.
-    #[error("couldn't render an image for a glyph")]
-    NoGlyphImage(CacheKey),
+    #[display("couldn't render an image for a glyph")]
+    NoGlyphImage(#[error(not(source))] CacheKey),
 }
 
 impl FontLayoutInner {
@@ -155,7 +154,7 @@ impl FontLayoutInner {
             .layout_runs()
             .flat_map(|run| run.glyphs.iter().map(move |glyph| (glyph, run.line_y)))
             .try_for_each(|(glyph, line)| {
-                let (id, key) = glyph_spans[glyph.metadata];
+                let (id, key) = &glyph_spans[glyph.metadata];
 
                 let mut tmp;
                 let glyph = if !key.antialias {
@@ -171,9 +170,9 @@ impl FontLayoutInner {
                     glyph
                 };
 
-                let atlas_set = self.font_atlases.entry(id).or_default();
+                let atlas_set = self.font_atlases.entry(id.clone()).or_default();
                 let phys = glyph.physical((0., 0.), 1.);
-                let (atlas_id, atlas) = atlas_set.atlas_mut(key, atlases);
+                let (atlas_id, atlas) = atlas_set.atlas_mut(*key, atlases);
 
                 let (offset, rect, index) = atlas.get_or_create_info(&mut self.sys, &mut self.cache, glyph, images)?;
                 let size = (rect.max - rect.min).as_vec2();
@@ -301,7 +300,7 @@ impl FontLayoutInner {
                         .metrics(Metrics::relative(font.font_size, font.line_height)),
                 )
             }),
-            Attrs::new(),
+            &Attrs::new(),
             Shaping::Advanced,
             Some(align.into()),
         );

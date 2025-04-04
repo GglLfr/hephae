@@ -3,10 +3,9 @@
 
 use std::borrow::Cow;
 
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_utils::all_tuples;
+use bevy::prelude::*;
 use smallvec::{SmallVec, smallvec};
+use variadics_please::all_tuples;
 
 use crate::{
     arg::LocaleArg,

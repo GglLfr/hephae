@@ -5,10 +5,7 @@
 
 use std::sync::Mutex;
 
-use bevy_app::{PluginGroupBuilder, prelude::*};
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_render::{RenderApp, prelude::*};
+use bevy::{app::PluginGroupBuilder, prelude::*, render::RenderApp};
 pub use cosmic_text;
 use hephae_utils::prelude::*;
 

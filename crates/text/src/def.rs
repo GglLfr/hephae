@@ -1,28 +1,24 @@
 //! Defines common types of Hephae Text.
 
-use std::{io::Error as IoError, slice::Iter, sync::Mutex};
+use std::{io, slice::Iter, sync::Mutex};
 
 use async_channel::Sender;
-use bevy_asset::{AssetLoader, LoadContext, io::Reader, prelude::*};
-use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{
-    prelude::*,
-    system::{
+use bevy::{
+    asset::{AssetLoader, LoadContext, io::Reader},
+    ecs::system::{
         SystemParamItem,
         lifetimeless::{Read, SQuery},
     },
+    prelude::*,
 };
-use bevy_hierarchy::prelude::*;
-use bevy_math::prelude::*;
-use bevy_reflect::prelude::*;
 use cosmic_text::{
     Align, Buffer, Metrics, Stretch, Style, Weight, Wrap, fontdb::ID as FontId, ttf_parser::FaceParsingError,
 };
+use derive_more::{Display, Error, From};
 use fixedbitset::FixedBitSet;
 #[cfg(feature = "locale")]
 use hephae_locale::prelude::*;
 use smallvec::SmallVec;
-use thiserror::Error;
 
 use crate::atlas::FontAtlas;
 
@@ -42,16 +38,16 @@ pub struct Font {
 }
 
 /// Errors that may arise when loading a [`Font`].
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Display, From)]
 pub enum FontError {
     /// The async channel between the asset thread and main world thread has been closed.
-    #[error("the async channel to add fonts to the database was closed")]
+    #[display("the async channel to add fonts to the database was closed")]
     ChannelClosed,
     /// An IO error occurred.
-    #[error(transparent)]
-    Io(#[from] IoError),
+    #[display("{_0}")]
+    Io(#[from] io::Error),
     /// Invalid asset bytes.
-    #[error(transparent)]
+    #[display("{_0}")]
     Face(#[from] FaceParsingError),
 }
 
@@ -294,7 +290,7 @@ impl Default for TextGlyphs {
 }
 
 /// A single information about how a glyph can be rendered.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct TextGlyph {
     /// Positional offset of the glyph relative to the text box's bottom-left corner.
     pub origin: Vec2,
@@ -323,15 +319,15 @@ impl LocaleTarget for TextSpan {
 /// wishing to listen for change-detection.
 pub fn compute_structure(
     mut text_query: Query<(Entity, &mut TextStructure, Option<&Children>)>,
-    recurse_query: Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
+    recurse_query: Query<(Entity, Option<&Children>, &ChildOf), (With<TextSpan>, Without<Text>)>,
     changed_query: Query<(
         Entity,
         Option<Ref<Text>>,
         Option<Ref<TextSpan>>,
-        Option<Ref<Parent>>,
+        Option<Ref<ChildOf>>,
         Option<Ref<Children>>,
     )>,
-    parent_query: Query<&Parent>,
+    parent_query: Query<&ChildOf>,
     mut removed_span: RemovedComponents<TextSpan>,
     mut iterated: Local<FixedBitSet>,
     mut removed: Local<FixedBitSet>,
@@ -367,7 +363,7 @@ pub fn compute_structure(
             let Ok((root, mut structure, children)) = (if text.is_some() {
                 text_query.get_mut(e)
             } else {
-                let Some(mut e) = parent.map(|p| p.get()) else {
+                let Some(mut e) = parent.map(|p| p.parent) else {
                     continue 'out;
                 };
                 loop {
@@ -380,7 +376,7 @@ pub fn compute_structure(
                         Ok(structure) => break Ok(structure),
                         Err(..) => match parent_query.get(e) {
                             Ok(parent) => {
-                                e = parent.get();
+                                e = parent.parent;
                                 continue;
                             }
                             Err(..) => continue 'out,
@@ -399,12 +395,11 @@ pub fn compute_structure(
                 depth: usize,
                 parent: Entity,
                 children: &[Entity],
-                recurse_query: &Query<(Entity, Option<&Children>, &Parent), (With<TextSpan>, Without<Text>)>,
+                recurse_query: &Query<(Entity, Option<&Children>, &ChildOf), (With<TextSpan>, Without<Text>)>,
             ) {
                 for (e, children, actual_parent) in recurse_query.iter_many(children) {
                     assert_eq!(
-                        actual_parent.get(),
-                        parent,
+                        actual_parent.parent, parent,
                         "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                     );
 

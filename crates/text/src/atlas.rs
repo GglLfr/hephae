@@ -1,15 +1,14 @@
 //! Defines font atlas sets for rendering glyphs.
 
-use bevy_asset::{RenderAssetUsages, prelude::*};
-use bevy_ecs::prelude::*;
-use bevy_image::prelude::*;
-use bevy_math::{ivec2, prelude::*, uvec2};
-use bevy_reflect::prelude::*;
-use bevy_render::{
-    Extract,
-    render_resource::{Extent3d, TextureDimension, TextureFormat},
+use bevy::{
+    asset::RenderAssetUsages,
+    platform_support::{collections::HashMap, hash::FixedHasher},
+    prelude::*,
+    render::{
+        Extract,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
 };
-use bevy_utils::HashMap;
 use cosmic_text::{CacheKey, FontSystem, LayoutGlyph, Placement, SwashCache, SwashContent};
 use guillotiere::{AtlasAllocator, size2};
 
@@ -32,13 +31,13 @@ impl FontAtlases {
                     key,
                     alloc: AtlasAllocator::new(size2(512, 512)),
                     image: Handle::Weak(AssetId::invalid()),
-                    map: HashMap::new(),
+                    map: HashMap::with_hasher(FixedHasher),
                     nodes: Vec::new(),
                 })
             })
             .id();
 
-        (id, atlases.get_mut(id).unwrap())
+        (id.clone(), atlases.get_mut(id).unwrap())
     }
 }
 
@@ -151,7 +150,7 @@ impl FontAtlas {
                                     },
                                     TextureDimension::D2,
                                     match old {
-                                        Some(old) => {
+                                        Some(mut old) => {
                                             let old_size = old.texture_descriptor.size;
                                             let mut data = Vec::with_capacity(
                                                 alloc_size.width as usize * alloc_size.height as usize * 4,
@@ -161,9 +160,10 @@ impl FontAtlas {
                                             let copy_left =
                                                 alloc_size.width.saturating_sub(old_size.width.min(alloc_size.width));
 
+                                            let old_data = old.data.as_mut().unwrap();
                                             for y in 0..old_size.height as usize {
                                                 data.extend_from_slice(
-                                                    &old.data[(y * copy_amount)..((y + 1) * copy_amount)],
+                                                    &old_data[(y * copy_amount)..((y + 1) * copy_amount)],
                                                 );
                                                 for _ in 0..copy_left {
                                                     data.extend_from_slice(&[0, 0, 0, 0]);
@@ -199,9 +199,10 @@ impl FontAtlas {
                             true => a,
                         };
 
+                        let data = image.data.as_mut().unwrap();
                         for (src_y, dst_y) in (rect.min.y as usize..rect.max.y as usize).enumerate() {
                             for (src_x, dst_x) in (from_x..to_x).enumerate() {
-                                image.data[dst_y * row + dst_x * 4..dst_y * row + dst_x * 4 + 4].copy_from_slice(
+                                data[dst_y * row + dst_x * 4..dst_y * row + dst_x * 4 + 4].copy_from_slice(
                                     &match swash_image.content {
                                         SwashContent::Mask => {
                                             [255, 255, 255, alpha(swash_image.data[src_y * src_row + src_x])]

@@ -23,23 +23,18 @@ rustdoc-args = [
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [dependencies]
-hephae-render-derive = { version = "0.7.2", path = "derive" }
+hephae-render-derive = { version = "0.8.0", path = "derive" }
 hephae-utils.workspace = true
-
-bevy_app.workspace = true
-bevy_asset.workspace = true
-bevy_color.workspace = true
-bevy_core_pipeline.workspace = true
-bevy_derive.workspace = true
-bevy_ecs.workspace = true
-bevy_image.workspace = true
-bevy_math.workspace = true
-bevy_reflect.workspace = true
-bevy_render.workspace = true
-bevy_transform.workspace = true
-bevy_utils.workspace = true
 
 bytemuck.workspace = true
 fixedbitset.workspace = true
 smallvec.workspace = true
 vec-belt.workspace = true
+
+[dependencies.bevy]
+workspace = true
+features = [
+    "bevy_asset",
+    "bevy_core_pipeline",
+    "bevy_image",
+]

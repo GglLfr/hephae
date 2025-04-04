@@ -5,9 +5,7 @@
 
 use std::{borrow::Cow, fmt::Debug};
 
-use bevy_app::{PluginGroupBuilder, prelude::*};
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy::{app::PluginGroupBuilder, prelude::*};
 use hephae_utils::prelude::*;
 
 use crate::{

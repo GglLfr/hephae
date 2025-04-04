@@ -9,16 +9,17 @@ pub mod image_bind;
 pub mod pipeline;
 pub mod vertex;
 
-use bevy_app::{PluginGroupBuilder, prelude::*};
-use bevy_asset::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_render::{
-    Render, RenderApp, RenderSet,
+use bevy::{
+    app::PluginGroupBuilder,
+    asset::weak_handle,
     prelude::*,
-    render_phase::AddRenderCommand,
-    render_resource::SpecializedRenderPipelines,
-    sync_component::SyncComponentPlugin,
-    view::{ExtractedView, VisibilitySystems},
+    render::{
+        Render, RenderApp, RenderSet,
+        render_phase::AddRenderCommand,
+        render_resource::SpecializedRenderPipelines,
+        sync_component::SyncComponentPlugin,
+        view::{ExtractedView, VisibilitySystems},
+    },
 };
 pub use bytemuck;
 use hephae_utils::prelude::*;
@@ -73,12 +74,12 @@ plugin_def! {
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             let world = render_app
                 .init_resource::<SpecializedRenderPipelines<VertexPipeline<T>>>()
+                .init_resource::<ViewBatches<T>>()
                 .add_render_command::<T::Item, DrawRequests<T>>()
                 .add_systems(ExtractSchedule, extract_shader::<T>)
                 .add_systems(Render, queue_vertices::<T>.in_set(HephaeRenderSystems::QueueVertices))
                 .world_mut();
 
-            world.register_required_components::<ExtractedView, ViewBatches<T>>();
             world.register_required_components::<ExtractedView, ViewIndexBuffer<T>>();
             world.register_required_components::<ExtractedView, VisibleDrawers<T>>();
         }
@@ -168,7 +169,7 @@ plugin_def! {
 
 /// Global handle to the global shader containing bind groups defining view uniform and tonemapping
 /// LUTs.
-pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = Handle::weak_from_u128(278527494526026980866063021704582553601);
+pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = weak_handle!("c52404ee-d572-46fe-9811-b0209e46309e");
 
 /// Labels assigned to Hephae systems that are added to [`Render`].
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]

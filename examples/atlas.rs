@@ -7,21 +7,18 @@ use bevy::{
             lifetimeless::{Read, SRes, SResMut},
         },
     },
-    math::FloatOrd,
     prelude::*,
     render::{
         render_asset::RenderAssets,
-        render_phase::{
-            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
-        },
+        render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
         render_resource::{
-            BindGroupEntry, BindGroupLayout, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
-            SamplerBindingType, ShaderStages, TextureSampleType,
+            BindGroupEntry, BindGroupLayout, IntoBinding, RenderPipelineDescriptor, SamplerBindingType, ShaderStages,
+            TextureSampleType,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
-        sync_world::MainEntity,
         texture::GpuImage,
+        view::ExtractedView,
     },
 };
 use hephae::prelude::*;
@@ -77,24 +74,6 @@ impl Vertex for SpriteVertex {
     }
 
     #[inline]
-    fn create_item(
-        layer: f32,
-        entity: (Entity, MainEntity),
-        pipeline: CachedRenderPipelineId,
-        draw_function: DrawFunctionId,
-        command: usize,
-    ) -> Self::Item {
-        Transparent2d {
-            sort_key: FloatOrd(layer),
-            entity,
-            pipeline,
-            draw_function,
-            batch_range: 0..0,
-            extra_index: PhaseItemExtraIndex(command as u32),
-        }
-    }
-
-    #[inline]
     fn create_batch(
         (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
         key: Self::PipelineKey,
@@ -119,8 +98,8 @@ impl Vertex for SpriteVertex {
 
 struct SetSpriteBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
-    type Param = SRes<ImageBindGroups>;
-    type ViewQuery = Read<ViewBatches<SpriteVertex>>;
+    type Param = (SRes<ImageBindGroups>, SRes<ViewBatches<SpriteVertex>>);
+    type ViewQuery = Read<ExtractedView>;
     type ItemQuery = ();
 
     #[inline]
@@ -128,11 +107,11 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
         item: &P,
         view: ROQueryItem<'w, Self::ViewQuery>,
         _: Option<ROQueryItem<'w, Self::ItemQuery>>,
-        image_bind_groups: SystemParamItem<'w, '_, Self::Param>,
+        (image_bind_groups, batches): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let image_bind_groups = image_bind_groups.into_inner();
-        let Some(&(id, ..)) = view.0.get(&item.entity()) else {
+        let Some(&(id, ..)) = batches.get(&(view.retained_view_entity, item.entity())) else {
             return RenderCommandResult::Skip;
         };
 
@@ -156,7 +135,7 @@ struct DrawSprite {
 impl Drawer for DrawSprite {
     type Vertex = SpriteVertex;
 
-    type ExtractParam = SRes<Assets<TextureAtlas>>;
+    type ExtractParam = SRes<Assets<Atlas>>;
     type ExtractData = (Read<GlobalTransform>, Read<AtlasEntry>, Read<AtlasIndex>);
     type ExtractFilter = ();
 
@@ -197,8 +176,8 @@ impl Drawer for DrawSprite {
 
         let Vec2 { x, y } = self.pos;
         let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2. * self.scl;
-        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / page.size.as_vec2();
-        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / page.size.as_vec2();
+        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / vec2(page.size.width as f32, page.size.height as f32);
+        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / vec2(page.size.width as f32, page.size.height as f32);
 
         let base = queuer.data([
             SpriteVertex::new(x - hw, y - hh, u, v),
@@ -237,7 +216,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                 ..default()
             },
             AtlasEntry {
-                atlas: server.load::<TextureAtlas>("sprites/sprites.atlas.ron"),
+                atlas: server.load::<Atlas>("sprites/sprites.atlas.ron"),
                 key: "cix".into(),
             },
             HasDrawer::<DrawSprite>::new(),

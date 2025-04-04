@@ -26,16 +26,13 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 hephae-text = { workspace = true, optional = true }
 hephae-utils.workspace = true
 
-bevy_app.workspace = true
-bevy_core_pipeline.workspace = true
-bevy_ecs.workspace = true
-bevy_hierarchy.workspace = true
-bevy_math.workspace = true
-bevy_reflect.workspace = true
-bevy_render.workspace = true
-bevy_transform.workspace = true
-
 taffy.workspace = true
+
+[dependencies.bevy]
+workspace = true
+features = [
+    "bevy_render",
+]
 
 [features]
 default = ["text"]

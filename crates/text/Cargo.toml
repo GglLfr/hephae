@@ -26,30 +26,26 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 hephae-locale = { workspace = true, optional = true }
 hephae-utils.workspace = true
 
-bevy_app.workspace = true
-bevy_asset.workspace = true
-bevy_derive.workspace = true
-bevy_ecs.workspace = true
-bevy_hierarchy.workspace = true
-bevy_image.workspace = true
-bevy_math.workspace = true
-bevy_reflect.workspace = true
-bevy_render.workspace = true
-bevy_tasks.workspace = true
-bevy_utils.workspace = true
-
 async-channel.workspace = true
 cosmic-text.workspace = true
+derive_more.workspace = true
 fixedbitset.workspace = true
 guillotiere.workspace = true
 scopeguard.workspace = true
 smallvec.workspace = true
 sys-locale.workspace = true
-thiserror.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 cosmic-text = { workspace = true, features = ["wasm-web"] }
 sys-locale = { workspace = true, features = ["js"] }
+
+[dependencies.bevy]
+workspace = true
+features = [
+    "bevy_asset",
+    "bevy_image",
+    "bevy_render",
+]
 
 [features]
 locale = ["dep:hephae-locale"]

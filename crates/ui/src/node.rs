@@ -2,19 +2,17 @@
 
 use std::{iter::FilterMap, ops::Index};
 
-use bevy_ecs::{
-    entity::EntityHashMap,
-    prelude::*,
-    query::QueryManyIter,
-    system::{
-        SystemParam, SystemState,
-        lifetimeless::{Read, Write},
+use bevy::{
+    ecs::{
+        entity::EntityHashMap,
+        query::QueryManyIter,
+        system::{
+            SystemParam, SystemState,
+            lifetimeless::{Read, Write},
+        },
     },
+    prelude::*,
 };
-use bevy_hierarchy::prelude::*;
-use bevy_math::prelude::*;
-use bevy_reflect::prelude::*;
-use bevy_transform::prelude::*;
 use taffy::{
     AvailableSpace, Cache, CacheTree, Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutInput, LayoutOutput,
     LayoutPartialTree, NodeId, PrintTree, RoundTree, RunMode, Size, TraversePartialTree, TraverseTree, compute_block_layout,
@@ -97,14 +95,14 @@ pub(crate) struct UiCache(Cache);
 impl UiCache {
     #[inline]
     pub fn clear(&mut self) {
-        self.0.clear()
+        self.0.clear();
     }
 }
 
 /// A system parameter used for invalidating UI caches. Use if you need a [`Ui`] node to be
 /// recomputed.
 #[derive(SystemParam)]
-pub struct UiCaches<'w, 's>(Query<'w, 's, (Write<UiCache>, Option<Read<Parent>>)>);
+pub struct UiCaches<'w, 's>(Query<'w, 's, (Write<UiCache>, Option<Read<ChildOf>>)>);
 
 impl UiCaches<'_, '_> {
     /// Invalidates a [`Ui`] node's cache recursively to its root.
@@ -114,7 +112,7 @@ impl UiCaches<'_, '_> {
             let Ok((mut cache, parent)) = self.0.get_mut(e) else { break };
             cache.clear();
 
-            if let Some(parent) = parent { e = **parent } else { break }
+            if let Some(parent) = parent { e = parent.parent } else { break }
         }
     }
 }
@@ -188,6 +186,11 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_
     }
 
     #[inline]
+    fn resolve_calc_value(&self, _val: *const (), _basis: f32) -> f32 {
+        0.
+    }
+
+    #[inline]
     fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
         self.intermediate_query.get_mut(Entity::from_bits(node_id.into())).unwrap().0 = *layout
     }
@@ -210,6 +213,7 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_
                         height: tree.viewport_size.y,
                         item: node,
                     },
+                    |val, basis| tree.resolve_calc_value(val, basis),
                     |known_size, available_space| {
                         if let Some(measure) = measure.and_then(|id| match id.get() {
                             MeasureId::INVALID => None,
@@ -339,7 +343,7 @@ impl<M> CacheTree for UiTree<'_, '_, M> {
     #[inline]
     fn cache_clear(&mut self, node_id: NodeId) {
         if let Ok(mut cache) = self.cache_query.get_mut(Entity::from_bits(node_id.into())) {
-            cache.0.clear()
+            cache.0.clear();
         }
     }
 }

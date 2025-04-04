@@ -8,20 +8,15 @@
 
 use std::{any::type_name, borrow::Cow, ops::Range, slice::Iter};
 
-use bevy_asset::{ReflectAsset, UntypedAssetId, VisitAssetDependencies, prelude::*};
-use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{
-    component::ComponentId,
-    entity::VisitEntitiesMut,
+use bevy::{
+    asset::{ReflectAsset, UntypedAssetId, VisitAssetDependencies},
+    ecs::{component::HookContext, entity::MapEntities, reflect::ReflectMapEntities, world::DeferredWorld},
+    platform_support::collections::HashMap,
     prelude::*,
-    reflect::{ReflectMapEntities, ReflectVisitEntities, ReflectVisitEntitiesMut},
-    world::DeferredWorld,
 };
-use bevy_reflect::prelude::*;
-use bevy_utils::{HashMap, warn_once};
+use derive_more::{Display, Error};
 use scopeguard::{Always, ScopeGuard};
 use smallvec::SmallVec;
-use thiserror::Error;
 
 use crate::arg::LocaleArg;
 
@@ -77,14 +72,14 @@ impl Locale {
 }
 
 /// Errors that may arise from [`Locale::localize_into`].
-#[derive(Error, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Error, Debug, Display, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LocalizeError {
     /// The locale doesn't contain the localization for the supplied key.
-    #[error("The locale doesn't contain the localization for the supplied key.")]
+    #[display("The locale doesn't contain the localization for the supplied key.")]
     MissingKey,
     /// Missing argument at the given index.
-    #[error("Missing argument at index {0}.")]
-    MissingArgument(usize),
+    #[display("Missing argument at index {_0}.")]
+    MissingArgument(#[error(not(source))] usize),
 }
 
 /// A locale string, either unformatted or formatted.
@@ -97,7 +92,7 @@ pub enum LocalizeError {
 /// ```
 /// use std::str::FromStr;
 ///
-/// use bevy_utils::HashMap;
+/// use bevy::platform_support::collections::HashMap;
 /// use hephae_locale::{
 ///     def::{LocaleFmt, LocalizeError},
 ///     prelude::*,
@@ -116,22 +111,22 @@ pub enum LocalizeError {
 /// // Format the arguments with `Locale::localize`. Unnecessary arguments are ignored.
 /// assert_eq!(
 ///     loc.localize("greet", &[
-///         "Joe", "Jane", "these", "are", "ignored", "Hehehe"
+///         "Joe", "Jane", "these", "are", "ignored", "Hehehe",
 ///     ])
 ///     .unwrap(),
-///     "Hi Joe, this is Jane. Hehehe..."
+///     "Hi Joe, this is Jane. Hehehe...",
 /// );
 ///
 /// // Double braces are escaped into single braces.
 /// assert_eq!(
 ///     loc.localize("chitchat", &[]).unwrap(),
-///     "It's nice to meet you {inside these braces for no reason}."
+///     "It's nice to meet you {inside these braces for no reason}.",
 /// );
 ///
 /// // Missing key will not panic.
 /// assert_eq!(
 ///     loc.localize("missing", &[]).unwrap_err(),
-///     LocalizeError::MissingKey
+///     LocalizeError::MissingKey,
 /// );
 ///
 /// // Neither will missing arguments.
@@ -195,10 +190,12 @@ pub struct LocaleKey {
     pub collection: Handle<LocaleCollection>,
 }
 
-fn remove_localize(mut world: DeferredWorld, e: Entity, _: ComponentId) {
-    let args = std::mem::take(&mut world.get_mut::<LocaleArgs>(e).unwrap().0);
-    world.commands().entity(e).queue(move |e: Entity, world: &mut World| {
-        world.entity_mut(e).remove::<LocaleArgs>();
+fn remove_localize(mut world: DeferredWorld, ctx: HookContext) {
+    let args = std::mem::take(&mut world.get_mut::<LocaleArgs>(ctx.entity).unwrap().0);
+    world.commands().entity(ctx.entity).queue(move |mut e: EntityWorldMut| {
+        e.remove::<LocaleArgs>();
+
+        let world = e.into_world_mut();
         for arg in args {
             world.despawn(arg);
         }
@@ -221,9 +218,9 @@ pub struct LocaleResult {
     locale: AssetId<Locale>,
 }
 
-#[derive(Component, Reflect, Clone, VisitEntitiesMut)]
-#[reflect(Component, MapEntities, VisitEntities, VisitEntitiesMut)]
-pub(crate) struct LocaleArgs(pub SmallVec<[Entity; 4]>);
+#[derive(Component, MapEntities, Reflect, Clone)]
+#[reflect(Component, MapEntities)]
+pub(crate) struct LocaleArgs(#[entities] pub SmallVec<[Entity; 4]>);
 impl<'a> IntoIterator for &'a LocaleArgs {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = Iter<'a, Entity>;

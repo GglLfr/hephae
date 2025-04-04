@@ -2,8 +2,12 @@
 
 use std::{fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError, str::FromStr};
 
-use bevy_asset::{AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::de::SpannedError};
-use bevy_utils::HashMap;
+use bevy::{
+    asset::{AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::error::SpannedError},
+    platform_support::{collections::HashMap, hash::FixedHasher},
+    prelude::*,
+};
+use derive_more::{Display, Error, From};
 use nom::{
     Err as NomErr, IResult, Parser,
     branch::alt,
@@ -19,7 +23,6 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
     de::{self, Visitor},
 };
-use thiserror::Error;
 
 use crate::def::{Locale, LocaleCollection, LocaleFmt};
 
@@ -235,13 +238,13 @@ impl FromStr for LocaleFmt {
 }
 
 /// Errors that may arise when loading [`Locale`]s using [`LocaleLoader`].
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Display, From)]
 pub enum LocaleError {
     /// An IO error occurred.
-    #[error(transparent)]
+    #[display("{_0}")]
     Io(#[from] IoError),
     /// A syntax error occurred.
-    #[error(transparent)]
+    #[display("{_0}")]
     Ron(#[from] SpannedError),
 }
 
@@ -273,20 +276,20 @@ impl AssetLoader for LocaleLoader {
 }
 
 /// Errors that may arise when loading [`LocaleCollection`]s using [`LocaleCollectionLoader`].
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Display, From)]
 pub enum LocaleCollectionError {
     /// An IO error occurred.
-    #[error(transparent)]
+    #[display("{_0}")]
     Io(#[from] IoError),
     /// A syntax error occurred.
-    #[error(transparent)]
+    #[display("{_0}")]
     Ron(#[from] SpannedError),
     /// Invalid sub-asset path.
-    #[error(transparent)]
+    #[display("{_0}")]
     InvalidPath(#[from] ParseAssetPathError),
     /// A default locale is defined, but is not available.
-    #[error("locale default '{0}' is defined, but is not available in `locales`")]
-    MissingDefault(String),
+    #[display("locale default '{_0}' is defined, but is not available in `locales`")]
+    MissingDefault(#[error(not(source))] String),
 }
 
 #[derive(Deserialize)]
@@ -317,7 +320,7 @@ impl AssetLoader for LocaleCollectionLoader {
 
         let mut asset = LocaleCollection {
             default: file.default,
-            languages: HashMap::with_capacity(file.languages.len()),
+            languages: HashMap::with_capacity_and_hasher(file.languages.len(), FixedHasher),
         };
 
         for key in file.languages {

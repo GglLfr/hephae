@@ -31,6 +31,7 @@ struct Syntax {
 
 impl Parse for Syntax {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        #[allow(unused)]
         fn no_data(id: &str, input: ParseStream) -> syn::Result<()> {
             if input.peek(Token![:]) {
                 Err(input.error(format!("`{id}` doesn't accept type arguments")))
@@ -269,10 +270,14 @@ pub fn hephae(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     fn parse_inner(input: TokenStream) -> syn::Result<TokenStream> {
         let span = input.span();
         let Syntax {
+            #[cfg(feature = "atlas")]
             atlas,
+            #[cfg(feature = "locale")]
             locale,
             render,
+            #[cfg(feature = "text")]
             text,
+            #[cfg(feature = "ui")]
             ui,
         } = syn::parse2(input)?;
 

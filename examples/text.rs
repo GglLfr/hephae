@@ -7,21 +7,19 @@ use bevy::{
             lifetimeless::{Read, SRes, SResMut},
         },
     },
-    math::{FloatOrd, vec2, vec3},
+    math::{vec2, vec3},
     prelude::*,
     render::{
         render_asset::RenderAssets,
-        render_phase::{
-            DrawFunctionId, PhaseItem, PhaseItemExtraIndex, RenderCommand, RenderCommandResult, TrackedRenderPass,
-        },
+        render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
         render_resource::{
-            BindGroupEntry, BindGroupLayout, CachedRenderPipelineId, IntoBinding, RenderPipelineDescriptor,
-            SamplerBindingType, ShaderStages, TextureSampleType,
+            BindGroupEntry, BindGroupLayout, IntoBinding, RenderPipelineDescriptor, SamplerBindingType, ShaderStages,
+            TextureSampleType,
             binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
-        sync_world::MainEntity,
         texture::GpuImage,
+        view::ExtractedView,
     },
     window::PrimaryWindow,
 };
@@ -83,24 +81,6 @@ impl Vertex for Vert {
     }
 
     #[inline]
-    fn create_item(
-        layer: f32,
-        entity: (Entity, MainEntity),
-        pipeline: CachedRenderPipelineId,
-        draw_function: DrawFunctionId,
-        command: usize,
-    ) -> Self::Item {
-        Transparent2d {
-            sort_key: FloatOrd(layer),
-            entity,
-            pipeline,
-            draw_function,
-            batch_range: 0..0,
-            extra_index: PhaseItemExtraIndex(command as u32),
-        }
-    }
-
-    #[inline]
     fn create_batch(
         (render_device, gpu_images, pipeline, image_bind_groups): &mut SystemParamItem<Self::BatchParam>,
         key: Self::PipelineKey,
@@ -125,8 +105,8 @@ impl Vertex for Vert {
 
 struct SetTextBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
-    type Param = SRes<ImageBindGroups>;
-    type ViewQuery = Read<ViewBatches<Vert>>;
+    type Param = (SRes<ImageBindGroups>, SRes<ViewBatches<Vert>>);
+    type ViewQuery = Read<ExtractedView>;
     type ItemQuery = ();
 
     #[inline]
@@ -134,11 +114,11 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextBindGroup<I> {
         item: &P,
         view: ROQueryItem<'w, Self::ViewQuery>,
         _: Option<ROQueryItem<'w, Self::ItemQuery>>,
-        image_bind_groups: SystemParamItem<'w, '_, Self::Param>,
+        (image_bind_groups, batches): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let image_bind_groups = image_bind_groups.into_inner();
-        let Some(&(id, ..)) = view.0.get(&item.entity()) else {
+        let Some(&(id, ..)) = batches.get(&(view.retained_view_entity, item.entity())) else {
             return RenderCommandResult::Skip;
         };
 
@@ -271,14 +251,11 @@ fn move_camera(time: Res<Time>, input: Res<ButtonInput<KeyCode>>, mut camera: Qu
 fn update(
     mut font_layout: ResMut<FontLayout>,
     mut query: Query<(&mut TextGlyphs, &mut Text, &TextFont), Changed<TextStructure>>,
-    window: Query<&Window, With<PrimaryWindow>>,
+    window: Single<&Window, With<PrimaryWindow>>,
     fonts: Res<Assets<Font>>,
     mut images: ResMut<Assets<Image>>,
     mut atlases: ResMut<Assets<FontAtlas>>,
 ) {
-    let Ok(window) = window.get_single() else {
-        return;
-    };
     let scale = window.scale_factor();
 
     for (mut glyphs, mut text, text_font) in &mut query {
@@ -308,7 +285,7 @@ fn switch_locale(
     *timer += time.delta_secs_f64();
     if *timer >= 1. {
         *timer %= 1.;
-        events.send(LocaleChangeEvent(
+        events.write(LocaleChangeEvent(
             match *to_english {
                 false => {
                     *to_english = true;
