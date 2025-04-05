@@ -154,7 +154,7 @@ impl FontLayoutInner {
             .layout_runs()
             .flat_map(|run| run.glyphs.iter().map(move |glyph| (glyph, run.line_y)))
             .try_for_each(|(glyph, line)| {
-                let (id, key) = &glyph_spans[glyph.metadata];
+                let (id, key) = glyph_spans[glyph.metadata];
 
                 let mut tmp;
                 let glyph = if !key.antialias {
@@ -170,9 +170,9 @@ impl FontLayoutInner {
                     glyph
                 };
 
-                let atlas_set = self.font_atlases.entry(id.clone()).or_default();
+                let atlas_set = self.font_atlases.entry(id).or_default();
                 let phys = glyph.physical((0., 0.), 1.);
-                let (atlas_id, atlas) = atlas_set.atlas_mut(*key, atlases);
+                let (atlas_id, atlas) = atlas_set.atlas_mut(key, atlases);
 
                 let (offset, rect, index) = atlas.get_or_create_info(&mut self.sys, &mut self.cache, glyph, images)?;
                 let size = (rect.max - rect.min).as_vec2();

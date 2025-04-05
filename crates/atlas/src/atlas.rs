@@ -112,7 +112,7 @@ pub fn update_atlas_index(
     changed.clear();
     for &event in events.read() {
         if let AssetEvent::Added { id } | AssetEvent::Modified { id } = event {
-            changed.insert(id.clone());
+            changed.insert(id);
         }
     }
 

@@ -37,7 +37,7 @@ impl FontAtlases {
             })
             .id();
 
-        (id.clone(), atlases.get_mut(id).unwrap())
+        (id, atlases.get_mut(id).unwrap())
     }
 }
 

@@ -159,7 +159,7 @@ impl Drawer for DrawText {
 
     #[inline]
     fn draw(&mut self, atlases: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
-        for glyph in self.glyphs.drain(..) {
+        for &glyph in &self.glyphs {
             let Some(atlas) = atlases.get(glyph.atlas) else {
                 continue;
             };

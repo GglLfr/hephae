@@ -290,7 +290,7 @@ impl Default for TextGlyphs {
 }
 
 /// A single information about how a glyph can be rendered.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct TextGlyph {
     /// Positional offset of the glyph relative to the text box's bottom-left corner.
     pub origin: Vec2,

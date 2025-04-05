@@ -290,15 +290,7 @@ pub(crate) fn queue_vertices<T: Vertex>(
     mut iterated: Local<FixedBitSet>,
 ) {
     let draw_function = draw_functions.read().id::<DrawRequests<T>>();
-    for item in &mut views {
-        let (mut visible_drawers, view, &msaa, tonemapping, dither): (
-            Mut<VisibleDrawers<T>>,
-            &ExtractedView,
-            &Msaa,
-            Option<&Tonemapping>,
-            Option<&DebandDither>,
-        ) = item;
-
+    for (mut visible_drawers, view, &msaa, tonemapping, dither) in &mut views {
         let Some(transparent_phase) = transparent_phases.get_mut(&view.retained_view_entity) else {
             continue;
         };
@@ -398,16 +390,7 @@ pub(crate) fn prepare_indices<T: Vertex>(
     mut batches: Local<HashMap<(RetainedViewEntity, Entity), (T::PipelineKey, Range<u32>)>>,
     mut batched_results: Local<HashMap<(RetainedViewEntity, Entity), (T::BatchProp, Range<u32>)>>,
 ) {
-    let (device, queue, buffers, mut transparent_phases, mut views, mut items): (
-        Res<RenderDevice>,
-        Res<RenderQueue>,
-        ResMut<DrawBuffers<T>>,
-        ResMut<ViewSortedRenderPhases<T::Item>>,
-        Query<(&ExtractedView, &mut ViewIndexBuffer<T>)>,
-        Query<&mut DrawItems<T>>,
-    ) = param_set.p0();
-
-    batches.clear();
+    let (device, queue, buffers, mut transparent_phases, mut views, mut items) = param_set.p0();
 
     let buffers = buffers.into_inner();
     buffers.vertices.clear(|vertices| {
