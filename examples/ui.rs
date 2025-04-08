@@ -107,54 +107,48 @@ struct Rotate;
 struct Color(LinearRgba);
 
 fn startup(mut commands: Commands) {
-    commands.spawn(Camera2dRoot::default()).with_children(|ui| {
-        ui.spawn((
+    let leaf = || {
+        (
             Ui {
-                size: UiSize::new(Vw(1.), Vh(0.8)),
-                padding: UiBorder::all(Abs(25.)),
+                size: UiSize::all(Abs(40.)),
+                margin: UiBorder::all(Abs(10.)),
                 ..default()
             },
-            Color(LinearRgba::RED),
+            Color(LinearRgba::WHITE),
             HasDrawer::<Draw>::new(),
-        ))
-        .with_children(|ui| {
-            ui.spawn((
+        )
+    };
+
+    commands.spawn((Camera2dRoot::default(), children![(
+        Ui {
+            size: UiSize::new(Vw(1.), Vh(0.8)),
+            padding: UiBorder::all(Abs(25.)),
+            ..default()
+        },
+        Color(LinearRgba::RED),
+        HasDrawer::<Draw>::new(),
+        children![(
+            Rotate,
+            Ui {
+                max_size: UiSize::rel(0.5, 1.),
+                flex_grow: 1.,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            Color(LinearRgba::GREEN),
+            HasDrawer::<Draw>::new(),
+            children![(
                 Rotate,
                 Ui {
-                    max_size: UiSize::rel(0.5, 1.),
-                    flex_grow: 1.,
-                    flex_direction: FlexDirection::Column,
+                    margin: UiBorder::all(Abs(10.)),
                     ..default()
                 },
-                Color(LinearRgba::GREEN),
+                Color(LinearRgba::BLUE),
                 HasDrawer::<Draw>::new(),
-            ))
-            .with_children(|ui| {
-                ui.spawn((
-                    Rotate,
-                    Ui {
-                        margin: UiBorder::all(Abs(10.)),
-                        ..default()
-                    },
-                    Color(LinearRgba::BLUE),
-                    HasDrawer::<Draw>::new(),
-                ))
-                .with_children(|ui| {
-                    for _ in 0..3 {
-                        ui.spawn((
-                            Ui {
-                                size: UiSize::all(Abs(40.)),
-                                margin: UiBorder::all(Abs(10.)),
-                                ..default()
-                            },
-                            Color(LinearRgba::WHITE),
-                            HasDrawer::<Draw>::new(),
-                        ));
-                    }
-                });
-            });
-        });
-    });
+                children![leaf(), leaf(), leaf(), leaf()]
+            )]
+        )]
+    )]));
 }
 
 fn rotate(time: Res<Time>, mut rotate: Query<&mut Ui, With<Rotate>>, mut timer: Local<f64>) {
