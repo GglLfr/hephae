@@ -23,6 +23,8 @@ rustc-args = [
 rustdoc-args = [
     "-Zunstable-options",
     "--generate-link-to-definition",
+    "--html-after-content",
+    "trait-tags.html",
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
@@ -109,15 +111,19 @@ ui = ["dep:hephae-ui", "hephae-plugins/ui"]
 
 [[example]]
 name = "quad"
+doc-scrape-examples = true
 
 [[example]]
 name = "atlas"
 required-features = ["atlas"]
+doc-scrape-examples = true
 
 [[example]]
 name = "text"
 required-features = ["text", "locale"]
+doc-scrape-examples = true
 
 [[example]]
 name = "ui"
 required-features = ["ui"]
+doc-scrape-examples = true
