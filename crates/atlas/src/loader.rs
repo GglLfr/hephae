@@ -18,7 +18,10 @@
 //! )
 //! ```
 
-use std::io;
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use bevy::{
     asset::{
@@ -42,7 +45,7 @@ use serde::{
     ser::SerializeStruct,
 };
 
-use crate::atlas::{Atlas, AtlasPage, NineSliceCuts};
+use crate::atlas::{Atlas, AtlasSprite, NineSliceCuts};
 
 /// Asset file representation of [`Atlas`].
 ///
@@ -197,10 +200,10 @@ impl Default for TextureAtlasSettings {
 #[derive(Error, Debug, Display, From)]
 pub enum TextureAtlasError {
     /// Error that arises when a texture is larger than the maximum size of the atlas page.
-    #[display("Texture '{name}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]")]
+    #[display("Texture '{}' is too large: [{actual_width}, {actual_height}] > [{max_width}, {max_height}]", path.display())]
     TooLarge {
         /// The sprite lookup key.
-        name: String,
+        path: PathBuf,
         /// The maximum width of the atlas page. See [`TextureAtlasSettings::max_width`].
         max_width: u32,
         /// The maximum width of the atlas page. See [`TextureAtlasSettings::max_height`].
@@ -212,18 +215,18 @@ pub enum TextureAtlasError {
     },
     /// Error that arises when the texture couldn't be converted into
     /// [`TextureFormat::Rgba8UnormSrgb`].
-    #[display("Texture '{name}' has an unsupported format: {format:?}")]
+    #[display("Texture '{}' has an unsupported format: {format:?}", path.display())]
     UnsupportedFormat {
         /// The sprite lookup key.
-        name: String,
+        path: PathBuf,
         /// The invalid texture format.
         format: TextureFormat,
     },
     /// Error that arises when the texture couldn't be loaded at all.
-    #[display("Texture '{name}' failed to load: {error}")]
+    #[display("Texture '{}' failed to load: {error}", path.display())]
     InvalidImage {
         /// The sprite lookup key.
-        name: String,
+        path: PathBuf,
         /// The error that arises when trying to load the texture.
         error: LoadDirectError,
     },
@@ -286,17 +289,16 @@ impl AssetLoader for AtlasLoader {
         let bleed = (bleeding as usize).min(pad);
 
         async fn collect(
+            prefix: &Path,
             entry: TextureAtlasEntry,
             base: &AssetPath<'_>,
             load_context: &mut LoadContext<'_>,
-            accum: &mut Vec<(String, Image, bool)>,
+            accum: &mut Vec<(PathBuf, Image, bool)>,
         ) -> Result<(), TextureAtlasError> {
             match entry {
                 TextureAtlasEntry::File(path) => {
                     let path = base.resolve(&path)?;
-                    let Some(name) = path.path().file_stem() else {
-                        return Ok(());
-                    };
+                    let Some(name) = path.path().file_stem() else { return Ok(()) };
 
                     let mut name = name.to_string_lossy().into_owned();
                     let has_nine_slice = if let Some((split, "9")) = name.rsplit_once('.') {
@@ -306,18 +308,19 @@ impl AssetLoader for AtlasLoader {
                         false
                     };
 
+                    let path_buf = path.resolve_embed(&name)?.path().strip_prefix(prefix).unwrap().to_owned();
                     let src = match load_context.loader().immediate().load::<Image>(&path).await {
-                        Err(error) => return Err(TextureAtlasError::InvalidImage { name, error }),
+                        Err(error) => return Err(TextureAtlasError::InvalidImage { path: path_buf, error }),
                         Ok(src) => src,
                     }
                     .take();
 
-                    accum.push((name, src, has_nine_slice));
+                    accum.push((path_buf, src, has_nine_slice));
                 }
                 TextureAtlasEntry::Directory(dir, paths) => {
                     let base = base.resolve(&dir)?;
                     for path in paths {
-                        Box::pin(collect(path, &base, load_context, accum)).await?;
+                        Box::pin(collect(prefix, path, &base, load_context, accum)).await?
                     }
                 }
             }
@@ -325,15 +328,11 @@ impl AssetLoader for AtlasLoader {
             Ok(())
         }
 
+        let prefix = load_context.asset_path().parent().unwrap_or_else(|| AssetPath::from(""));
+
         let mut entries = Vec::new();
         for file_entry in file_entries {
-            collect(
-                file_entry,
-                &load_context.asset_path().parent().unwrap(),
-                load_context,
-                &mut entries,
-            )
-            .await?;
+            collect(prefix.path(), file_entry, &prefix, load_context, &mut entries).await?;
         }
 
         entries.sort_by_key(|&(.., ref texture, has_nine_slice)| {
@@ -346,12 +345,12 @@ impl AssetLoader for AtlasLoader {
             2 * (x + y)
         });
 
-        let mut atlas = Atlas {
+        let mut output_atlas = Atlas {
             pages: Vec::new(),
-            sprite_map: HashMap::with_hasher(FixedHasher),
+            sprites: HashMap::with_hasher(FixedHasher),
         };
 
-        let mut end = |ids: HashMap<AllocId, (String, Image, bool)>, packer: AtlasAllocator| {
+        let mut push_page = |ids: HashMap<AllocId, (PathBuf, Image, bool)>, packer: AtlasAllocator| {
             let Size2D {
                 width: page_width,
                 height: page_height,
@@ -359,8 +358,7 @@ impl AssetLoader for AtlasLoader {
             } = packer.size().to_u32();
 
             let pixel_size = TextureFormat::Rgba8UnormSrgb.pixel_size();
-
-            let mut sprites = Vec::new();
+            let mut sprites = Vec::with_capacity(ids.len());
             let mut data = vec![0; page_width as usize * page_height as usize * pixel_size];
 
             for (id, (name, texture, has_nine_slice)) in ids {
@@ -369,7 +367,7 @@ impl AssetLoader for AtlasLoader {
 
                 let Some(texture) = texture.convert(TextureFormat::Rgba8UnormSrgb) else {
                     return Err(TextureAtlasError::UnsupportedFormat {
-                        name,
+                        path: name,
                         format: texture.texture_descriptor.format,
                     });
                 };
@@ -430,76 +428,99 @@ impl AssetLoader for AtlasLoader {
                 }
 
                 // Finally, insert to the sprite map.
-                atlas.sprite_map.insert(name, (atlas.pages.len(), sprites.len()));
                 sprites.push((
+                    name,
                     URect {
                         min: uvec2(min.x as u32 + padding, min.y as u32 + padding),
                         max: uvec2(max.x as u32 - padding, max.y as u32 - padding),
                     },
-                    if has_nine_slice {
-                        let mut cuts = NineSliceCuts {
-                            left: 0,
-                            right: 0,
-                            top: src_row as u32,
-                            bottom: rect_height as u32 - 2 * padding,
-                        };
+                    // `atlas` and `atlas_page` are to be initialized when all sprites are inserted.
+                    AtlasSprite {
+                        atlas: TextureAtlas {
+                            layout: Handle::Weak(AssetId::invalid()),
+                            index: 0,
+                        },
+                        atlas_page: Handle::Weak(AssetId::invalid()),
+                        nine_slices: has_nine_slice.then(|| {
+                            let mut cuts = NineSliceCuts {
+                                left: 0,
+                                right: 0,
+                                top: src_row as u32,
+                                bottom: rect_height as u32 - 2 * padding,
+                            };
 
-                        let mut found_left = false;
-                        for x in 1..src_row + 1 {
-                            let alpha = texture[x * pixel_size + 3];
-                            if !found_left && alpha >= 127 {
-                                found_left = true;
-                                cuts.left = x as u32;
-                            } else if found_left && alpha < 127 {
-                                cuts.right = x as u32;
-                                break
+                            let mut found_left = false;
+                            for x in 1..src_row + 1 {
+                                let alpha = texture[x * pixel_size + 3];
+                                if !found_left && alpha >= 127 {
+                                    found_left = true;
+                                    cuts.left = x as u32;
+                                } else if found_left && alpha < 127 {
+                                    cuts.right = x as u32;
+                                    break
+                                }
                             }
-                        }
 
-                        let mut found_top = false;
-                        for y in 1..rect_height - 2 * pad + 1 {
-                            let alpha = texture[y * (src_row + nine_offset) * pixel_size + 3];
-                            if !found_top && alpha >= 127 {
-                                found_top = true;
-                                cuts.top = y as u32;
-                            } else if found_top && alpha < 127 {
-                                cuts.bottom = y as u32;
-                                break
+                            let mut found_top = false;
+                            for y in 1..rect_height - 2 * pad + 1 {
+                                let alpha = texture[y * (src_row + nine_offset) * pixel_size + 3];
+                                if !found_top && alpha >= 127 {
+                                    found_top = true;
+                                    cuts.top = y as u32;
+                                } else if found_top && alpha < 127 {
+                                    cuts.bottom = y as u32;
+                                    break
+                                }
                             }
-                        }
 
-                        Some(cuts)
-                    } else {
-                        None
+                            cuts
+                        }),
                     },
                 ));
             }
 
-            let page_num = atlas.pages.len();
-            atlas.pages.push(AtlasPage {
-                image: load_context.add_labeled_asset(
-                    format!("page-{page_num}"),
-                    Image::new(
-                        Extent3d {
-                            width: page_width,
-                            height: page_height,
-                            depth_or_array_layers: 1,
-                        },
-                        TextureDimension::D2,
-                        data,
-                        TextureFormat::Rgba8UnormSrgb,
-                        usages,
-                    ),
+            let page_num = output_atlas.pages.len();
+            let page = load_context.add_labeled_asset(
+                format!("page-{page_num}"),
+                Image::new(
+                    Extent3d {
+                        width: page_width,
+                        height: page_height,
+                        depth_or_array_layers: 1,
+                    },
+                    TextureDimension::D2,
+                    data,
+                    TextureFormat::Rgba8UnormSrgb,
+                    usages,
                 ),
-                sprites,
-            });
+            );
 
+            // Fill the layout first before turning it into a handle.
+            let mut layout = TextureAtlasLayout {
+                size: uvec2(page_width, page_height),
+                textures: Vec::with_capacity(sprites.len()),
+            };
+
+            for (.., rect, entry) in &mut sprites {
+                entry.atlas_page = page.clone_weak();
+                entry.atlas.index = layout.textures.len();
+                layout.textures.push(*rect);
+            }
+
+            // Finally turn the layout into a handle, and assign it to sprite entries.
+            let layout = load_context.add_labeled_asset(format!("layout-{page_num}"), layout);
+            for (name, .., mut entry) in sprites {
+                entry.atlas.layout = layout.clone_weak();
+                output_atlas.sprites.insert(name, entry);
+            }
+
+            output_atlas.pages.push((layout, page));
             Ok(())
         };
 
         'pages: while !entries.is_empty() {
             let mut packer = AtlasAllocator::new(size2(init_width as i32, init_height as i32));
-            let mut ids = HashMap::<AllocId, (String, Image, bool)>::with_hasher(FixedHasher);
+            let mut ids = HashMap::<AllocId, (PathBuf, Image, bool)>::with_hasher(FixedHasher);
 
             while let Some((name, texture, has_nine_slice)) = entries.pop() {
                 let UVec2 {
@@ -524,14 +545,14 @@ impl AssetLoader for AtlasLoader {
                         if width == max_width as i32 && height == max_height as i32 {
                             if packer.is_empty() {
                                 return Err(TextureAtlasError::TooLarge {
-                                    name,
+                                    path: name,
                                     max_width,
                                     max_height,
                                     actual_width: width as u32,
                                     actual_height: height as u32,
                                 });
                             } else {
-                                end(ids, packer)?;
+                                push_page(ids, packer)?;
 
                                 // Re-insert the entry to the back, since we didn't end up packing that one.
                                 entries.push((name, texture, has_nine_slice));
@@ -563,10 +584,10 @@ impl AssetLoader for AtlasLoader {
                 }
             }
 
-            end(ids, packer)?;
+            push_page(ids, packer)?;
         }
 
-        Ok(atlas)
+        Ok(output_atlas)
     }
 
     #[inline]

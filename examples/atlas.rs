@@ -129,38 +129,39 @@ struct DrawSprite {
     pos: Vec2,
     scl: Vec2,
     page: AssetId<Image>,
+    page_size: UVec2,
     rect: URect,
 }
 
 impl Drawer for DrawSprite {
     type Vertex = SpriteVertex;
 
-    type ExtractParam = SRes<Assets<Atlas>>;
-    type ExtractData = (Read<GlobalTransform>, Read<AtlasEntry>, Read<AtlasIndex>);
+    type ExtractParam = ();
+    type ExtractData = (Read<GlobalTransform>, Read<AtlasCache>);
     type ExtractFilter = ();
 
-    type DrawParam = SRes<RenderAssets<GpuImage>>;
+    type DrawParam = ();
 
     #[inline]
     fn extract(
         mut drawer: DrawerExtract<Self>,
-        atlases: &SystemParamItem<Self::ExtractParam>,
-        (&trns, atlas, index): QueryItem<Self::ExtractData>,
+        _: &SystemParamItem<Self::ExtractParam>,
+        (&trns, cache): QueryItem<Self::ExtractData>,
     ) {
         (|| -> Option<()> {
-            let atlas = atlases.get(&atlas.atlas)?;
-            let (page_index, rect_index) = index.indices()?;
-
-            let (page, (rect, ..)) = atlas
-                .pages
-                .get(page_index)
-                .and_then(|page| Some((page.image.id(), *page.sprites.get(rect_index)?)))?;
+            let &AtlasCache::Cache {
+                page, page_size, rect, ..
+            } = cache
+            else {
+                return None
+            };
 
             let (scale, .., translation) = trns.to_scale_rotation_translation();
             *drawer.get_or_default() = DrawSprite {
                 pos: translation.truncate(),
                 scl: scale.truncate(),
                 page,
+                page_size,
                 rect,
             };
 
@@ -169,15 +170,16 @@ impl Drawer for DrawSprite {
     }
 
     #[inline]
-    fn draw(&mut self, images: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Some(page) = images.get(self.page) else {
-            return;
-        };
-
+    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Vec2 { x, y } = self.pos;
         let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2. * self.scl;
-        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / vec2(page.size.width as f32, page.size.height as f32);
-        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / vec2(page.size.width as f32, page.size.height as f32);
+        let UVec2 {
+            x: page_width,
+            y: page_height,
+        } = self.page_size;
+
+        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / vec2(page_width as f32, page_height as f32);
+        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / vec2(page_width as f32, page_height as f32);
 
         let base = queuer.data([
             SpriteVertex::new(x - hw, y - hh, u, v),
@@ -215,10 +217,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                 scale: Vec3::splat(10.),
                 ..default()
             },
-            AtlasEntry {
-                atlas: server.load::<Atlas>("sprites/sprites.atlas.ron"),
-                key: "cix".into(),
-            },
+            AtlasEntry::new(server.load("sprites/sprites.atlas.ron"), "cix"),
             HasDrawer::<DrawSprite>::new(),
         ));
     }

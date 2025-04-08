@@ -1,6 +1,6 @@
 //! Defines asset loaders for [`Locale`] and [`LocaleLoader`].
 
-use std::{fmt::Formatter, hint::unreachable_unchecked, io::Error as IoError, num::ParseIntError, str::FromStr};
+use std::{fmt::Formatter, hint::unreachable_unchecked, io, num::ParseIntError, str::FromStr};
 
 use bevy::{
     asset::{AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::error::SpannedError},
@@ -242,7 +242,7 @@ impl FromStr for LocaleFmt {
 pub enum LocaleError {
     /// An IO error occurred.
     #[display("{_0}")]
-    Io(#[from] IoError),
+    Io(#[from] io::Error),
     /// A syntax error occurred.
     #[display("{_0}")]
     Ron(#[from] SpannedError),
@@ -280,7 +280,7 @@ impl AssetLoader for LocaleLoader {
 pub enum LocaleCollectionError {
     /// An IO error occurred.
     #[display("{_0}")]
-    Io(#[from] IoError),
+    Io(#[from] io::Error),
     /// A syntax error occurred.
     #[display("{_0}")]
     Ron(#[from] SpannedError),
