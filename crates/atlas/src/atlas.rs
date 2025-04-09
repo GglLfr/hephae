@@ -8,10 +8,10 @@
 //! This module provides the [`Atlas`] type. See [this module](crate::atlas) for more
 //! information on how the atlas implements [`Asset`].
 //!
-//! This module provides [`AtlasEntry`] and [`AtlasIndex`] components; the former being the
+//! This module provides [`AtlasEntry`] and [`AtlasCache`] components; the former being the
 //! atlas lookup key, and the latter being the cached sprite index. The dedicated
-//! [`update_atlas_index`] system listens to changes/additions to texture atlas assets and updates
-//! the `AtlasIndex` of entities accordingly.
+//! [`update_atlas_cache`] system listens to changes/additions to texture atlas assets and updates
+//! the `AtlasCache` of entities accordingly.
 //!
 //! See the `examples/atlas` for a full example.
 

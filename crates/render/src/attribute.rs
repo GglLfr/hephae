@@ -74,6 +74,9 @@ impl LinearRgbaExt for LinearRgba {
 /// Marks the type as acceptable by shader programs as vertex attributes. You shouldn't implement
 /// this manually, as this crate already does that for you.
 ///
+/// This is usually used as fields for structs that derive [`VertexLayout`], which in turn may also
+/// derive [`HasAttrib`] that may power up [`Shaper`] API.
+///
 /// # Safety
 ///
 /// [`FORMAT::size()`](VertexFormat::size) == [`size_of::<Self>()`](size_of).
@@ -140,7 +143,7 @@ impl_is_attrib_data! {
     LinearRgba => Float32x4
 }
 
-/// Represents vertex values in a [vertex buffer object](bevy_render::render_resource::Buffer).
+/// Represents vertex values in a [vertex buffer object](bevy::render::render_resource::Buffer).
 ///
 /// # Safety
 ///
@@ -153,40 +156,61 @@ pub unsafe trait VertexLayout: Pod {
     const ATTRIBUTES: &'static [VertexAttribute];
 }
 
+/// Vertex attribute types that are used in [`Shaper`] API. Common types include [`Pos2dAttrib`],
+/// [`ColorAttrib`], and [`UvAttrib`].
 pub trait Attrib {
+    /// The actual field type this attribute uses.
     type Data: IsAttribData;
 }
 
+/// Static marker asserting that a vertex type has a certain attribute, which may benefit [`Shaper`]
+/// API.
+///
+/// # Safety
+///
+/// Pointer to `Self` offset by `OFFSET` must point to a field whose type is `T::Data`. This is
+/// ensured by [`VertexLayout`]'s derive macro.
 pub unsafe trait HasAttrib<T: Attrib>: VertexLayout {
+    /// The offset of the field representing this attribute.
     const OFFSET: usize;
 }
 
+/// 2D position attribute.
 pub struct Pos2dAttrib;
 impl Attrib for Pos2dAttrib {
     type Data = Vec2;
 }
 
+/// 3D position attribute.
 pub struct Pos3dAttrib;
 impl Attrib for Pos3dAttrib {
     type Data = Vec3;
 }
 
+/// Float-color attribute.
 pub struct ColorAttrib;
 impl Attrib for ColorAttrib {
     type Data = LinearRgba;
 }
 
+/// Byte-color attribute.
 pub struct ByteColorAttrib;
 impl Attrib for ByteColorAttrib {
     type Data = [Nor<u8>; 4];
 }
 
+/// UV-coordinates attribute.
 pub struct UvAttrib;
 impl Attrib for UvAttrib {
     type Data = Vec2;
 }
 
+/// Used in [`Shaper::queue`] to create an index array based on an offset.
+///
+/// This is a work around `impl FnOnce(u32) -> impl Transfer<u32>` not being possible on current
+/// stable Rust.
 pub trait IndexQueuer {
+    /// Creates the index array that starts from `base_offset`.
     fn queue(self, base_offset: u32) -> impl Transfer<u32>;
 }
 
@@ -197,8 +221,14 @@ impl<F: FnOnce(u32) -> T, T: Transfer<u32>> IndexQueuer for F {
     }
 }
 
+/// Provides utility methods like positioning, coloring, setting UV coordinates, and more to an
+/// array of vertices.
+///
+/// This utilizes [`HasAttrib`] to determine whether the vertex it's working with supports those
+/// attributes.
 #[derive(Debug, Copy, Clone)]
 pub struct Shaper<T: Vertex, const VERTICES: usize> {
+    /// The raw vertex array for manual access.
     pub vertices: [T; VERTICES],
 }
 
@@ -215,6 +245,7 @@ unsafe impl<T: Vertex, const VERTICES: usize> Transfer<T> for Shaper<T, VERTICES
 }
 
 impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Creates a new shaper.
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -222,12 +253,18 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
         }
     }
 
+    /// Manually sets the vertex at a given index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn at(&mut self, index: usize, vertex: T) -> &mut Self {
         self.vertices[index] = vertex;
         self
     }
 
+    /// Sets a vertex attribute for all vertices.
     #[inline]
     pub fn attribs<M: Attrib>(&mut self, attributes: [M::Data; VERTICES]) -> &mut Self
     where
@@ -250,6 +287,11 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
         self
     }
 
+    /// Sets a vertex attribute for a specific vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn attrib_at<M: Attrib>(&mut self, index: usize, attribute: M::Data) -> &mut Self
     where
@@ -266,6 +308,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
         self
     }
 
+    /// Finishes using the [`Shaper`] API.
     #[inline]
     pub fn queue(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey, indices: impl IndexQueuer) {
         queuer.request(layer, key, indices.queue(queuer.data(self.vertices)))
@@ -273,11 +316,17 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
 }
 
 impl<T: Vertex + HasAttrib<Pos2dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Sets 2D positions for all vertices.
     #[inline]
     pub fn pos2d(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
         self.attribs::<Pos2dAttrib>(positions)
     }
 
+    /// Sets a 2D position for a vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn pos2d_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
         self.attrib_at::<Pos2dAttrib>(index, position.into())
@@ -285,11 +334,17 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>, const VERTICES: usize> Shaper<T, VERTIC
 }
 
 impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Sets 3D positions for all vertices.
     #[inline]
     pub fn pos3d(&mut self, positions: [Vec3; VERTICES]) -> &mut Self {
         self.attribs::<Pos3dAttrib>(positions)
     }
 
+    /// Sets a 3D position for a vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn pos3d_at(&mut self, index: usize, position: impl Into<Vec3>) -> &mut Self {
         self.attrib_at::<Pos3dAttrib>(index, position.into())
@@ -297,17 +352,24 @@ impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTIC
 }
 
 impl<T: Vertex + HasAttrib<ColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Colors all vertices with a uniform color.
     #[inline]
     pub fn color(&mut self, color: impl Into<LinearRgba>) -> &mut Self {
         let color = color.into();
         self.attribs::<ColorAttrib>([color; VERTICES])
     }
 
+    /// Sets colors for all vertices.
     #[inline]
     pub fn colors(&mut self, colors: [LinearRgba; VERTICES]) -> &mut Self {
         self.attribs::<ColorAttrib>(colors)
     }
 
+    /// Sets a color for a vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn color_at(&mut self, index: usize, color: impl Into<LinearRgba>) -> &mut Self {
         self.attrib_at::<ColorAttrib>(index, color.into())
@@ -315,16 +377,23 @@ impl<T: Vertex + HasAttrib<ColorAttrib>, const VERTICES: usize> Shaper<T, VERTIC
 }
 
 impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Colors all vertices with a uniform color.
     #[inline]
     pub fn byte_color(&mut self, color: [Nor<u8>; 4]) -> &mut Self {
         self.attribs::<ByteColorAttrib>([color; VERTICES])
     }
 
+    /// Sets colors for all vertices.
     #[inline]
     pub fn byte_colors(&mut self, colors: [[Nor<u8>; 4]; VERTICES]) -> &mut Self {
         self.attribs::<ByteColorAttrib>(colors)
     }
 
+    /// Sets a color for a vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn byte_color_at(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self {
         self.attrib_at::<ByteColorAttrib>(index, color.into())
@@ -332,11 +401,17 @@ impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VE
 }
 
 impl<T: Vertex + HasAttrib<UvAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    /// Assigns UV coordinates for all vertices.
     #[inline]
     pub fn uv(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
         self.attribs::<UvAttrib>(positions)
     }
 
+    /// Sets a UV coordinate for a vertex.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn uv_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
         self.attrib_at::<UvAttrib>(index, position.into())
@@ -344,6 +419,8 @@ impl<T: Vertex + HasAttrib<UvAttrib>, const VERTICES: usize> Shaper<T, VERTICES>
 }
 
 impl<T: Vertex> Shaper<T, 4> {
+    /// Convenience method for [`Self::queue`] where the index array is `[0, 1, 2, 2, 3, 0]`, offset
+    /// by the base index.
     #[inline]
     pub fn queue_rect(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey) {
         self.queue(queuer, layer, key, |o| [o, o + 1, o + 2, o + 2, o + 3, o])
@@ -351,6 +428,7 @@ impl<T: Vertex> Shaper<T, 4> {
 }
 
 impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
+    /// Positions the rectangle based on a center position and size.
     #[inline]
     pub fn rect(&mut self, center: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
         let Vec2 { x, y } = center.into();
@@ -360,6 +438,7 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
         self
     }
 
+    /// Positions the rectangle based on the bottom-left position and size.
     #[inline]
     pub fn rect_bl(&mut self, bottom_left: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
         let Vec2 { x, y } = bottom_left.into();
@@ -371,6 +450,8 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
 }
 
 impl<T: Vertex + HasAttrib<UvAttrib>> Shaper<T, 4> {
+    /// Assigns UV coordinates based on an atlas sprite entry. Note that this flips the V
+    /// coordinate, since images are actually flipped vertically (y=0 is at the top, not bottom).
     #[inline]
     pub fn uv_rect(&mut self, rect: URect, atlas_size: UVec2) -> &mut Self {
         let page = atlas_size.as_vec2();

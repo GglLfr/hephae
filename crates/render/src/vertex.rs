@@ -31,7 +31,7 @@ use crate::{
     drawer::{Drawer, HasDrawer},
 };
 
-/// A [`PhaseItem`](bevy_render::render_phase::PhaseItem) that works with [`Vertex`].
+/// A [`PhaseItem`](bevy::render::render_phase::PhaseItem) that works with [`Vertex`].
 ///
 /// The phase item is special in that it's aware of which draw request from a [`Drawer`] it's
 /// actually rendering. This means, multiple [`DrawerPhaseItem`]s may point to the same entities but
@@ -88,11 +88,11 @@ pub trait Vertex: Send + Sync + VertexLayout {
     /// The additional property of the [common pipeline definition](crate::pipeline::VertexPipeline)
     /// that may used when specializing based on [`PipelineKey`](Vertex::PipelineKey). For example,
     /// this may be used to create a
-    /// [`BindGroupLayout`](bevy_render::render_resource::BindGroupLayout) for texture-sampling.
+    /// [`BindGroupLayout`](bevy::render::render_resource::BindGroupLayout) for texture-sampling.
     type PipelineProp: Send + Sync;
     /// Key used to specialize the render pipeline. For example, this may be an
-    /// [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) used to reference a
-    /// [`GpuImage`](bevy_render::texture::GpuImage) for texture-sampling.
+    /// [`AssetId<Image>`](Handle<bevy::image::Image>) used to reference a
+    /// [`GpuImage`](bevy::render::texture::GpuImage) for texture-sampling.
     type PipelineKey: Send + Sync + Clone + Eq + PartialEq + Hash;
     /// Format of the depth-stencil pass supplied to the rendering pipeline creation parameters.
     /// Defaults to [`Some(TextureFormat::Depth32Float)`], which is the default for 2D core pipeline
@@ -103,12 +103,12 @@ pub trait Vertex: Send + Sync + VertexLayout {
     type BatchParam: SystemParam;
     /// Additional property that is embedded into the [batch](crate::pipeline::ViewBatches)
     /// components for use in [`RenderCommand`](Vertex::RenderCommand). For example, this may be
-    /// an [`AssetId<Image>`](bevy_asset::Handle<bevy_image::Image>) from
+    /// an [`AssetId<Image>`](Handle<bevy::image::Image>) from
     /// [`PipelineKey`](Vertex::PipelineKey) to attach the associated bind
     /// group for texture-sampling.
     type BatchProp: Send + Sync;
 
-    /// The [`PhaseItem`](bevy_render::render_phase::PhaseItem) that this vertex works with.
+    /// The [`PhaseItem`](bevy::render::render_phase::PhaseItem) that this vertex works with.
     type Item: DrawerPhaseItem;
     /// Additional GPU render commands to invoke before actually drawing the vertex and index
     /// buffers. For example, this may be used to set the texture-sampling bind group provided by
@@ -168,7 +168,7 @@ impl<T: Vertex> Default for DrawItems<T> {
 
 /// Calculates [`ViewVisibility`] of [drawable](Drawer) entities.
 ///
-/// Similar to [`check_visibility`](bevy_render::view::check_visibility) that is generic over
+/// Similar to [`check_visibility`](bevy::render::view::check_visibility) that is generic over
 /// [`HasDrawer`], except the filters are configured dynamically by
 /// [`DrawerPlugin`](crate::DrawerPlugin). This makes it so that all drawers that share the
 /// same [`Vertex`] type also share the same visibility system.

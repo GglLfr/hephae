@@ -250,10 +250,11 @@ pub enum TextureAtlasError {
 /// This asset loader adds each texture atlas entry as a "load dependency." As much, coupled with a
 /// file system watcher, mutating these input image files will cause reprocessing of the atlas.
 ///
-/// This asset loader also adds [`pages[i].image`](AtlasPage::image) as a labelled asset with label
-/// `"page-{i}"` (without the brackets). Therefore, doing (for example)
+/// This asset loader also adds layouts and images as labelled assets with label `"page-{i}"` and
+/// `"layout-{i}"` (without the brackets). Therefore, doing (for example)
 /// `server.load::<Image>("sprites.atlas.ron#page-0")` is possible and will return the 0th page
-/// image of the atlas, provided the atlas actually has a 0th page.
+/// image of the atlas, provided the atlas actually has a 0th page (which it won't only if there are
+/// no sprites at all!).
 #[derive(Debug, Copy, Clone, Default)]
 pub struct AtlasLoader;
 impl AssetLoader for AtlasLoader {

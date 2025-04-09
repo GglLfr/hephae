@@ -3,14 +3,13 @@
 //! The procedures are as following:
 //! - During [extraction](ExtractSchedule), the [pipeline shader](Vertex::SHADER) [id](AssetId) is
 //!   synchronized from the main world to the render world.
-//! - During [phase item queueing](bevy_render::RenderSet::Queue), each visible
-//!   [drawers](crate::drawer::Drawer) queue [vertices](crate::vertex::Vertex) and indices as draw
-//!   requests.
-//! - During [GPU resource preparation](bevy_render::RenderSet::PrepareBindGroups), camera view bind
-//!   groups are created, and for each camera view, index buffers are generated based on drawers
-//!   that overlap the camera view bounds. Notably, all cameras share the same vertex buffer.
-//!   Compatible vertex commands are batched; i.e., they share a section in the vertex and index
-//!   buffers and share GPU render calls.
+//! - During [phase item queueing](bevy::render::RenderSet::Queue), each visible
+//!   [drawers](crate::drawer::Drawer) queue [vertices](Vertex) and indices as draw requests.
+//! - During [GPU resource preparation](bevy::render::RenderSet::PrepareBindGroups), camera view
+//!   bind groups are created, and for each camera view, index buffers are generated based on
+//!   drawers that overlap the camera view bounds. Notably, all cameras share the same vertex
+//!   buffer. Compatible vertex commands are batched; i.e., they share a section in the vertex and
+//!   index buffers and share GPU render calls.
 //! - [`DrawRequests`] renders each batch.
 
 use std::{marker::PhantomData, ops::Range, sync::PoisonError};
@@ -106,7 +105,7 @@ impl<T: Vertex> PipelineShader<T> {
     }
 }
 
-/// [`Startup`](bevy_app::Startup) system that loads the [`PipelineShader`].
+/// [`Startup`] system that loads the [`PipelineShader`].
 pub fn load_shader<T: Vertex>(mut commands: Commands, server: Res<AssetServer>) {
     commands.insert_resource(PipelineShader::<T>(server.load(T::SHADER), PhantomData));
 }

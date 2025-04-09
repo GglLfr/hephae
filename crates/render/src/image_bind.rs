@@ -41,7 +41,7 @@ impl ImageBindGroups {
     }
 
     /// Gets the [`BindGroup`] previously created with [`create`](Self::create). Should work in
-    /// concert with [`RenderCommand::render`](bevy_render::render_phase::RenderCommand::render).
+    /// concert with [`RenderCommand::render`](bevy::render::render_phase::RenderCommand::render).
     #[inline]
     pub fn get(&self, id: impl Into<AssetId<Image>>) -> Option<&BindGroup> {
         self.0.get(&id.into())
