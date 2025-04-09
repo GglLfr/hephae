@@ -244,6 +244,13 @@ unsafe impl<T: Vertex, const VERTICES: usize> Transfer<T> for Shaper<T, VERTICES
     }
 }
 
+impl<T: Vertex, const VERTICES: usize> Default for Shaper<T, VERTICES> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Creates a new shaper.
     #[inline]
@@ -396,7 +403,7 @@ impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VE
     /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn byte_color_at(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self {
-        self.attrib_at::<ByteColorAttrib>(index, color.into())
+        self.attrib_at::<ByteColorAttrib>(index, color)
     }
 }
 
