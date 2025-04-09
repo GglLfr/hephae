@@ -1,8 +1,8 @@
 use hephae_macros::{
     Manifest,
     proc_macro2::TokenStream,
-    quote::quote,
-    syn::{self, Data, DeriveInput, Fields, parse_quote, punctuated::Punctuated},
+    quote::{ToTokens, format_ident, quote, quote_spanned},
+    syn::{self, Data, DeriveInput, Error, Fields, parse_quote, punctuated::Punctuated, spanned::Spanned},
 };
 
 pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
@@ -17,7 +17,7 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
     } = syn::parse2(input)?;
 
     let Data::Struct(data) = data else {
-        return Err(syn::Error::new_spanned(ident, "`VertexLayout` only supports `struct`s"))
+        return Err(Error::new_spanned(ident, "`VertexLayout` only supports `struct`s"))
     };
 
     let where_clause = generics.make_where_clause();
@@ -29,24 +29,59 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
 
     where_clause
         .predicates
-        .push(parse_quote! { Self: #hephae_render::bytemuck::NoUninit });
+        .push(parse_quote! { Self: #hephae_render::bytemuck::Pod });
 
-    for field in fields {
+    let mut impl_attribs = Vec::new();
+    for (i, field) in fields.iter().enumerate() {
         let ty = &field.ty;
         where_clause
             .predicates
-            .push(parse_quote! { #ty: #hephae_render::attribute::IsVertexAttribute });
+            .push(parse_quote! { #ty: #hephae_render::attribute::IsAttribData });
+
+        let mut impl_attrib = None;
+        for attr in &field.attrs {
+            if attr.path().is_ident("attrib") {
+                if impl_attrib.is_some() {
+                    return Err(Error::new_spanned(attr, "multiple `#[attrib(...)]` found"))
+                } else {
+                    attr.parse_nested_meta(|meta| {
+                        impl_attrib = Some(meta.path);
+                        Ok(())
+                    })?;
+                }
+            }
+        }
+
+        if let Some(mut attrib) = impl_attrib {
+            let Some(last) = attrib.segments.last_mut() else {
+                return Err(Error::new_spanned(attrib, "empty path"))
+            };
+
+            last.ident = format_ident!("{}Attrib", last.ident);
+            impl_attribs.push((
+                match field.ident {
+                    Some(ref id) => id.to_token_stream(),
+                    None => quote_spanned! { field.span() => #i },
+                },
+                &field.ty,
+                attrib,
+            ));
+        }
     }
 
     let attributes = fields.iter().enumerate().fold(Vec::new(), |mut out, (i, field)| {
-        let name = &field.ident;
+        let name = match field.ident {
+            Some(ref id) => id.to_token_stream(),
+            None => quote_spanned! { field.span() => #i },
+        };
+
         let ty = &field.ty;
         let index = i as u32;
 
         out.push(quote! {
             #bevy_render::render_resource::VertexAttribute {
-                format: <#ty as #hephae_render::attribute::IsVertexAttribute>::FORMAT,
-                offset: ::std::mem::offset_of!(Self, #name) as u64,
+                format: <#ty as #hephae_render::attribute::IsAttribData>::FORMAT,
+                offset: ::core::mem::offset_of!(Self, #name) as u64,
                 shader_location: #index,
             }
         });
@@ -54,11 +89,23 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
     });
 
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+    let impl_attribs = impl_attribs.into_iter().map(|(f, field_type, attrib)| {
+        quote_spanned! { f.span() =>
+            unsafe impl #impl_generics #hephae_render::attribute::HasAttrib::<#attrib> for #ident #type_generics
+                #where_clause, #attrib: #hephae_render::attribute::Attrib<Data = #field_type>,
+            {
+                const OFFSET: usize = ::core::mem::offset_of!(Self, #f);
+            }
+        }
+    });
+
     Ok(quote! {
         unsafe impl #impl_generics #hephae_render::attribute::VertexLayout for #ident #type_generics #where_clause {
             const ATTRIBUTES: &'static [#bevy_render::render_resource::VertexAttribute] = &[
                 #(#attributes),*
             ];
         }
+
+        #(#impl_attribs)*
     })
 }

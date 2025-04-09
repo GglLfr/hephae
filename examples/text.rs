@@ -7,7 +7,7 @@ use bevy::{
             lifetimeless::{Read, SRes, SResMut},
         },
     },
-    math::{vec2, vec3},
+    math::vec3,
     prelude::*,
     render::{
         render_asset::RenderAssets,
@@ -29,20 +29,12 @@ use hephae::{locale::def::LocaleChangeEvent, prelude::*, text::atlas::FontAtlas}
 #[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct Vert {
-    pos: [f32; 2],
-    uv: [f32; 2],
+    #[attrib(Pos2d)]
+    pos: Vec2,
+    #[attrib(Uv)]
+    uv: Vec2,
+    #[attrib(ByteColor)]
     col: [Nor<u8>; 4],
-}
-
-impl Vert {
-    #[inline]
-    pub const fn new(xy: Vec2, uv: Vec2, col: [Nor<u8>; 4]) -> Self {
-        Self {
-            pos: [xy.x, xy.y],
-            uv: [uv.x, uv.y],
-            col,
-        }
-    }
 }
 
 impl Vertex for Vert {
@@ -167,32 +159,11 @@ impl Drawer for DrawText {
                 continue;
             };
 
-            let pos = self.pos + glyph.origin;
-            let rect = rect.as_rect();
-            let atlas_size = atlas.size().as_vec2();
-
-            let (w, h) = (rect.width(), rect.height());
-            let (u, v, u2, v2) = (
-                rect.min.x / atlas_size.x,
-                rect.max.y / atlas_size.y,
-                rect.max.x / atlas_size.x,
-                rect.min.y / atlas_size.y,
-            );
-
-            let bottom_left = (pos, vec2(u, v));
-            let bottom_right = (pos + vec2(w, 0.), vec2(u2, v));
-            let top_right = (pos + vec2(w, h), vec2(u2, v2));
-            let top_left = (pos + vec2(0., h), vec2(u, v2));
-
-            let col = [127, 255, 100, 255].map(Nor);
-            let base = queuer.data([
-                Vert::new(bottom_left.0, bottom_left.1, col),
-                Vert::new(bottom_right.0, bottom_right.1, col),
-                Vert::new(top_right.0, top_right.1, col),
-                Vert::new(top_left.0, top_left.1, col),
-            ]);
-
-            queuer.request(0., atlas.image(), [base, base + 1, base + 2, base + 2, base + 3, base]);
+            Shaper::new()
+                .rect_bl(self.pos + glyph.origin, rect.size().as_vec2())
+                .uv_rect(rect, atlas.size())
+                .byte_color([127, 255, 100, 255].map(Nor))
+                .queue_rect(queuer, 0., atlas.image())
         }
     }
 }
@@ -210,7 +181,7 @@ fn main() {
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
-    commands.spawn(Camera2d);
+    commands.spawn((Camera2d, Msaa::Off));
 
     commands.spawn_localized(
         (

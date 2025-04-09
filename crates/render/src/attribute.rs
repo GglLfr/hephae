@@ -1,7 +1,10 @@
 //! Defines functionalities associated with vertex attributes and their respective layouts and
 //! formats.
 
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    ptr::addr_eq,
+};
 
 use bevy::{
     prelude::*,
@@ -9,6 +12,9 @@ use bevy::{
 };
 use bytemuck::{Pod, Zeroable};
 pub use hephae_render_derive::VertexLayout;
+use vec_belt::Transfer;
+
+use crate::{drawer::VertexQueuer, vertex::Vertex};
 
 /// Represents values that, when passed to shaders as vertex attributes, are to be treated as
 /// normalized floating point numbers. For example, `[u8; 2]`'s format is [`VertexFormat::Uint8x2`],
@@ -71,25 +77,25 @@ impl LinearRgbaExt for LinearRgba {
 /// # Safety
 ///
 /// [`FORMAT::size()`](VertexFormat::size) == [`size_of::<Self>()`](size_of).
-pub unsafe trait IsVertexAttribute: Pod {
+pub unsafe trait IsAttribData: Pod {
     /// The associated vertex format of this vertex attribute.
     const FORMAT: VertexFormat;
 }
 
-macro_rules! impl_is_vertex_attribute {
+macro_rules! impl_is_attrib_data {
     ($($target:ty => $result:ident)*) => {
         $(
             const _: () = assert!(size_of::<$target>() as u64 == VertexFormat::$result.size());
 
             // Safety: Assertion above guarantees same sizes.
-            unsafe impl IsVertexAttribute for $target {
+            unsafe impl IsAttribData for $target {
                 const FORMAT: VertexFormat = VertexFormat::$result;
             }
         )*
     };
 }
 
-impl_is_vertex_attribute! {
+impl_is_attrib_data! {
     [u8; 2] => Uint8x2
     [u8; 4] => Uint8x4
     [i8; 2] => Sint8x2
@@ -145,4 +151,233 @@ impl_is_vertex_attribute! {
 pub unsafe trait VertexLayout: Pod {
     /// The attributes of this layout.
     const ATTRIBUTES: &'static [VertexAttribute];
+}
+
+pub trait Attrib {
+    type Data: IsAttribData;
+}
+
+pub unsafe trait HasAttrib<T: Attrib>: VertexLayout {
+    const OFFSET: usize;
+}
+
+pub struct Pos2dAttrib;
+impl Attrib for Pos2dAttrib {
+    type Data = Vec2;
+}
+
+pub struct Pos3dAttrib;
+impl Attrib for Pos3dAttrib {
+    type Data = Vec3;
+}
+
+pub struct ColorAttrib;
+impl Attrib for ColorAttrib {
+    type Data = LinearRgba;
+}
+
+pub struct ByteColorAttrib;
+impl Attrib for ByteColorAttrib {
+    type Data = [Nor<u8>; 4];
+}
+
+pub struct UvAttrib;
+impl Attrib for UvAttrib {
+    type Data = Vec2;
+}
+
+pub trait IndexQueuer {
+    fn queue(self, base_offset: u32) -> impl Transfer<u32>;
+}
+
+impl<F: FnOnce(u32) -> T, T: Transfer<u32>> IndexQueuer for F {
+    #[inline]
+    fn queue(self, base_offset: u32) -> impl Transfer<u32> {
+        self(base_offset)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Shaper<T: Vertex, const VERTICES: usize> {
+    pub vertices: [T; VERTICES],
+}
+
+unsafe impl<T: Vertex, const VERTICES: usize> Transfer<T> for Shaper<T, VERTICES> {
+    #[inline]
+    fn len(&self) -> usize {
+        VERTICES
+    }
+
+    #[inline]
+    unsafe fn transfer(self, len: usize, dst: *mut T) {
+        unsafe { self.vertices.transfer(len, dst) }
+    }
+}
+
+impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            vertices: [T::zeroed(); VERTICES],
+        }
+    }
+
+    #[inline]
+    pub fn at(&mut self, index: usize, vertex: T) -> &mut Self {
+        self.vertices[index] = vertex;
+        self
+    }
+
+    #[inline]
+    pub fn attribs<M: Attrib>(&mut self, attributes: [M::Data; VERTICES]) -> &mut Self
+    where
+        T: HasAttrib<M>,
+    {
+        let offset = const { <T as HasAttrib<M>>::OFFSET };
+        let mut src = attributes.as_ptr().cast::<u8>();
+        let mut dst = self.vertices.as_mut_ptr().cast::<u8>();
+
+        unsafe {
+            let end = dst.add(VERTICES * size_of::<T>());
+            while !addr_eq(dst, end) {
+                dst.add(offset).copy_from_nonoverlapping(src, size_of::<M::Data>());
+
+                src = src.add(size_of::<M::Data>());
+                dst = dst.add(size_of::<T>());
+            }
+        }
+
+        self
+    }
+
+    #[inline]
+    pub fn attrib_at<M: Attrib>(&mut self, index: usize, attribute: M::Data) -> &mut Self
+    where
+        T: HasAttrib<M>,
+    {
+        let offset = const { <T as HasAttrib<M>>::OFFSET };
+        let dst = (&raw mut self.vertices[index]).cast::<u8>();
+
+        unsafe {
+            dst.add(offset)
+                .copy_from_nonoverlapping((&raw const attribute).cast::<u8>(), size_of::<M::Data>())
+        }
+
+        self
+    }
+
+    #[inline]
+    pub fn queue(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey, indices: impl IndexQueuer) {
+        queuer.request(layer, key, indices.queue(queuer.data(self.vertices)))
+    }
+}
+
+impl<T: Vertex + HasAttrib<Pos2dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn pos2d(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
+        self.attribs::<Pos2dAttrib>(positions)
+    }
+
+    #[inline]
+    pub fn pos2d_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
+        self.attrib_at::<Pos2dAttrib>(index, position.into())
+    }
+}
+
+impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn pos3d(&mut self, positions: [Vec3; VERTICES]) -> &mut Self {
+        self.attribs::<Pos3dAttrib>(positions)
+    }
+
+    #[inline]
+    pub fn pos3d_at(&mut self, index: usize, position: impl Into<Vec3>) -> &mut Self {
+        self.attrib_at::<Pos3dAttrib>(index, position.into())
+    }
+}
+
+impl<T: Vertex + HasAttrib<ColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn color(&mut self, color: impl Into<LinearRgba>) -> &mut Self {
+        let color = color.into();
+        self.attribs::<ColorAttrib>([color; VERTICES])
+    }
+
+    #[inline]
+    pub fn colors(&mut self, colors: [LinearRgba; VERTICES]) -> &mut Self {
+        self.attribs::<ColorAttrib>(colors)
+    }
+
+    #[inline]
+    pub fn color_at(&mut self, index: usize, color: impl Into<LinearRgba>) -> &mut Self {
+        self.attrib_at::<ColorAttrib>(index, color.into())
+    }
+}
+
+impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn byte_color(&mut self, color: [Nor<u8>; 4]) -> &mut Self {
+        self.attribs::<ByteColorAttrib>([color; VERTICES])
+    }
+
+    #[inline]
+    pub fn byte_colors(&mut self, colors: [[Nor<u8>; 4]; VERTICES]) -> &mut Self {
+        self.attribs::<ByteColorAttrib>(colors)
+    }
+
+    #[inline]
+    pub fn byte_color_at(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self {
+        self.attrib_at::<ByteColorAttrib>(index, color.into())
+    }
+}
+
+impl<T: Vertex + HasAttrib<UvAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+    #[inline]
+    pub fn uv(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
+        self.attribs::<UvAttrib>(positions)
+    }
+
+    #[inline]
+    pub fn uv_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
+        self.attrib_at::<UvAttrib>(index, position.into())
+    }
+}
+
+impl<T: Vertex> Shaper<T, 4> {
+    #[inline]
+    pub fn queue_rect(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey) {
+        self.queue(queuer, layer, key, |o| [o, o + 1, o + 2, o + 2, o + 3, o])
+    }
+}
+
+impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
+    #[inline]
+    pub fn rect(&mut self, center: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
+        let Vec2 { x, y } = center.into();
+        let Vec2 { x: w, y: h } = size.into() / 2.0;
+
+        self.pos2d([vec2(x - w, y - h), vec2(x + w, y - h), vec2(x + w, y + h), vec2(x - w, y + h)]);
+        self
+    }
+
+    #[inline]
+    pub fn rect_bl(&mut self, bottom_left: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
+        let Vec2 { x, y } = bottom_left.into();
+        let Vec2 { x: w, y: h } = size.into();
+
+        self.pos2d([vec2(x, y), vec2(x + w, y), vec2(x + w, y + h), vec2(x, y + h)]);
+        self
+    }
+}
+
+impl<T: Vertex + HasAttrib<UvAttrib>> Shaper<T, 4> {
+    #[inline]
+    pub fn uv_rect(&mut self, rect: URect, atlas_size: UVec2) -> &mut Self {
+        let page = atlas_size.as_vec2();
+        let Vec2 { x: u, y: v2 } = rect.min.as_vec2() / page;
+        let Vec2 { x: u2, y: v } = rect.max.as_vec2() / page;
+
+        self.uv([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)]);
+        self
+    }
 }

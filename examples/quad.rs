@@ -12,18 +12,10 @@ use hephae::prelude::*;
 #[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct Vert {
-    pos: [f32; 2],
+    #[attrib(Pos2d)]
+    pos: Vec2,
+    #[attrib(Color)]
     color: LinearRgba,
-}
-
-impl Vert {
-    #[inline]
-    const fn new(x: f32, y: f32, red: f32, green: f32, blue: f32, alpha: f32) -> Self {
-        Self {
-            pos: [x, y],
-            color: LinearRgba { red, green, blue, alpha },
-        }
-    }
 }
 
 impl Vertex for Vert {
@@ -65,14 +57,18 @@ impl Drawer for Draw {
     #[inline]
     fn draw(&mut self, time: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let (sin, cos) = (time.elapsed_secs() * 3.).sin_cos();
-        let base = queuer.data([
-            Vert::new(100. + cos * 25., 100. + sin * 25., 2., 0., 0., 1.),
-            Vert::new(-100. - cos * 25., 100. + sin * 25., 0., 3., 0., 1.),
-            Vert::new(-100. - cos * 25., -100. - sin * 25., 0., 0., 4., 1.),
-            Vert::new(100. + cos * 25., -100. - sin * 25., 4., 3., 2., 1.),
-        ]);
-
-        queuer.request(0., (), [base, base + 1, base + 2, base + 2, base + 3, base]);
+        Shaper::new()
+            .pos2d(
+                [
+                    [100. + cos * 25., 100. + sin * 25.],
+                    [-100. - cos * 25., 100. + sin * 25.],
+                    [-100. - cos * 25., -100. - sin * 25.],
+                    [100. + cos * 25., -100. - sin * 25.],
+                ]
+                .map(Vec2::from_array),
+            )
+            .colors([[2., 0., 0., 1.], [0., 3., 0., 1.], [0., 0., 4., 1.], [4., 3., 2., 1.]].map(LinearRgba::from_f32_array))
+            .queue_rect(queuer, 0., ())
     }
 }
 

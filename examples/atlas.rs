@@ -27,15 +27,10 @@ use hephae::prelude::*;
 #[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct SpriteVertex {
-    pos: [f32; 2],
-    uv: [f32; 2],
-}
-
-impl SpriteVertex {
-    #[inline]
-    pub const fn new(x: f32, y: f32, u: f32, v: f32) -> Self {
-        Self { pos: [x, y], uv: [u, v] }
-    }
+    #[attrib(Pos2d)]
+    pos: Vec2,
+    #[attrib(Uv)]
+    uv: Vec2,
 }
 
 impl Vertex for SpriteVertex {
@@ -148,47 +143,29 @@ impl Drawer for DrawSprite {
         _: &SystemParamItem<Self::ExtractParam>,
         (&trns, cache): QueryItem<Self::ExtractData>,
     ) {
-        (|| -> Option<()> {
-            let &AtlasCache::Cache {
-                page, page_size, rect, ..
-            } = cache
-            else {
-                return None
-            };
+        let &AtlasCache::Cache {
+            page, page_size, rect, ..
+        } = cache
+        else {
+            return
+        };
 
-            let (scale, .., translation) = trns.to_scale_rotation_translation();
-            *drawer.get_or_default() = DrawSprite {
-                pos: translation.truncate(),
-                scl: scale.truncate(),
-                page,
-                page_size,
-                rect,
-            };
-
-            None
-        })();
+        let (scale, .., translation) = trns.to_scale_rotation_translation();
+        *drawer.get_or_default() = DrawSprite {
+            pos: translation.truncate(),
+            scl: scale.truncate(),
+            page,
+            page_size,
+            rect,
+        };
     }
 
     #[inline]
     fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Vec2 { x, y } = self.pos;
-        let Vec2 { x: hw, y: hh } = (self.rect.max - self.rect.min).as_vec2() / 2. * self.scl;
-        let UVec2 {
-            x: page_width,
-            y: page_height,
-        } = self.page_size;
-
-        let Vec2 { x: u, y: v2 } = self.rect.min.as_vec2() / vec2(page_width as f32, page_height as f32);
-        let Vec2 { x: u2, y: v } = self.rect.max.as_vec2() / vec2(page_width as f32, page_height as f32);
-
-        let base = queuer.data([
-            SpriteVertex::new(x - hw, y - hh, u, v),
-            SpriteVertex::new(x + hw, y - hh, u2, v),
-            SpriteVertex::new(x + hw, y + hh, u2, v2),
-            SpriteVertex::new(x - hw, y + hh, u, v2),
-        ]);
-
-        queuer.request(0., self.page, [base, base + 1, base + 2, base + 2, base + 3, base]);
+        Shaper::new()
+            .rect(self.pos, self.rect.size().as_vec2() * self.scl)
+            .uv_rect(self.rect, self.page_size)
+            .queue_rect(queuer, 0., self.page)
     }
 }
 

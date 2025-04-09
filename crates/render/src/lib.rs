@@ -21,7 +21,6 @@ use bevy::{
         view::{ExtractedView, VisibilitySystems},
     },
 };
-pub use bytemuck;
 use hephae_utils::prelude::*;
 
 use crate::{
@@ -41,13 +40,19 @@ pub mod prelude {
 
     pub use crate::{
         HephaeRenderSystems,
-        attribute::{IsVertexAttribute, LinearRgbaExt as _, Nor, VertexLayout},
+        attribute::{
+            ByteColorAttrib, ColorAttrib, IsAttribData, LinearRgbaExt as _, Nor, Pos2dAttrib, Pos3dAttrib, Shaper, UvAttrib,
+            VertexLayout,
+        },
         drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
         image_bind::ImageBindGroups,
         pipeline::{VertexPipeline, ViewBatches},
         vertex::Vertex,
     };
 }
+
+pub use bytemuck;
+pub use vec_belt;
 
 plugin_conf! {
     /// [`Vertex`]s you can pass to [`RendererPlugin`] to conveniently configure them in one go.

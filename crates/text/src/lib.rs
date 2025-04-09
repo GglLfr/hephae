@@ -6,7 +6,6 @@
 use std::sync::Mutex;
 
 use bevy::{app::PluginGroupBuilder, prelude::*, render::RenderApp};
-pub use cosmic_text;
 use hephae_utils::prelude::*;
 
 use crate::{
@@ -27,6 +26,8 @@ pub mod prelude {
         layout::FontLayout,
     };
 }
+
+pub use cosmic_text;
 
 plugin_def! {
     /// Provides text-rendering functionality into the app.

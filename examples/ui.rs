@@ -13,18 +13,10 @@ use hephae::prelude::*;
 #[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
 struct Vert {
-    pos: [f32; 2],
+    #[attrib(Pos3d)]
+    pos: Vec3,
+    #[attrib(Color)]
     color: LinearRgba,
-}
-
-impl Vert {
-    #[inline]
-    const fn new(pos: Vec2, color: LinearRgba) -> Self {
-        Self {
-            pos: pos.to_array(),
-            color,
-        }
-    }
 }
 
 impl Vertex for Vert {
@@ -50,7 +42,7 @@ impl Vertex for Vert {
 #[derive(TypePath, Component, Copy, Clone, Default)]
 struct Draw {
     color: LinearRgba,
-    transform: Affine3A,
+    trns: Affine3A,
     size: Vec2,
 }
 
@@ -71,24 +63,22 @@ impl Drawer for Draw {
     ) {
         let drawer = drawer.get_or_default();
         drawer.color = color.0;
-        drawer.transform = trns.affine();
+        drawer.trns = trns.affine();
         drawer.size = ui.size;
     }
 
     #[inline]
     fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
-        let Self { color, transform, size } = *self;
-        let base = queuer.data(
-            [
-                transform.translation.truncate(),
-                transform.transform_point(Vec3::new(size.x, 0., 0.)).truncate(),
-                transform.transform_point(Vec3::new(size.x, size.y, 0.)).truncate(),
-                transform.transform_point(Vec3::new(0., size.y, 0.)).truncate(),
-            ]
-            .map(|pos| Vert::new(pos, color)),
-        );
-
-        queuer.request(0., (), [base, base + 1, base + 2, base + 2, base + 3, base]);
+        let Self { color, trns, size } = *self;
+        Shaper::new()
+            .pos3d([
+                Vec3::from(trns.translation),
+                trns.transform_point(Vec3::new(size.x, 0., 0.)),
+                trns.transform_point(Vec3::new(size.x, size.y, 0.)),
+                trns.transform_point(Vec3::new(0., size.y, 0.)),
+            ])
+            .color(color)
+            .queue_rect(queuer, trns.translation.z, ())
     }
 }
 
