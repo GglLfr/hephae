@@ -188,20 +188,20 @@ impl Attrib for Pos3dAttrib {
 }
 
 /// Float-color attribute.
-pub struct ColorAttrib;
-impl Attrib for ColorAttrib {
+pub struct ColorAttrib<const INDEX: usize = 0>;
+impl<const INDEX: usize> Attrib for ColorAttrib<INDEX> {
     type Data = LinearRgba;
 }
 
 /// Byte-color attribute.
-pub struct ByteColorAttrib;
-impl Attrib for ByteColorAttrib {
+pub struct ByteColorAttrib<const INDEX: usize = 0>;
+impl<const INDEX: usize> Attrib for ByteColorAttrib<INDEX> {
     type Data = [Nor<u8>; 4];
 }
 
 /// UV-coordinates attribute.
-pub struct UvAttrib;
-impl Attrib for UvAttrib {
+pub struct UvAttrib<const INDEX: usize = 0>;
+impl<const INDEX: usize> Attrib for UvAttrib<INDEX> {
     type Data = Vec2;
 }
 
@@ -358,18 +358,24 @@ impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTIC
     }
 }
 
-impl<T: Vertex + HasAttrib<ColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Colors all vertices with a uniform color.
     #[inline]
-    pub fn color(&mut self, color: impl Into<LinearRgba>) -> &mut Self {
+    pub fn color<const INDEX: usize>(&mut self, color: impl Into<LinearRgba>) -> &mut Self
+    where
+        T: HasAttrib<ColorAttrib<INDEX>>,
+    {
         let color = color.into();
-        self.attribs::<ColorAttrib>([color; VERTICES])
+        self.attribs::<ColorAttrib<INDEX>>([color; VERTICES])
     }
 
     /// Sets colors for all vertices.
     #[inline]
-    pub fn colors(&mut self, colors: [LinearRgba; VERTICES]) -> &mut Self {
-        self.attribs::<ColorAttrib>(colors)
+    pub fn colors<const INDEX: usize>(&mut self, colors: [LinearRgba; VERTICES]) -> &mut Self
+    where
+        T: HasAttrib<ColorAttrib<INDEX>>,
+    {
+        self.attribs::<ColorAttrib<INDEX>>(colors)
     }
 
     /// Sets a color for a vertex.
@@ -378,22 +384,32 @@ impl<T: Vertex + HasAttrib<ColorAttrib>, const VERTICES: usize> Shaper<T, VERTIC
     ///
     /// Panics if `index >= VERTICES`.
     #[inline]
-    pub fn color_at(&mut self, index: usize, color: impl Into<LinearRgba>) -> &mut Self {
-        self.attrib_at::<ColorAttrib>(index, color.into())
+    pub fn color_at<const INDEX: usize>(&mut self, index: usize, color: impl Into<LinearRgba>) -> &mut Self
+    where
+        T: HasAttrib<ColorAttrib<INDEX>>,
+    {
+        self.attrib_at::<ColorAttrib<INDEX>>(index, color.into())
     }
 }
 
-impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Colors all vertices with a uniform color.
     #[inline]
-    pub fn byte_color(&mut self, color: [Nor<u8>; 4]) -> &mut Self {
-        self.attribs::<ByteColorAttrib>([color; VERTICES])
+    pub fn byte_color<const INDEX: usize>(&mut self, color: [Nor<u8>; 4]) -> &mut Self
+    where
+        T: HasAttrib<ByteColorAttrib<INDEX>>,
+    {
+        let color = color.into();
+        self.attribs::<ByteColorAttrib<INDEX>>([color; VERTICES])
     }
 
     /// Sets colors for all vertices.
     #[inline]
-    pub fn byte_colors(&mut self, colors: [[Nor<u8>; 4]; VERTICES]) -> &mut Self {
-        self.attribs::<ByteColorAttrib>(colors)
+    pub fn byte_colors<const INDEX: usize>(&mut self, colors: [[Nor<u8>; 4]; VERTICES]) -> &mut Self
+    where
+        T: HasAttrib<ByteColorAttrib<INDEX>>,
+    {
+        self.attribs::<ByteColorAttrib<INDEX>>(colors)
     }
 
     /// Sets a color for a vertex.
@@ -402,16 +418,22 @@ impl<T: Vertex + HasAttrib<ByteColorAttrib>, const VERTICES: usize> Shaper<T, VE
     ///
     /// Panics if `index >= VERTICES`.
     #[inline]
-    pub fn byte_color_at(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self {
-        self.attrib_at::<ByteColorAttrib>(index, color)
+    pub fn byte_color_at<const INDEX: usize>(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self
+    where
+        T: HasAttrib<ByteColorAttrib<INDEX>>,
+    {
+        self.attrib_at::<ByteColorAttrib<INDEX>>(index, color.into())
     }
 }
 
-impl<T: Vertex + HasAttrib<UvAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
+impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Assigns UV coordinates for all vertices.
     #[inline]
-    pub fn uv(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
-        self.attribs::<UvAttrib>(positions)
+    pub fn uv<const INDEX: usize>(&mut self, positions: [Vec2; VERTICES]) -> &mut Self
+    where
+        T: HasAttrib<UvAttrib<INDEX>>,
+    {
+        self.attribs::<UvAttrib<INDEX>>(positions)
     }
 
     /// Sets a UV coordinate for a vertex.
@@ -420,8 +442,11 @@ impl<T: Vertex + HasAttrib<UvAttrib>, const VERTICES: usize> Shaper<T, VERTICES>
     ///
     /// Panics if `index >= VERTICES`.
     #[inline]
-    pub fn uv_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
-        self.attrib_at::<UvAttrib>(index, position.into())
+    pub fn uv_at<const INDEX: usize>(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self
+    where
+        T: HasAttrib<UvAttrib<INDEX>>,
+    {
+        self.attrib_at::<UvAttrib<INDEX>>(index, position.into())
     }
 }
 
@@ -456,16 +481,19 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
     }
 }
 
-impl<T: Vertex + HasAttrib<UvAttrib>> Shaper<T, 4> {
+impl<T: Vertex> Shaper<T, 4> {
     /// Assigns UV coordinates based on an atlas sprite entry. Note that this flips the V
     /// coordinate, since images are actually flipped vertically (y=0 is at the top, not bottom).
     #[inline]
-    pub fn uv_rect(&mut self, rect: URect, atlas_size: UVec2) -> &mut Self {
+    pub fn uv_rect<const INDEX: usize>(&mut self, rect: URect, atlas_size: UVec2) -> &mut Self
+    where
+        T: HasAttrib<UvAttrib<INDEX>>,
+    {
         let page = atlas_size.as_vec2();
         let Vec2 { x: u, y: v2 } = rect.min.as_vec2() / page;
         let Vec2 { x: u2, y: v } = rect.max.as_vec2() / page;
 
-        self.uv([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)]);
+        self.uv::<INDEX>([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)]);
         self
     }
 }

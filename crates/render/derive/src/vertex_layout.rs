@@ -2,7 +2,10 @@ use hephae_macros::{
     Manifest,
     proc_macro2::TokenStream,
     quote::{ToTokens, format_ident, quote, quote_spanned},
-    syn::{self, Data, DeriveInput, Error, Fields, parse_quote, punctuated::Punctuated, spanned::Spanned},
+    syn::{
+        self, Data, DeriveInput, Error, Fields, TypePath, parse::ParseStream, parse_quote, punctuated::Punctuated,
+        spanned::Spanned,
+    },
 };
 
 pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
@@ -44,20 +47,20 @@ pub fn parse(input: TokenStream) -> syn::Result<TokenStream> {
                 if impl_attrib.is_some() {
                     return Err(Error::new_spanned(attr, "multiple `#[attrib(...)]` found"))
                 } else {
-                    attr.parse_nested_meta(|meta| {
-                        impl_attrib = Some(meta.path);
-                        Ok(())
-                    })?;
+                    impl_attrib = Some(attr.parse_args_with(|input: ParseStream| {
+                        let mut ty = input.parse::<TypePath>()?;
+                        let Some(last) = ty.path.segments.last_mut() else {
+                            return Err(Error::new_spanned(ty, "empty path"))
+                        };
+
+                        last.ident = format_ident!("{}Attrib", last.ident);
+                        Ok(ty)
+                    })?);
                 }
             }
         }
 
-        if let Some(mut attrib) = impl_attrib {
-            let Some(last) = attrib.segments.last_mut() else {
-                return Err(Error::new_spanned(attrib, "empty path"))
-            };
-
-            last.ident = format_ident!("{}Attrib", last.ident);
+        if let Some(attrib) = impl_attrib {
             impl_attribs.push((
                 match field.ident {
                     Some(ref id) => id.to_token_stream(),
