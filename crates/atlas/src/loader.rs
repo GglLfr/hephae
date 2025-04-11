@@ -119,9 +119,7 @@ impl AtlasFile {
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: MapAccess<'de>,
-            {
+            where A: MapAccess<'de> {
                 let mut main = None::<bool>;
                 let mut render = None::<bool>;
                 while let Some(key) = map.next_key()? {

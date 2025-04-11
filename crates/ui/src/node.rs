@@ -141,8 +141,7 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
         >,
         fn((Entity, bool, &Ui, Option<&ContentSize>)) -> Option<NodeId>,
     >
-    where
-        Self: 'a;
+    where Self: 'a;
 
     #[inline]
     fn child_ids(&self, parent_node_id: NodeId) -> Self::ChildIter<'_> {
@@ -172,8 +171,7 @@ impl<M> TraversePartialTree for UiTree<'_, '_, M> {
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutPartialTree for UiTree<'_, '_, M> {
     type CoreContainerStyle<'a>
         = WithCtx<&'a Ui>
-    where
-        Self: 'a;
+    where Self: 'a;
 
     #[inline]
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
@@ -269,13 +267,11 @@ impl<M> PrintTree for UiTree<'_, '_, M> {
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTree<'_, '_, M> {
     type FlexboxContainerStyle<'a>
         = WithCtx<&'a Ui>
-    where
-        Self: 'a;
+    where Self: 'a;
 
     type FlexboxItemStyle<'a>
         = WithCtx<&'a Ui>
-    where
-        Self: 'a;
+    where Self: 'a;
 
     #[inline]
     fn get_flexbox_container_style(&self, node_id: NodeId) -> Self::FlexboxContainerStyle<'_> {
@@ -291,13 +287,11 @@ impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutFlexboxContainer for UiTr
 impl<M: Index<MeasureId, Output = dyn Measurer>> LayoutBlockContainer for UiTree<'_, '_, M> {
     type BlockContainerStyle<'a>
         = WithCtx<&'a Ui>
-    where
-        Self: 'a;
+    where Self: 'a;
 
     type BlockItemStyle<'a>
         = WithCtx<&'a Ui>
-    where
-        Self: 'a;
+    where Self: 'a;
 
     #[inline]
     fn get_block_container_style(&self, node_id: NodeId) -> Self::BlockContainerStyle<'_> {

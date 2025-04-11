@@ -19,9 +19,7 @@ pub trait ComponentOption<T: Deref<Target: Component + Sized>>: Sized {
     /// Unwraps the option or inserts a default instance to the entity.
     #[inline]
     fn get_or_default(self, commands: EntityCommands) -> RefOrInsert<T>
-    where
-        T::Target: Default,
-    {
+    where T::Target: Default {
         self.get_or_insert_with(commands, T::Target::default)
     }
 }

@@ -158,9 +158,7 @@ fn parse<'a, E: ParseError<&'a str> + FromExternalError<&'a str, ParseIntError>>
 
 impl Serialize for LocaleFmt {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    where S: Serializer {
         match self {
             Self::Unformatted(raw) => serializer.serialize_str(raw),
             Self::Formatted { format, args } => {
@@ -189,9 +187,7 @@ impl Serialize for LocaleFmt {
 
 impl<'de> Deserialize<'de> for LocaleFmt {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
+    where D: Deserializer<'de> {
         struct Parser;
         impl Visitor<'_> for Parser {
             type Value = LocaleFmt;
@@ -203,9 +199,7 @@ impl<'de> Deserialize<'de> for LocaleFmt {
 
             #[inline]
             fn visit_str<E>(self, input: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
+            where E: de::Error {
                 match parse::<VerboseError<&str>>(input) {
                     Ok(("", fmt)) => Ok(fmt),
                     Ok(..) => unreachable!("`cut(eof)` should've ruled out leftover data"),

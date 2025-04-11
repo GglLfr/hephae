@@ -274,9 +274,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Sets a vertex attribute for all vertices.
     #[inline]
     pub fn attribs<M: Attrib>(&mut self, attributes: [M::Data; VERTICES]) -> &mut Self
-    where
-        T: HasAttrib<M>,
-    {
+    where T: HasAttrib<M> {
         let offset = const { <T as HasAttrib<M>>::OFFSET };
         let mut src = attributes.as_ptr().cast::<u8>();
         let mut dst = self.vertices.as_mut_ptr().cast::<u8>();
@@ -301,9 +299,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn attrib_at<M: Attrib>(&mut self, index: usize, attribute: M::Data) -> &mut Self
-    where
-        T: HasAttrib<M>,
-    {
+    where T: HasAttrib<M> {
         let offset = const { <T as HasAttrib<M>>::OFFSET };
         let dst = (&raw mut self.vertices[index]).cast::<u8>();
 
@@ -320,12 +316,11 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     pub fn queue(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey, indices: impl IndexQueuer) {
         queuer.request(layer, key, indices.queue(queuer.data(self.vertices)))
     }
-}
 
-impl<T: Vertex + HasAttrib<Pos2dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Sets 2D positions for all vertices.
     #[inline]
-    pub fn pos2d(&mut self, positions: [Vec2; VERTICES]) -> &mut Self {
+    pub fn pos2d(&mut self, positions: [Vec2; VERTICES]) -> &mut Self
+    where T: HasAttrib<Pos2dAttrib> {
         self.attribs::<Pos2dAttrib>(positions)
     }
 
@@ -335,15 +330,15 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>, const VERTICES: usize> Shaper<T, VERTIC
     ///
     /// Panics if `index >= VERTICES`.
     #[inline]
-    pub fn pos2d_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self {
+    pub fn pos2d_at(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self
+    where T: HasAttrib<Pos2dAttrib> {
         self.attrib_at::<Pos2dAttrib>(index, position.into())
     }
-}
 
-impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Sets 3D positions for all vertices.
     #[inline]
-    pub fn pos3d(&mut self, positions: [Vec3; VERTICES]) -> &mut Self {
+    pub fn pos3d(&mut self, positions: [Vec3; VERTICES]) -> &mut Self
+    where T: HasAttrib<Pos3dAttrib> {
         self.attribs::<Pos3dAttrib>(positions)
     }
 
@@ -353,18 +348,15 @@ impl<T: Vertex + HasAttrib<Pos3dAttrib>, const VERTICES: usize> Shaper<T, VERTIC
     ///
     /// Panics if `index >= VERTICES`.
     #[inline]
-    pub fn pos3d_at(&mut self, index: usize, position: impl Into<Vec3>) -> &mut Self {
+    pub fn pos3d_at(&mut self, index: usize, position: impl Into<Vec3>) -> &mut Self
+    where T: HasAttrib<Pos3dAttrib> {
         self.attrib_at::<Pos3dAttrib>(index, position.into())
     }
-}
 
-impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Colors all vertices with a uniform color.
     #[inline]
     pub fn color<const INDEX: usize>(&mut self, color: impl Into<LinearRgba>) -> &mut Self
-    where
-        T: HasAttrib<ColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ColorAttrib<INDEX>> {
         let color = color.into();
         self.attribs::<ColorAttrib<INDEX>>([color; VERTICES])
     }
@@ -372,9 +364,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Sets colors for all vertices.
     #[inline]
     pub fn colors<const INDEX: usize>(&mut self, colors: [LinearRgba; VERTICES]) -> &mut Self
-    where
-        T: HasAttrib<ColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ColorAttrib<INDEX>> {
         self.attribs::<ColorAttrib<INDEX>>(colors)
     }
 
@@ -385,20 +375,14 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn color_at<const INDEX: usize>(&mut self, index: usize, color: impl Into<LinearRgba>) -> &mut Self
-    where
-        T: HasAttrib<ColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ColorAttrib<INDEX>> {
         self.attrib_at::<ColorAttrib<INDEX>>(index, color.into())
     }
-}
 
-impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Colors all vertices with a uniform color.
     #[inline]
     pub fn byte_color<const INDEX: usize>(&mut self, color: [Nor<u8>; 4]) -> &mut Self
-    where
-        T: HasAttrib<ByteColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ByteColorAttrib<INDEX>> {
         let color = color.into();
         self.attribs::<ByteColorAttrib<INDEX>>([color; VERTICES])
     }
@@ -406,9 +390,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Sets colors for all vertices.
     #[inline]
     pub fn byte_colors<const INDEX: usize>(&mut self, colors: [[Nor<u8>; 4]; VERTICES]) -> &mut Self
-    where
-        T: HasAttrib<ByteColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ByteColorAttrib<INDEX>> {
         self.attribs::<ByteColorAttrib<INDEX>>(colors)
     }
 
@@ -419,20 +401,14 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn byte_color_at<const INDEX: usize>(&mut self, index: usize, color: [Nor<u8>; 4]) -> &mut Self
-    where
-        T: HasAttrib<ByteColorAttrib<INDEX>>,
-    {
+    where T: HasAttrib<ByteColorAttrib<INDEX>> {
         self.attrib_at::<ByteColorAttrib<INDEX>>(index, color.into())
     }
-}
 
-impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Assigns UV coordinates for all vertices.
     #[inline]
     pub fn uv<const INDEX: usize>(&mut self, positions: [Vec2; VERTICES]) -> &mut Self
-    where
-        T: HasAttrib<UvAttrib<INDEX>>,
-    {
+    where T: HasAttrib<UvAttrib<INDEX>> {
         self.attribs::<UvAttrib<INDEX>>(positions)
     }
 
@@ -443,26 +419,19 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Panics if `index >= VERTICES`.
     #[inline]
     pub fn uv_at<const INDEX: usize>(&mut self, index: usize, position: impl Into<Vec2>) -> &mut Self
-    where
-        T: HasAttrib<UvAttrib<INDEX>>,
-    {
+    where T: HasAttrib<UvAttrib<INDEX>> {
         self.attrib_at::<UvAttrib<INDEX>>(index, position.into())
     }
 }
 
 impl<T: Vertex> Shaper<T, 4> {
-    /// Convenience method for [`Self::queue`] where the index array is `[0, 1, 2, 2, 3, 0]`, offset
-    /// by the base index.
-    #[inline]
-    pub fn queue_rect(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey) {
-        self.queue(queuer, layer, key, |o| [o, o + 1, o + 2, o + 2, o + 3, o])
-    }
-}
-
-impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
     /// Positions the rectangle based on a center position and size.
+    ///
+    /// This sets the attributes in the order of bottom-left, bottom-right, top-right, and top-left,
+    /// which works in tandem with [`Self::queue_rect`].
     #[inline]
-    pub fn rect(&mut self, center: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
+    pub fn rect(&mut self, center: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self
+    where T: HasAttrib<Pos2dAttrib> {
         let Vec2 { x, y } = center.into();
         let Vec2 { x: w, y: h } = size.into() / 2.0;
 
@@ -471,29 +440,39 @@ impl<T: Vertex + HasAttrib<Pos2dAttrib>> Shaper<T, 4> {
     }
 
     /// Positions the rectangle based on the bottom-left position and size.
+    ///
+    /// This sets the attributes in the order of bottom-left, bottom-right, top-right, and top-left,
+    /// which works in tandem with [`Self::queue_rect`].
     #[inline]
-    pub fn rect_bl(&mut self, bottom_left: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self {
+    pub fn rect_bl(&mut self, bottom_left: impl Into<Vec2>, size: impl Into<Vec2>) -> &mut Self
+    where T: HasAttrib<Pos2dAttrib> {
         let Vec2 { x, y } = bottom_left.into();
         let Vec2 { x: w, y: h } = size.into();
 
         self.pos2d([vec2(x, y), vec2(x + w, y), vec2(x + w, y + h), vec2(x, y + h)]);
         self
     }
-}
 
-impl<T: Vertex> Shaper<T, 4> {
     /// Assigns UV coordinates based on an atlas sprite entry. Note that this flips the V
     /// coordinate, since images are actually flipped vertically (y=0 is at the top, not bottom).
+    ///
+    /// This sets the attributes in the order of bottom-left, bottom-right, top-right, and top-left,
+    /// which works in tandem with [`Self::queue_rect`].
     #[inline]
     pub fn uv_rect<const INDEX: usize>(&mut self, rect: URect, atlas_size: UVec2) -> &mut Self
-    where
-        T: HasAttrib<UvAttrib<INDEX>>,
-    {
+    where T: HasAttrib<UvAttrib<INDEX>> {
         let page = atlas_size.as_vec2();
         let Vec2 { x: u, y: v2 } = rect.min.as_vec2() / page;
         let Vec2 { x: u2, y: v } = rect.max.as_vec2() / page;
 
         self.uv::<INDEX>([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)]);
         self
+    }
+
+    /// Convenience method for [`Self::queue`] where the index array is `[0, 1, 2, 2, 3, 0]`, offset
+    /// by the base index.
+    #[inline]
+    pub fn queue_rect(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey) {
+        self.queue(queuer, layer, key, |o| [o, o + 1, o + 2, o + 2, o + 3, o])
     }
 }

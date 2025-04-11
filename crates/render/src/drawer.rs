@@ -71,9 +71,7 @@ impl<T: Drawer> DrawerExtract<'_, T> {
     /// Gets a mutable reference to the underlying component, creating a new one if necessary.
     #[inline]
     pub fn get_or_default(&mut self) -> &mut T
-    where
-        T: Default,
-    {
+    where T: Default {
         self.get_mut(T::default)
     }
 }
