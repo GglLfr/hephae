@@ -176,25 +176,7 @@ fn main() -> AppExit {
             render: (Vert, DrawSprite),
         }))
         .add_systems(Startup, startup)
-        .add_systems(Update, check)
         .run()
-}
-
-fn check(
-    server: Res<AssetServer>,
-    images: Res<Assets<Image>>,
-    mut handle: Local<Option<Handle<Image>>>,
-    mut done: Local<bool>,
-) {
-    if *done {
-        return
-    }
-
-    let handle = handle.get_or_insert_with(|| server.load("sprites/sprites.atlas.ron#page-0"));
-    if let Some(image) = images.get(handle) {
-        image.clone().try_into_dynamic().unwrap().save("output.png").unwrap();
-        *done = true
-    }
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {
