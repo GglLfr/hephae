@@ -5,5 +5,11 @@
         main: false,
         render: true,
     ),
-    entries: ["cix.png"],
+    entries: [
+        "cix.png",
+        ("trails", [
+            "soul.png",
+            "soul-cap.png",
+        ]),
+    ],
 )

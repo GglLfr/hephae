@@ -29,6 +29,7 @@ proc-macro = true
 hephae-macros.workspace = true
 
 [features]
+default = ["atlas", "locale", "text", "ui"]
 atlas = []
 locale = []
 text = []

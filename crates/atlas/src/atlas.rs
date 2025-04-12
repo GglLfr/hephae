@@ -8,20 +8,27 @@
 //! This module provides the [`Atlas`] type. See [this module](crate::atlas) for more
 //! information on how the atlas implements [`Asset`].
 //!
-//! This module provides [`AtlasEntry`] and [`AtlasCache`] components; the former being the
+//! This module provides [`AtlasEntry`] and [`AtlasInfo`] components; the former being the
 //! atlas lookup key, and the latter being the cached sprite index. The dedicated
 //! [`update_atlas_cache`] system listens to changes/additions to texture atlas assets and updates
 //! the `AtlasCache` of entities accordingly.
 //!
 //! See the `examples/atlas` for a full example.
 
-use std::path::PathBuf;
+use std::{
+    hash::Hash,
+    path::{Path, PathBuf},
+};
 
 use bevy::{
-    asset::{AsAssetId, ReflectAsset},
-    platform_support::collections::HashMap,
+    asset::ReflectAsset,
+    ecs::{component::Tick, system::SystemChangeTick},
+    platform_support::collections::{Equivalent, HashMap},
     prelude::*,
 };
+use derive_more::{Display, Error, From};
+pub use hephae_atlas_derive::AtlasEntries;
+use smallvec::SmallVec;
 
 /// A list of textures packed into one large texture. See the [module-level](crate::atlas)
 /// documentation for more specific information on how to integrate this into your rendering
@@ -33,6 +40,41 @@ pub struct Atlas {
     pub pages: Vec<(Handle<TextureAtlasLayout>, Handle<Image>)>,
     /// Maps sprite paths to their corresponding atlas page and layout.
     pub sprites: HashMap<PathBuf, AtlasSprite>,
+}
+
+#[derive(Error, From, Debug, Display)]
+pub enum AtlasEntryError {
+    #[display("The given path doesn't resolve to an `AtlasSprite`")]
+    SpriteNotFound,
+    #[display(
+        "The sprite's `TextureAtlasLayout` page doesn't exist or doesn't contain the \
+        appropriate the texture; was it modified manually?"
+    )]
+    LayoutNotFound,
+}
+
+impl Atlas {
+    /// Gets the appropriate information for rendering the given sprite entry.
+    #[inline]
+    pub fn get_info(
+        &self,
+        layouts: &Assets<TextureAtlasLayout>,
+        path: &(impl Hash + Equivalent<PathBuf> + ?Sized),
+    ) -> Result<AtlasInfo, AtlasEntryError> {
+        let entry = self.sprites.get(path).ok_or(AtlasEntryError::SpriteNotFound)?;
+        let layout = layouts.get(&entry.atlas.layout).ok_or(AtlasEntryError::LayoutNotFound)?;
+        let &rect = layout
+            .textures
+            .get(entry.atlas.index)
+            .ok_or(AtlasEntryError::LayoutNotFound)?;
+
+        Ok(AtlasInfo {
+            page: entry.atlas_page.id(),
+            page_size: layout.size,
+            rect,
+            nine_slices: entry.nine_slices,
+        })
+    }
 }
 
 /// An individual sprite found in an [`Atlas`].
@@ -61,14 +103,67 @@ pub struct NineSliceCuts {
     pub bottom: u32,
 }
 
+/// Components that want to do an [`Atlas`] [lookup](Atlas::get_info) should derive this trait.
+pub trait AtlasEntries: Component {
+    /// Returns all the entries to be cached by [`AtlasCaches`], with the same order.
+    ///
+    /// By default, the derive-macro orders the entries by field declarations.
+    fn entries(&self) -> impl Iterator<Item = (AssetId<Atlas>, &Path)>;
+}
+
+/// Caches information provided by [`Atlas::get_info`].
+#[derive(Copy, Clone, Debug)]
+pub struct AtlasInfo {
+    /// The page image [`AssetId`], useful for vertex pipeline keys.
+    pub page: AssetId<Image>,
+    /// The page size, so you don't have to query the image size again.
+    pub page_size: UVec2,
+    /// Where the sprite resides within the page. Note that images are "+Y = down" so you might have
+    /// to flip the V coordinate.
+    pub rect: URect,
+    /// The nine-slicing information, if any. Useful for tiling and UI.
+    pub nine_slices: Option<NineSliceCuts>,
+}
+
+impl AtlasInfo {
+    /// The default-value for the cache.
+    pub const DEFAULT: Self = Self {
+        page: AssetId::Uuid {
+            uuid: AssetId::<Image>::DEFAULT_UUID,
+        },
+        page_size: UVec2::ZERO,
+        rect: URect {
+            min: UVec2::ZERO,
+            max: UVec2::ZERO,
+        },
+        nine_slices: None,
+    };
+}
+
+impl Default for AtlasInfo {
+    #[inline]
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// Caches information provided by [`AtlasEntries`].
+#[derive(Component, Clone, Debug, Default, Deref, DerefMut)]
+pub struct AtlasCaches {
+    /// Stores information retrieved through [`Atlas::get_info`]. The element order is defined by
+    /// the iterator returned from [`AtlasEntries::entries`].
+    pub caches: SmallVec<[AtlasInfo; 4]>,
+}
+
 /// Convenience component used to fetch sprite meta information from the given atlas and path.
-#[derive(Component, Reflect, Clone, Debug)]
-#[require(AtlasCache)]
+#[derive(Component, Reflect, AtlasEntries, Clone, Debug)]
 #[reflect(Debug)]
 pub struct AtlasEntry {
     /// Handle to the [`Atlas`].
+    #[atlas]
     pub atlas: Handle<Atlas>,
     /// Sprite full path, including its directories but not its file extension.
+    #[entry]
     pub path: PathBuf,
 }
 
@@ -83,76 +178,108 @@ impl AtlasEntry {
     }
 }
 
-impl AsAssetId for AtlasEntry {
-    type Asset = Atlas;
+#[derive(Resource, Default)]
+pub(crate) struct AtlasChanges {
+    changes: HashMap<AssetId<Atlas>, Tick>,
+    last_change: Tick,
+}
 
-    #[inline]
-    fn as_asset_id(&self) -> AssetId<Self::Asset> {
-        self.atlas.id()
+pub(crate) fn detect_changes(
+    atlases: Res<Assets<Atlas>>,
+    mut atlas_events: EventReader<AssetEvent<Atlas>>,
+    mut layout_events: EventReader<AssetEvent<TextureAtlasLayout>>,
+    mut changes: ResMut<AtlasChanges>,
+    tick: SystemChangeTick,
+    mut used_layouts: Local<HashMap<AssetId<TextureAtlasLayout>, AssetId<Atlas>>>,
+) {
+    let tick = tick.this_run();
+    let mut has_changes = false;
+
+    for &e in layout_events.read() {
+        match e {
+            AssetEvent::Added { id } | AssetEvent::Modified { id } | AssetEvent::LoadedWithDependencies { id } => {
+                let Some(&atlas_id) = used_layouts.get(&id) else { continue };
+
+                changes.changes.insert(atlas_id, tick);
+                has_changes = true
+            }
+            AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
+                if let Some(atlas_id) = used_layouts.remove(&id) {
+                    changes.changes.insert(atlas_id, tick);
+                    has_changes = true
+                }
+            }
+        }
+    }
+
+    for &e in atlas_events.read() {
+        match e {
+            AssetEvent::Added { id } | AssetEvent::Modified { id } | AssetEvent::LoadedWithDependencies { id } => {
+                changes.changes.insert(id, tick);
+
+                let Some(atlas) = atlases.get(id) else { continue };
+                for (layout, ..) in &atlas.pages {
+                    used_layouts.insert(layout.id(), id);
+                    has_changes = true
+                }
+            }
+            AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
+                changes.changes.remove(&id);
+                has_changes = true
+            }
+        }
+    }
+
+    if has_changes {
+        changes.last_change = tick
     }
 }
 
-/// Cached information provided by [`AtlasEntry`].
-#[derive(Component, Copy, Clone, Debug, Default)]
-pub enum AtlasCache {
-    /// No cache information is found.
-    ///
-    /// This typically occurs for any of the following reasons:
-    /// - [`update_atlas_cache`] in [`PostUpdate`] hasn't been reached yet.
-    /// - The [`Atlas`] doesn't exist.
-    /// - The sprite from the given path doesn't exist.
-    /// - The sprite in the [`Atlas`] is invalid; i.e., it refers to a non-existent
-    ///   [`TextureAtlasLayout`] or to an invalid texture index within that layout. This only
-    ///   happens if users manually modify [`Atlas`] assets in an erroneous way.
-    #[default]
-    None,
-    /// Sprite information is successfully cached, ready to be consumed by renderers.
-    Cache {
-        /// The atlas page ID.
-        page: AssetId<Image>,
-        /// How large the atlas page is.
-        page_size: UVec2,
-        /// Where the sprite resides within the atlas, used for UV coordinates.
-        rect: URect,
-        /// Optional nine-slice cuts associated with the sprite.
-        nine_slices: Option<NineSliceCuts>,
-    },
-}
-
-/// Updates [`AtlasCache`] from [`AtlasEntry`].
-pub fn update_atlas_cache(
+pub(crate) fn update_caches<T: AtlasEntries>(
     atlases: Res<Assets<Atlas>>,
     layouts: Res<Assets<TextureAtlasLayout>>,
-    mut entries: Query<(&AtlasEntry, &mut AtlasCache), Or<(Changed<AtlasEntry>, AssetChanged<AtlasEntry>)>>,
+    changes: Res<AtlasChanges>,
+    tick: SystemChangeTick,
+    mut query: Query<(Entity, &T, &mut AtlasCaches)>,
 ) {
-    for (entry, mut cache) in &mut entries {
-        *cache.bypass_change_detection() = AtlasCache::None;
+    let last = tick.last_run();
+    let this = tick.this_run();
 
-        let Some(atlas) = atlases.get(&entry.atlas) else {
-            error!("Non-existent `Atlas`: {:?}", entry.atlas);
-            continue
-        };
+    if !changes.last_change.is_newer_than(last, this) {
+        return
+    }
 
-        let Some(entry) = atlas.sprites.get(&entry.path) else {
-            error!("Non-existent sprite path: {}", entry.path.display());
-            continue
-        };
+    for (e, entries, mut caches) in &mut query {
+        let mut len = 0;
+        for (i, (atlas, path)) in entries.entries().enumerate() {
+            let info = match caches.get_mut(i) {
+                Some(info) => info,
+                None => {
+                    caches.push(AtlasInfo::DEFAULT);
+                    &mut caches[i]
+                }
+            };
 
-        let Some(layout) = layouts.get(&entry.atlas.layout) else {
-            error!("Non-existent `TextureAtlasLayout`: {:?}", entry.atlas.layout);
-            continue
-        };
+            let Some(atlas) = changes
+                .changes
+                .get(&atlas)
+                .and_then(|&tick| tick.is_newer_than(last, this).then_some(atlases.get(atlas)?))
+            else {
+                *info = AtlasInfo::DEFAULT;
+                continue
+            };
 
-        let Some(&rect) = layout.textures.get(entry.atlas.index) else {
-            error!("Non-existent layout index in {:?}: {}", entry.atlas.layout, entry.atlas.index);
-            continue
-        };
+            match atlas.get_info(&layouts, path) {
+                Ok(res) => *info = res,
+                Err(error) => {
+                    *info = AtlasInfo::DEFAULT;
+                    error!("Couldn't update `AtlasCaches` for {e}: {error}")
+                }
+            }
 
-        *cache = AtlasCache::Cache {
-            page: entry.atlas_page.id(),
-            page_size: layout.size,
-            rect,
-            nine_slices: entry.nine_slices,
-        };
+            len = i;
+        }
+
+        caches.truncate(len + 1);
     }
 }

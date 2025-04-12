@@ -82,12 +82,12 @@ impl Drawer for Draw {
     }
 }
 
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins, hephae! { render: (Vert, Draw), ui }))
         .add_systems(Startup, startup)
         .add_systems(Update, rotate)
-        .run();
+        .run()
 }
 
 #[derive(Component, Copy, Clone)]

@@ -10,11 +10,11 @@ pub use quote;
 use quote::ToTokens;
 pub use syn;
 use syn::Path;
-use toml_edit::{DocumentMut, Item};
+use toml_edit::{ImDocument, Item};
 
 /// Represents `Cargo.toml`, providing functions to resolve library paths under Bevy or similar
 /// library-containing crates.
-pub struct Manifest(DocumentMut);
+pub struct Manifest(ImDocument<Box<str>>);
 impl Manifest {
     fn new() -> Self {
         Self(
@@ -26,9 +26,11 @@ impl Manifest {
                         panic!("No Cargo manifest found for crate. Expected: {}", path.display());
                     }
 
-                    std::fs::read_to_string(path.clone())
+                    let source = std::fs::read_to_string(path.clone())
                         .unwrap_or_else(|e| panic!("Unable to read cargo manifest ({}): {e}", path.display()))
-                        .parse::<DocumentMut>()
+                        .into_boxed_str();
+
+                    ImDocument::parse(source)
                         .unwrap_or_else(|e| panic!("Failed to parse cargo manifest ({}): {e}", path.display()))
                 })
                 .expect("CARGO_MANIFEST_DIR is not defined."),
@@ -67,7 +69,7 @@ impl Manifest {
         let base = base.as_ref();
         let sub = sub.as_ref();
 
-        let find = |deps: &Item| -> Option<syn::Result<syn::Path>> {
+        let find = |deps: &Item| -> Option<syn::Result<Path>> {
             if let Some(dep) = deps.get(format!("{base}_{sub}")) {
                 Some(syn::parse_str(&format!("{}_{sub}", name(dep, base))))
             } else if let Some(dep) = deps.get(format!("{base}-{sub}")) {
@@ -83,6 +85,21 @@ impl Manifest {
             .get("dependencies")
             .and_then(find)
             .or_else(|| self.0.get("dev-dependencies").and_then(find))
+            .or_else(|| {
+                if base == "hephae" {
+                    match self
+                        .0
+                        .get("package")
+                        .and_then(|package| package.get("name"))
+                        .and_then(|name| name.as_str())
+                    {
+                        Some(name) if name == &format!("hephae-{sub}") => Some(syn::parse_str("crate")),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| {
                 syn::Error::new_spanned(
                     &tokens,

@@ -72,14 +72,14 @@ impl Drawer for Draw {
     }
 }
 
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins, hephae! { render: (Vert, Draw) }))
         .add_systems(Startup, startup)
-        .run();
+        .run()
 }
 
 fn startup(mut commands: Commands) {
     commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
-    commands.spawn((Transform::IDENTITY, HasDrawer::<Draw>::new()));
+    commands.spawn(HasDrawer::<Draw>::new());
 }

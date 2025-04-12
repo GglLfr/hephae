@@ -26,14 +26,14 @@ use hephae::prelude::*;
 #[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
 #[bytemuck(crate = "hephae::render::bytemuck")]
 #[repr(C)]
-struct SpriteVertex {
+struct Vert {
     #[attrib(Pos2d)]
     pos: Vec2,
     #[attrib(Uv)]
     uv: Vec2,
 }
 
-impl Vertex for SpriteVertex {
+impl Vertex for Vert {
     type PipelineParam = SRes<RenderDevice>;
     type PipelineProp = BindGroupLayout;
     type PipelineKey = AssetId<Image>;
@@ -93,7 +93,7 @@ impl Vertex for SpriteVertex {
 
 struct SetSpriteBindGroup<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
-    type Param = (SRes<ImageBindGroups>, SRes<ViewBatches<SpriteVertex>>);
+    type Param = (SRes<ImageBindGroups>, SRes<ViewBatches<Vert>>);
     type ViewQuery = Read<ExtractedView>;
     type ItemQuery = ();
 
@@ -129,10 +129,10 @@ struct DrawSprite {
 }
 
 impl Drawer for DrawSprite {
-    type Vertex = SpriteVertex;
+    type Vertex = Vert;
 
     type ExtractParam = ();
-    type ExtractData = (Read<GlobalTransform>, Read<AtlasCache>);
+    type ExtractData = (Read<GlobalTransform>, Read<AtlasCaches>);
     type ExtractFilter = ();
 
     type DrawParam = ();
@@ -143,9 +143,9 @@ impl Drawer for DrawSprite {
         _: &SystemParamItem<Self::ExtractParam>,
         (&trns, cache): QueryItem<Self::ExtractData>,
     ) {
-        let &AtlasCache::Cache {
+        let Some(&AtlasInfo {
             page, page_size, rect, ..
-        } = cache
+        }) = cache.get(0)
         else {
             return
         };
@@ -169,14 +169,32 @@ impl Drawer for DrawSprite {
     }
 }
 
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), hephae! {
             atlas,
-            render: (SpriteVertex, DrawSprite),
+            render: (Vert, DrawSprite),
         }))
         .add_systems(Startup, startup)
-        .run();
+        .add_systems(Update, check)
+        .run()
+}
+
+fn check(
+    server: Res<AssetServer>,
+    images: Res<Assets<Image>>,
+    mut handle: Local<Option<Handle<Image>>>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return
+    }
+
+    let handle = handle.get_or_insert_with(|| server.load("sprites/sprites.atlas.ron#page-0"));
+    if let Some(image) = images.get(handle) {
+        image.clone().try_into_dynamic().unwrap().save("output.png").unwrap();
+        *done = true
+    }
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {

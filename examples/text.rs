@@ -168,7 +168,7 @@ impl Drawer for DrawText {
     }
 }
 
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), hephae! {
             render: (Vert, DrawText),
@@ -177,7 +177,7 @@ fn main() {
         }))
         .add_systems(Startup, startup)
         .add_systems(Update, (move_camera, update, switch_locale))
-        .run();
+        .run()
 }
 
 fn startup(mut commands: Commands, server: Res<AssetServer>) {

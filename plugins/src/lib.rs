@@ -83,7 +83,7 @@ impl Parse for Syntax {
 
                 #[cfg(feature = "atlas")]
                 if let (true, Ok(atlas_crate)) = (atlas.is_none(), manifest.resolve("hephae", "atlas", token)) {
-                    atlas = Some(quote_spanned! { token.span() => #atlas_crate::AtlasPlugin::default() })
+                    atlas = Some(quote_spanned! { token.span() => #atlas_crate::AtlasPlugin::<()>::default() })
                 }
                 #[cfg(feature = "locale")]
                 if let (true, Ok(locale_crate)) = (locale.is_none(), manifest.resolve("hephae", "locale", token)) {
@@ -106,18 +106,20 @@ impl Parse for Syntax {
                 let id = input.parse::<Ident>()?;
                 match &*id.to_string() {
                     #[cfg(feature = "atlas")]
-                    "atlas" => {
-                        no_data("atlas", input)?;
-                        no_redefine(
-                            "atlas",
-                            &mut atlas,
-                            || {
-                                let atlas_crate = manifest.resolve("hephae", "atlas", &id)?;
-                                Ok(quote_spanned! { id.span() => #atlas_crate::AtlasPlugin::default() })
-                            },
-                            &id,
-                        )?
-                    }
+                    "atlas" => no_redefine(
+                        "atlas",
+                        &mut atlas,
+                        || {
+                            let atlas_crate = manifest.resolve("hephae", "atlas", &id)?;
+                            if input.parse::<Option<Token![:]>>()?.is_some() {
+                                let entries = input.parse::<Type>()?;
+                                Ok(quote_spanned! { id.span() => #atlas_crate::AtlasPlugin::<#entries>::default() })
+                            } else {
+                                Ok(quote_spanned! { id.span() => #atlas_crate::AtlasPlugin::<()>::default() })
+                            }
+                        },
+                        &id,
+                    )?,
                     #[cfg(not(feature = "atlas"))]
                     "atlas" => return Err(unsupported("atlas", id)),
                     #[cfg(feature = "locale")]
@@ -245,7 +247,7 @@ impl Parse for Syntax {
 
 /// The `hephae! { ... }` procedural macro for specifying Hephae plugins.
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// # use hephae_plugins::hephae;
 ///
 /// // You can define these plugin attributes in any order, as long as you only define it either zero or one times.

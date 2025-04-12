@@ -188,8 +188,8 @@ impl Default for TextureAtlasSettings {
         Self {
             init_width: 1024,
             init_height: 1024,
-            max_width: 2048,
-            max_height: 2048,
+            max_width: 4096,
+            max_height: 4096,
         }
     }
 }
@@ -380,7 +380,7 @@ impl AssetLoader for AtlasLoader {
                 let src_pos = |x, y| ((y + nine_offset) * (src_row + nine_offset) + (x + nine_offset)) * pixel_size;
 
                 let dst_row = page_width as usize;
-                let dst_pos = |x, y| ((min.y + y) * dst_row + (min.y + x)) * pixel_size;
+                let dst_pos = |x, y| ((min.y + y) * dst_row + (min.x + x)) * pixel_size;
 
                 // Set topleft-wards bleeding to topleft pixel and topright-wards bleeding to topright pixel. This
                 // is so that the subsequent bleeding operation may just use a split-off copy.
@@ -537,6 +537,7 @@ impl AssetLoader for AtlasLoader {
                     (base_height + 2 * pad as u32) as i32,
                 )) {
                     Some(alloc) => {
+                        info!("Packed {}: {:?}", name.display(), alloc.rectangle);
                         ids.insert(alloc.id, (name, texture, has_nine_slice));
                     }
                     None => {

@@ -183,7 +183,7 @@ pub fn check_visibilities<T: Vertex>(
             &mut ViewVisibility,
             Option<&RenderLayers>,
             Option<&Aabb>,
-            &GlobalTransform,
+            Option<&GlobalTransform>,
             Has<NoFrustumCulling>,
             Has<VisibilityRange>,
         )>,
@@ -224,7 +224,7 @@ pub fn check_visibilities<T: Vertex>(
                 mut view_visibility,
                 maybe_entity_mask,
                 maybe_model_aabb,
-                transform,
+                maybe_transform,
                 no_frustum_culling,
                 has_visibility_range,
             )| {
@@ -245,6 +245,13 @@ pub fn check_visibilities<T: Vertex>(
                 {
                     return;
                 }
+
+                // If there is no transform, just draw it anyway.
+                let Some(transform) = maybe_transform else {
+                    view_visibility.set();
+                    queue.push(entity);
+                    return
+                };
 
                 // If we have an AABB, do frustum culling.
                 if !no_frustum_culling && !no_cpu_culling {

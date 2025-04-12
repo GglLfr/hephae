@@ -33,6 +33,7 @@ resolver = "3"
 members = [
     "plugins",
     "crates/atlas",
+    "crates/atlas/derive",
     "crates/locale",
     "crates/macros",
     "crates/render",
@@ -69,7 +70,6 @@ fixedbitset = "0.5"
 guillotiere = "0.6"
 nom = "8"
 nom-language = "0.1"
-nonmax = "0.5"
 proc-macro2 = "1"
 quote = "1"
 scopeguard = "1"
@@ -97,7 +97,7 @@ hephae-render.workspace = true
 hephae-text = { optional = true, workspace = true }
 hephae-ui = { optional = true, workspace = true }
 hephae-utils.workspace = true
-hephae-plugins = { version = "0.8.0", path = "plugins" }
+hephae-plugins = { version = "0.8.0", default-features = false, path = "plugins" }
 
 [dev-dependencies]
 bevy = { version = "0.16.0-rc.3", default-features = false, features = ["bevy_winit", "bevy_core_pipeline", "png", "multi_threaded", "async_executor"] }
@@ -121,6 +121,11 @@ doc-scrape-examples = true
 [[example]]
 name = "text"
 required-features = ["text", "locale"]
+doc-scrape-examples = true
+
+[[example]]
+name = "trail"
+required-features = ["atlas"]
 doc-scrape-examples = true
 
 [[example]]

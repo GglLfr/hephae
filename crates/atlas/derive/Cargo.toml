@@ -1,6 +1,6 @@
 [package]
-name = "hephae-atlas"
-description = "Hephae's texture atlas rendering and asset module."
+name = "hephae-atlas-derive"
+description = "Proc-macro derives for Hephae's texture atlas module"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,19 +22,8 @@ rustdoc-args = [
 ]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
+[lib]
+proc-macro = true
+
 [dependencies]
-hephae-atlas-derive = { version = "0.8.0", path = "derive" }
-hephae-utils.workspace = true
-
-derive_more.workspace = true
-guillotiere.workspace = true
-serde.workspace = true
-smallvec.workspace = true
-
-[dependencies.bevy]
-workspace = true
-features = [
-    "bevy_asset",
-    "bevy_image",
-    "bevy_render",
-]
+hephae-macros.workspace = true
