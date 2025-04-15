@@ -232,18 +232,6 @@ pub struct Shaper<T: Vertex, const VERTICES: usize> {
     pub vertices: [T; VERTICES],
 }
 
-unsafe impl<T: Vertex, const VERTICES: usize> Transfer<T> for Shaper<T, VERTICES> {
-    #[inline]
-    fn len(&self) -> usize {
-        VERTICES
-    }
-
-    #[inline]
-    unsafe fn transfer(self, len: usize, dst: *mut T) {
-        unsafe { self.vertices.transfer(len, dst) }
-    }
-}
-
 impl<T: Vertex, const VERTICES: usize> Default for Shaper<T, VERTICES> {
     #[inline]
     fn default() -> Self {
@@ -314,7 +302,7 @@ impl<T: Vertex, const VERTICES: usize> Shaper<T, VERTICES> {
     /// Finishes using the [`Shaper`] API.
     #[inline]
     pub fn queue(self, queuer: &impl VertexQueuer<Vertex = T>, layer: f32, key: T::PipelineKey, indices: impl IndexQueuer) {
-        queuer.request(layer, key, indices.queue(queuer.data(self.vertices)))
+        queuer.request(layer, key, indices.queue(queuer.data(self.vertices.as_ref())))
     }
 
     /// Sets 2D positions for all vertices.
@@ -449,8 +437,7 @@ impl<T: Vertex> Shaper<T, 4> {
         let Vec2 { x, y } = bottom_left.into();
         let Vec2 { x: w, y: h } = size.into();
 
-        self.pos2d([vec2(x, y), vec2(x + w, y), vec2(x + w, y + h), vec2(x, y + h)]);
-        self
+        self.pos2d([vec2(x, y), vec2(x + w, y), vec2(x + w, y + h), vec2(x, y + h)])
     }
 
     /// Assigns UV coordinates based on an atlas sprite entry. Note that this flips the V
@@ -465,8 +452,7 @@ impl<T: Vertex> Shaper<T, 4> {
         let Vec2 { x: u, y: v2 } = rect.min.as_vec2() / page;
         let Vec2 { x: u2, y: v } = rect.max.as_vec2() / page;
 
-        self.uv::<INDEX>([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)]);
-        self
+        self.uv::<INDEX>([vec2(u, v), vec2(u2, v), vec2(u2, v2), vec2(u, v2)])
     }
 
     /// Convenience method for [`Self::queue`] where the index array is `[0, 1, 2, 2, 3, 0]`, offset

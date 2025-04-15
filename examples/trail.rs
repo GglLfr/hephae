@@ -34,10 +34,8 @@ struct Vert {
     pos: Vec2,
     #[attrib(Uv)]
     uv: Vec2,
-    #[attrib(Color<0>)]
+    #[attrib(Color)]
     col: LinearRgba,
-    #[attrib(Color<1>)]
-    mix_col: LinearRgba,
 }
 
 impl Vertex for Vert {
@@ -126,8 +124,9 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     }
 }
 
-/// 64 ticks per second.
-const TRAIL_UPDATE_RATE: Duration = Duration::new(0, 15625000);
+/// 128 ticks per second.
+const TRAIL_UPDATE_RATE: Duration = Duration::new(0, 1_000_000_000 / 128);
+const TRAIL_LENGTH: usize = 128;
 
 #[derive(Component)]
 struct PrimaryTrail;
@@ -139,6 +138,8 @@ struct Trail {
     max_len: NonZeroUsize,
     head: Vec2,
     tail: Vec2,
+    still: usize,
+    shrinking: Option<usize>,
 }
 
 impl Trail {
@@ -148,6 +149,8 @@ impl Trail {
             max_len,
             head: Vec2::ZERO,
             tail: Vec2::ZERO,
+            still: 0,
+            shrinking: None,
         }
     }
 }
@@ -171,17 +174,33 @@ impl<T: VectorSpace> Interp<T> {
     }
 }
 
-#[derive(Component, AtlasEntries, Clone)]
+#[derive(Component, Copy, Clone)]
 struct TrailParam {
+    fade: Interp<f32>,
+    side_fade: Interp<f32>,
+    color: Interp<Vec3>,
+    width: Interp<f32>,
+}
+
+impl TrailParam {
+    fn soul() -> Self {
+        Self {
+            fade: Interp::new(0., 1., |t| t.powf(4.)),
+            side_fade: Interp::new(0., 1., |t| t.powf(8.)),
+            color: Interp::new(vec3(0., 1.5, 4.), vec3(2., 4.5, 15.), |t| t.powf(5.)),
+            width: Interp::new(20., 20., |t| t),
+        }
+    }
+}
+
+#[derive(Component, AtlasEntries)]
+struct TrailSprites {
     #[atlas]
     atlas: Handle<Atlas>,
     #[entry]
     body: PathBuf,
     #[entry]
     head: PathBuf,
-    color: Interp<LinearRgba>,
-    mix_color: Interp<LinearRgba>,
-    width: Interp<f32>,
 }
 
 fn update_trail(
@@ -210,11 +229,26 @@ fn update_trail(
         }
 
         if let Some(&last_pos) = trail.points.back() {
-            for i in 1..=count {
-                trail.points.push_back(last_pos.lerp(*cursor, i as f32 / div));
+            if (*cursor - last_pos).length_squared() < 10. {
+                trail.still += 1;
+                if trail.still >= 6 {
+                    trail.shrinking = Some(trail.points.len())
+                }
+            } else {
+                trail.still = 0;
+                for i in 1..=count {
+                    trail.points.push_back(last_pos.lerp(*cursor, i as f32 / div))
+                }
             }
         } else {
-            trail.points.push_back(*cursor);
+            trail.points.push_back(*cursor)
+        }
+
+        if let Some(shrink) = trail.shrinking {
+            trail.shrinking = shrink.checked_sub(count as usize);
+            for _ in 0..count {
+                trail.points.pop_front();
+            }
         }
     }
 
@@ -235,15 +269,9 @@ fn update_trail(
 struct DrawTrail {
     points: Vec<Vec2>,
     max_len: usize,
-    body_page: AssetId<Image>,
-    body_page_size: UVec2,
-    body_sprite: URect,
-    head_page: AssetId<Image>,
-    head_page_size: UVec2,
-    head_sprite: URect,
-    color: Interp<LinearRgba>,
-    mix_color: Interp<LinearRgba>,
-    width: Interp<f32>,
+    param: TrailParam,
+    body: AtlasInfo,
+    head: AtlasInfo,
 }
 
 impl Drawer for DrawTrail {
@@ -259,29 +287,21 @@ impl Drawer for DrawTrail {
     fn extract(
         drawer: DrawerExtract<Self>,
         _: &SystemParamItem<Self::ExtractParam>,
-        (trail, param, cache): QueryItem<Self::ExtractData>,
+        (trail, &param, cache): QueryItem<Self::ExtractData>,
     ) {
         let this = match drawer {
             DrawerExtract::Borrowed(drawer) => {
                 drawer.points.clear();
                 drawer.max_len = trail.max_len.get();
-                drawer.color = param.color;
-                drawer.mix_color = param.mix_color;
-                drawer.width = param.width;
+                drawer.param = param;
                 drawer
             }
             DrawerExtract::Spawn(spawn) => spawn.insert(Self {
                 points: default(),
                 max_len: default(),
-                body_page: default(),
-                body_page_size: default(),
-                body_sprite: default(),
-                head_page: default(),
-                head_page_size: default(),
-                head_sprite: default(),
-                color: param.color,
-                mix_color: param.mix_color,
-                width: param.width,
+                param,
+                body: default(),
+                head: default(),
             }),
         };
 
@@ -301,22 +321,12 @@ impl Drawer for DrawTrail {
 
         this.points.push(trail.head);
 
-        if let Some(&AtlasInfo {
-            page, page_size, rect, ..
-        }) = cache.get(0)
-        {
-            this.body_page = page;
-            this.body_page_size = page_size;
-            this.body_sprite = rect;
+        if let Some(&body) = cache.get(0) {
+            this.body = body;
         }
 
-        if let Some(&AtlasInfo {
-            page, page_size, rect, ..
-        }) = cache.get(1)
-        {
-            this.head_page = page;
-            this.head_page_size = page_size;
-            this.head_sprite = rect;
+        if let Some(&head) = cache.get(1) {
+            this.head = head;
         }
     }
 
@@ -324,13 +334,15 @@ impl Drawer for DrawTrail {
         let Self {
             ref points,
             max_len,
-            color,
-            mix_color,
-            width,
-            body_page,
-            body_page_size,
-            body_sprite,
-            ..
+            param:
+                TrailParam {
+                    fade,
+                    side_fade,
+                    color,
+                    width,
+                },
+            body,
+            head,
         } = *self;
 
         let mut total_len2 = 0.;
@@ -339,8 +351,9 @@ impl Drawer for DrawTrail {
             total_len2 += (b - a).length_squared()
         }
 
-        let Vec2 { x: u, y: v2 } = body_sprite.min.as_vec2() / body_page_size.as_vec2();
-        let Vec2 { x: u2, y: v } = body_sprite.max.as_vec2() / body_page_size.as_vec2();
+        let Vec2 { x: u, y: v2 } = body.rect.min.as_vec2() / body.page_size.as_vec2();
+        let Vec2 { x: u2, y: v } = body.rect.max.as_vec2() / body.page_size.as_vec2();
+        let uc = (u + u2) * 0.5;
 
         let mut len2 = 0.;
         let mut prev_prog = 0.;
@@ -360,29 +373,56 @@ impl Drawer for DrawTrail {
 
             let pos0 = vec2(last_rot.0, last_rot.1) * width.sample(prev_prog);
             let pos1 = vec2(rot.0, rot.1) * width.sample(prog);
-            let col0 = color.sample(prev_prog);
-            let col1 = color.sample(prog);
-            let mix_col0 = mix_color.sample(prev_prog);
-            let mix_col1 = mix_color.sample(prog);
-            let v0 = VectorSpace::lerp(v, v2, prev_prog);
-            let v1 = VectorSpace::lerp(v, v2, prog);
-
-            prev_prog = prog;
-            last_rot = rot;
+            let col0 = LinearRgba::from_f32_array(color.sample(prev_prog).extend(fade.sample(prev_prog)).to_array());
+            let col1 = LinearRgba::from_f32_array(color.sample(prog).extend(fade.sample(prog)).to_array());
+            let s_col0 = LinearRgba::from_f32_array(color.sample(prev_prog).extend(side_fade.sample(prev_prog)).to_array());
+            let s_col1 = LinearRgba::from_f32_array(color.sample(prog).extend(side_fade.sample(prog)).to_array());
+            let v0 = VectorSpace::lerp(v, v2, prev_prog / max_prog);
+            let v1 = VectorSpace::lerp(v, v2, prog / max_prog);
 
             Shaper::new()
-                .pos2d([a - pos0, a + pos0, b + pos1, b - pos1])
-                .uv([[u, v0], [u2, v0], [u2, v1], [u, v1]].map(Vec2::from_array))
-                .colors::<0>([col0, col0, col1, col1])
-                .colors::<1>([mix_col0, mix_col0, mix_col1, mix_col1])
-                .queue_rect(queuer, 0., body_page)
+                .pos2d([a - pos0, a, b, b - pos1])
+                .uv([[u, v0], [uc, v0], [uc, v1], [u, v1]].map(Vec2::from_array))
+                .colors([s_col0, col0, col1, s_col1])
+                .queue_rect(queuer, 0., body.page);
+
+            Shaper::new()
+                .pos2d([a + pos0, a, b, b + pos1])
+                .uv([[u2, v0], [uc, v0], [uc, v1], [u2, v1]].map(Vec2::from_array))
+                .colors([s_col0, col0, col1, s_col1])
+                .queue_rect(queuer, 0., body.page);
+
+            if i == points.len() - ab.len() {
+                let w = width.sample(prog);
+                let h = (head.rect.height() as f32 / head.rect.width() as f32) * w;
+                let c = b + vec2(rot.1, -rot.0) * 2. * h;
+
+                let Vec2 { x: u, y: v2 } = head.rect.min.as_vec2() / head.page_size.as_vec2();
+                let Vec2 { x: u2, y: v } = head.rect.max.as_vec2() / head.page_size.as_vec2();
+                let uc = (u + u2) * 0.5;
+
+                Shaper::new()
+                    .pos2d([b - pos1, b, c, c - pos1])
+                    .uv([[u, v], [uc, v], [uc, v2], [u, v2]].map(Vec2::from_array))
+                    .colors([s_col1, col1, col1, s_col1])
+                    .queue_rect(queuer, 0., head.page);
+
+                Shaper::new()
+                    .pos2d([b + pos1, b, c, c + pos1])
+                    .uv([[u2, v], [uc, v], [uc, v2], [u2, v2]].map(Vec2::from_array))
+                    .colors([s_col1, col1, col1, s_col1])
+                    .queue_rect(queuer, 0., head.page);
+            } else {
+                prev_prog = prog;
+                last_rot = rot;
+            }
         }
     }
 }
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((DefaultPlugins, hephae! { atlas: TrailParam, render: (Vert, DrawTrail) }))
+        .add_plugins((DefaultPlugins, hephae! { atlas: TrailSprites, render: (Vert, DrawTrail) }))
         .add_systems(Startup, startup)
         .add_systems(PostUpdate, update_trail)
         .run()
@@ -396,31 +436,22 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
             hdr: true,
             ..default()
         },
-        Bloom::ANAMORPHIC,
+        Bloom {
+            intensity: 0.5,
+            low_frequency_boost_curvature: 0.,
+            ..Bloom::NATURAL
+        },
         Tonemapping::TonyMcMapface,
     ));
 
-    /*
-    blend = Blending.additive;
-    fadeInterp = Interp.pow2In;
-    sideFadeInterp = Interp.pow3In;
-    mixInterp = Interp.pow10In;
-    gradientInterp = Interp.pow10Out;
-    fadeColor = new Color(0.3f, 0.5f, 1f);
-    shrink = 0f;
-    fadeAlpha = 1f;
-    mixAlpha = 1f;
-    trailChance = 0.4f;
-    trailWidth = 1.6f;
-    trailColor = monolithLight;
-     */
-
-    commands.spawn((PrimaryTrail, Trail::new(NonZeroUsize::new(32).unwrap()), TrailParam {
-        atlas: server.load("sprites/sprites.atlas.ron"),
-        body: "trails/soul".into(),
-        head: "trails/soul-cap".into(),
-        color: Interp::new(LinearRgba::new(0., 1.5, 4., 0.), LinearRgba::rgb(2., 4.5, 7.), |t| t * t * t),
-        mix_color: Interp::new(LinearRgba::NONE, LinearRgba::WHITE, |t| t),
-        width: Interp::new(0., 50., |t| t),
-    }));
+    commands.spawn((
+        PrimaryTrail,
+        Trail::new(NonZeroUsize::new(TRAIL_LENGTH).unwrap()),
+        TrailParam::soul(),
+        TrailSprites {
+            atlas: server.load("sprites/sprites.atlas.ron"),
+            body: "trails/soul".into(),
+            head: "trails/soul-cap".into(),
+        },
+    ));
 }
