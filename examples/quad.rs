@@ -1,5 +1,5 @@
 use bevy::{
-    core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
+    core_pipeline::{bloom::Bloom, core_2d::Transparent2d, tonemapping::Tonemapping},
     ecs::{
         query::QueryItem,
         system::{SystemParamItem, lifetimeless::SRes},
@@ -51,7 +51,7 @@ impl Drawer for Draw {
 
     #[inline]
     fn extract(mut drawer: DrawerExtract<Self>, _: &SystemParamItem<Self::ExtractParam>, _: QueryItem<Self::ExtractData>) {
-        *drawer.get_mut(|| Self) = Self;
+        *drawer.get_mut(|| Self) = Self
     }
 
     #[inline]
@@ -67,7 +67,9 @@ impl Drawer for Draw {
                 ]
                 .map(Vec2::from_array),
             )
-            .colors([[2., 0., 0., 1.], [0., 3., 0., 1.], [0., 0., 4., 1.], [4., 3., 2., 1.]].map(LinearRgba::from_f32_array))
+            .colors(
+                [[2., 0., 0., 1.], [0., 3., 0., 1.], [0., 0., 4., 1.], [2., 5., 50., 1.]].map(LinearRgba::from_f32_array),
+            )
             .queue_rect(queuer, 0., ())
     }
 }
@@ -80,6 +82,19 @@ fn main() -> AppExit {
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            hdr: true,
+            clear_color: ClearColorConfig::Custom(Color::BLACK),
+            ..default()
+        },
+        Bloom {
+            intensity: 0.5,
+            low_frequency_boost_curvature: 0.,
+            ..Bloom::NATURAL
+        },
+        Tonemapping::TonyMcMapface,
+    ));
     commands.spawn(HasDrawer::<Draw>::new());
 }

@@ -3,7 +3,7 @@
 //! See `examples/atlas.rs` for example usage.
 
 use bevy::{
-    platform_support::collections::{HashMap, hash_map::Entry},
+    platform::collections::{HashMap, hash_map::Entry},
     prelude::*,
     render::{
         Extract,

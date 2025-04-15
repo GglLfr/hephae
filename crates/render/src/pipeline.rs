@@ -25,7 +25,7 @@ use bevy::{
             lifetimeless::{Read, SRes},
         },
     },
-    platform_support::collections::HashMap,
+    platform::collections::HashMap,
     prelude::*,
     render::{
         Extract,

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use async_channel::{Receiver, Sender};
 use bevy::{
-    platform_support::{collections::HashMap, hash::FixedHasher},
+    platform::{collections::HashMap, hash::FixedHasher},
     prelude::*,
     tasks::IoTaskPool,
 };

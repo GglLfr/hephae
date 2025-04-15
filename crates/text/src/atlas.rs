@@ -2,7 +2,7 @@
 
 use bevy::{
     asset::RenderAssetUsages,
-    platform_support::{collections::HashMap, hash::FixedHasher},
+    platform::{collections::HashMap, hash::FixedHasher},
     prelude::*,
     render::{
         Extract,

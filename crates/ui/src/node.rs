@@ -112,7 +112,7 @@ impl UiCaches<'_, '_> {
             let Ok((mut cache, parent)) = self.0.get_mut(e) else { break };
             cache.clear();
 
-            if let Some(parent) = parent { e = parent.parent } else { break }
+            if let Some(parent) = parent { e = parent.parent() } else { break }
         }
     }
 }

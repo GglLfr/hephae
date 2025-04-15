@@ -4,7 +4,7 @@ use std::{fmt::Formatter, hint::unreachable_unchecked, io, num::ParseIntError, s
 
 use bevy::{
     asset::{AssetLoader, LoadContext, ParseAssetPathError, io::Reader, ron, ron::error::SpannedError},
-    platform_support::{collections::HashMap, hash::FixedHasher},
+    platform::{collections::HashMap, hash::FixedHasher},
     prelude::*,
 };
 use derive_more::{Display, Error, From};

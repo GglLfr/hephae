@@ -337,13 +337,13 @@ pub fn compute_structure(
     removed.clear();
 
     for e in removed_span.read() {
-        removed.grow_and_insert(e.index() as usize);
+        removed.grow_and_insert(e.index() as usize)
     }
 
     'out: for (e, text, span, parent, children) in &changed_query {
         iterated.grow((e.index() + 1) as usize);
         if iterated.put(e.index() as usize) {
-            continue 'out;
+            continue 'out
         }
 
         let parent_changed = parent.as_ref().is_some_and(Ref::is_changed);
@@ -356,27 +356,25 @@ pub fn compute_structure(
                 if removed.contains(e.index() as usize) {
                     true
                 } else {
-                    continue 'out;
+                    continue 'out
                 }
             }
         } {
             let Ok((root, mut structure, children)) = (if text.is_some() {
                 text_query.get_mut(e)
             } else {
-                let Some(mut e) = parent.map(|p| p.parent) else {
-                    continue 'out;
-                };
+                let Some(mut e) = parent.as_deref().map(ChildOf::parent) else { continue 'out };
                 loop {
                     iterated.grow((e.index() + 1) as usize);
                     if iterated.put(e.index() as usize) {
-                        continue 'out;
+                        continue 'out
                     }
 
                     match text_query.get_mut(e) {
                         Ok(structure) => break Ok(structure),
                         Err(..) => match parent_query.get(e) {
                             Ok(parent) => {
-                                e = parent.parent;
+                                e = parent.parent();
                                 continue;
                             }
                             Err(..) => continue 'out,
@@ -384,7 +382,7 @@ pub fn compute_structure(
                     }
                 }
             }) else {
-                continue 'out;
+                continue 'out
             };
 
             let inner = &mut structure.bypass_change_detection().0;
@@ -399,7 +397,8 @@ pub fn compute_structure(
             ) {
                 for (e, children, actual_parent) in recurse_query.iter_many(children) {
                     assert_eq!(
-                        actual_parent.parent, parent,
+                        actual_parent.parent(),
+                        parent,
                         "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                     );
 
@@ -413,14 +412,14 @@ pub fn compute_structure(
             inner.clear();
             inner.push((root, 0));
             if let Some(children) = children {
-                recurse(inner, 1, root, children, &recurse_query);
+                recurse(inner, 1, root, children, &recurse_query)
             }
 
             if &*old != inner {
-                structure.set_changed();
+                structure.set_changed()
             }
 
-            old.clear();
+            old.clear()
         }
     }
 }
@@ -442,7 +441,7 @@ pub fn notify_structure(
                 font.is_some_and(|font| font.is_changed())
             {
                 structure.set_changed();
-                continue 'out;
+                continue 'out
             }
         }
     }

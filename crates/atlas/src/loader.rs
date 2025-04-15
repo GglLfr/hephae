@@ -29,7 +29,7 @@ use bevy::{
         ron::error::SpannedError,
     },
     image::TextureFormatPixelInfo,
-    platform_support::{collections::HashMap, hash::FixedHasher},
+    platform::{collections::HashMap, hash::FixedHasher},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
@@ -537,7 +537,6 @@ impl AssetLoader for AtlasLoader {
                     (base_height + 2 * pad as u32) as i32,
                 )) {
                     Some(alloc) => {
-                        info!("Packed {}: {:?}", name.display(), alloc.rectangle);
                         ids.insert(alloc.id, (name, texture, has_nine_slice));
                     }
                     None => {

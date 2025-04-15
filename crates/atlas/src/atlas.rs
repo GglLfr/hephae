@@ -23,7 +23,7 @@ use std::{
 use bevy::{
     asset::ReflectAsset,
     ecs::{component::Tick, system::SystemChangeTick},
-    platform_support::collections::{Equivalent, HashMap},
+    platform::collections::{Equivalent, HashMap},
     prelude::*,
 };
 use derive_more::{Display, Error, From};

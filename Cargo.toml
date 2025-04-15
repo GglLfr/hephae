@@ -60,7 +60,7 @@ too_many_arguments = "allow"
 unexpected_cfgs = { level = "allow", check-cfg = ["cfg(docsrs_dep)"] }
 
 [workspace.dependencies]
-bevy = { version = "0.16.0-rc.3", default-features = false, features = ["bevy_log", "std"] }
+bevy = { version = "0.16.0-rc.5", default-features = false, features = ["bevy_log", "std"] }
 
 async-channel = "2"
 bytemuck = { version = "1", features = ["derive"] }
@@ -100,7 +100,7 @@ hephae-utils.workspace = true
 hephae-plugins = { version = "0.8.0", default-features = false, path = "plugins" }
 
 [dev-dependencies]
-bevy = { version = "0.16.0-rc.3", default-features = false, features = ["bevy_winit", "bevy_core_pipeline", "png", "multi_threaded", "async_executor"] }
+bevy = { version = "0.16.0-rc.5", default-features = false, features = ["bevy_winit", "bevy_core_pipeline", "png", "multi_threaded", "async_executor", "tonemapping_luts"] }
 
 [features]
 default = ["atlas", "locale", "text", "ui"]

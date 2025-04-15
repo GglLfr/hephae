@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use bevy::{
-    core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
+    core_pipeline::{bloom::Bloom, core_2d::Transparent2d, tonemapping::Tonemapping},
     ecs::{
         query::{QueryItem, ROQueryItem},
         system::{
@@ -126,8 +126,8 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
     }
 }
 
-/// 128 ticks per second.
-const TRAIL_UPDATE_RATE: Duration = Duration::new(0, 7812500);
+/// 64 ticks per second.
+const TRAIL_UPDATE_RATE: Duration = Duration::new(0, 15625000);
 
 #[derive(Component)]
 struct PrimaryTrail;
@@ -234,6 +234,7 @@ fn update_trail(
 #[derive(TypePath, Component)]
 struct DrawTrail {
     points: Vec<Vec2>,
+    max_len: usize,
     body_page: AssetId<Image>,
     body_page_size: UVec2,
     body_sprite: URect,
@@ -263,6 +264,7 @@ impl Drawer for DrawTrail {
         let this = match drawer {
             DrawerExtract::Borrowed(drawer) => {
                 drawer.points.clear();
+                drawer.max_len = trail.max_len.get();
                 drawer.color = param.color;
                 drawer.mix_color = param.mix_color;
                 drawer.width = param.width;
@@ -270,6 +272,7 @@ impl Drawer for DrawTrail {
             }
             DrawerExtract::Spawn(spawn) => spawn.insert(Self {
                 points: default(),
+                max_len: default(),
                 body_page: default(),
                 body_page_size: default(),
                 body_sprite: default(),
@@ -320,6 +323,7 @@ impl Drawer for DrawTrail {
     fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self {
             ref points,
+            max_len,
             color,
             mix_color,
             width,
@@ -342,16 +346,17 @@ impl Drawer for DrawTrail {
         let mut prev_prog = 0.;
         let mut last_rot = (0., 1.);
 
+        let max_prog = (points.len() - 2) as f32 / max_len as f32;
         for (i, ab) in points.windows(2).enumerate() {
             let &[a, b] = ab else { break };
 
-            let rot = (-(b - a).to_angle()).sin_cos();
+            let rot = if (b - a).length_squared() <= 1. { last_rot } else { (-(b - a).to_angle()).sin_cos() };
             if i == 0 {
                 last_rot = rot
             }
 
             len2 += (b - a).length_squared();
-            let prog = (len2 / total_len2).sqrt();
+            let prog = (len2 / total_len2).sqrt() * max_prog;
 
             let pos0 = vec2(last_rot.0, last_rot.1) * width.sample(prev_prog);
             let pos1 = vec2(rot.0, rot.1) * width.sample(prog);
@@ -391,7 +396,8 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
             hdr: true,
             ..default()
         },
-        Bloom::NATURAL,
+        Bloom::ANAMORPHIC,
+        Tonemapping::TonyMcMapface,
     ));
 
     /*
@@ -409,11 +415,11 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
     trailColor = monolithLight;
      */
 
-    commands.spawn((PrimaryTrail, Trail::new(NonZeroUsize::new(128).unwrap()), TrailParam {
+    commands.spawn((PrimaryTrail, Trail::new(NonZeroUsize::new(32).unwrap()), TrailParam {
         atlas: server.load("sprites/sprites.atlas.ron"),
         body: "trails/soul".into(),
         head: "trails/soul-cap".into(),
-        color: Interp::new(LinearRgba::NONE, LinearRgba::WHITE, |t| t),
+        color: Interp::new(LinearRgba::new(0., 1.5, 4., 0.), LinearRgba::rgb(2., 4.5, 7.), |t| t * t * t),
         mix_color: Interp::new(LinearRgba::NONE, LinearRgba::WHITE, |t| t),
         width: Interp::new(0., 50., |t| t),
     }));

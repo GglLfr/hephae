@@ -11,7 +11,7 @@ use std::{any::type_name, borrow::Cow, ops::Range, slice::Iter};
 use bevy::{
     asset::{ReflectAsset, UntypedAssetId, VisitAssetDependencies},
     ecs::{component::HookContext, entity::MapEntities, reflect::ReflectMapEntities, world::DeferredWorld},
-    platform_support::collections::HashMap,
+    platform::collections::HashMap,
     prelude::*,
 };
 use derive_more::{Display, Error};
@@ -90,13 +90,13 @@ pub enum LocalizeError {
 /// arguments, only explicitly-indexed positional arguments are supported.
 ///
 /// ```
-/// use std::str::FromStr;
+/// # use std::str::FromStr;
 ///
-/// use bevy::platform_support::collections::HashMap;
-/// use hephae_locale::{
-///     def::{LocaleFmt, LocalizeError},
-///     prelude::*,
-/// };
+/// # use bevy::platform::collections::HashMap;
+/// # use hephae_locale::{
+/// #     def::{LocaleFmt, LocalizeError},
+/// #     prelude::*,
+/// # };
 ///
 /// let a = LocaleFmt::from_str("Hi {0}, this is {1}. {5}...").unwrap();
 /// let b = LocaleFmt::from_str("It's nice to meet you {{inside these braces for no reason}}.")
