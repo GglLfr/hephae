@@ -3,9 +3,7 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 
-use std::sync::Mutex;
-
-use bevy::{app::PluginGroupBuilder, prelude::*, render::RenderApp};
+use bevy::{app::PluginGroupBuilder, platform::sync::Mutex, prelude::*, render::RenderApp};
 use hephae_utils::prelude::*;
 
 use crate::{

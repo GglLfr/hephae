@@ -268,7 +268,7 @@ impl ExtractedFontAtlas {
     /// Gets the glyph information based on its index in a tuple of positional offset and size.
     #[inline]
     pub fn get_info_index(&self, index: usize) -> Option<(IVec2, URect)> {
-        Some(*self.nodes.get(index)?)
+        self.nodes.get(index).copied()
     }
 }
 

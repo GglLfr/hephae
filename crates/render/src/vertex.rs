@@ -2,12 +2,13 @@
 //!
 //! See the documentation of [Vertex] for more information.
 
-use std::{hash::Hash, ops::Range, sync::Mutex};
+use std::{hash::Hash, ops::Range};
 
 use bevy::{
     core_pipeline::core_2d::{CORE_2D_DEPTH_FORMAT, Transparent2d},
     ecs::system::{ReadOnlySystemParam, SystemParam, SystemParamItem},
     math::FloatOrd,
+    platform::sync::Mutex,
     prelude::*,
     render::{
         render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, PhaseItemExtraIndex, RenderCommand, SortedPhaseItem},

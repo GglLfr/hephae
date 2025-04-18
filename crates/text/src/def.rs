@@ -1,6 +1,6 @@
 //! Defines common types of Hephae Text.
 
-use std::{io, slice::Iter, sync::Mutex};
+use std::{io, slice};
 
 use async_channel::Sender;
 use bevy::{
@@ -9,6 +9,7 @@ use bevy::{
         SystemParamItem,
         lifetimeless::{Read, SQuery},
     },
+    platform::sync::Mutex,
     prelude::*,
 };
 use cosmic_text::{
@@ -226,7 +227,7 @@ impl TextStructure {
 
 /// Iterates textual entities for use in [`FontLayout`](crate::layout::FontLayout).
 pub struct TextStructureIter<'w, 's: 'w> {
-    inner: Iter<'w, (Entity, usize)>,
+    inner: slice::Iter<'w, (Entity, usize)>,
     fonts: SmallVec<[(&'w TextFont, usize); 4]>,
     query: &'w TextQuery<'w, 's>,
 }

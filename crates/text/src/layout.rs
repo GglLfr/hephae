@@ -1,10 +1,12 @@
 //! Defines font layout computation systems.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-
 use async_channel::{Receiver, Sender};
 use bevy::{
-    platform::{collections::HashMap, hash::FixedHasher},
+    platform::{
+        collections::HashMap,
+        hash::FixedHasher,
+        sync::{Arc, Mutex, MutexGuard, PoisonError},
+    },
     prelude::*,
     tasks::IoTaskPool,
 };

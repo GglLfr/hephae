@@ -1,6 +1,6 @@
 //! Defines base drawers that work with vertices and supply various vertex commands.
 
-use std::{any::TypeId, marker::PhantomData, sync::PoisonError};
+use std::{any::TypeId, marker::PhantomData};
 
 use bevy::{
     ecs::{
@@ -9,7 +9,7 @@ use bevy::{
         query::{QueryFilter, QueryItem, ReadOnlyQueryData},
         system::{ReadOnlySystemParam, StaticSystemParam, SystemBuffer, SystemMeta, SystemParamItem, lifetimeless::Write},
     },
-    platform::collections::hash_map::Entry,
+    platform::{collections::hash_map::Entry, sync::PoisonError},
     prelude::*,
     render::{
         Extract,

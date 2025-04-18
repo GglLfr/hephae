@@ -12,7 +12,7 @@
 //!   index buffers and share GPU render calls.
 //! - [`DrawRequests`] renders each batch.
 
-use std::{marker::PhantomData, ops::Range, sync::PoisonError};
+use std::{marker::PhantomData, ops::Range};
 
 use bevy::{
     core_pipeline::tonemapping::{
@@ -25,7 +25,7 @@ use bevy::{
             lifetimeless::{Read, SRes},
         },
     },
-    platform::collections::HashMap,
+    platform::{collections::HashMap, sync::PoisonError},
     prelude::*,
     render::{
         Extract,
