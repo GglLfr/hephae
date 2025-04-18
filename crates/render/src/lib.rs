@@ -24,14 +24,14 @@ use bevy::{
 use hephae_utils::prelude::*;
 
 use crate::{
-    drawer::{Drawer, HasDrawer, extract_drawers, queue_drawers},
+    drawer::{Drawer, HasDrawer, check_visibilities, extract_drawers, queue_drawers},
     image_bind::{ImageAssetEvents, ImageBindGroups, extract_image_events, validate_image_bind_groups},
     pipeline::{
         DrawBuffers, DrawRequests, VertexPipeline, ViewBatches, ViewIndexBuffer, VisibleDrawers, extract_shader,
         load_shader, prepare_indices, prepare_view_bind_groups, queue_vertices,
     },
     prelude::Vertex,
-    vertex::{DrawItems, VertexDrawers, check_visibilities},
+    vertex::DrawItems,
 };
 
 /// Common imports for [`hephae_render`](crate).
@@ -72,9 +72,7 @@ plugin_def! {
     /// [`drawer`] for more.
     pub struct VertexPlugin<T: Vertex>;
     fn build(&self, app: &mut App) {
-        app.init_resource::<VertexDrawers<T>>()
-            .add_systems(Startup, load_shader::<T>)
-            .add_systems(PostUpdate, check_visibilities::<T>.in_set(VisibilitySystems::CheckVisibility));
+        app.add_systems(Startup, load_shader::<T>);
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             let world = render_app
@@ -117,8 +115,7 @@ plugin_def! {
     fn build(&self, app: &mut App) {
         app.add_plugins(SyncComponentPlugin::<HasDrawer<T>>::default())
             .register_type::<HasDrawer<T>>()
-            .world_mut()
-            .resource_scope::<VertexDrawers<T::Vertex>, ()>(|world, mut drawers| drawers.add::<T>(world));
+            .add_systems(PostUpdate, check_visibilities::<T>.in_set(VisibilitySystems::CheckVisibility));
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app

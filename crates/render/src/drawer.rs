@@ -1,19 +1,26 @@
 //! Defines base drawers that work with vertices and supply various vertex commands.
 
-use std::{marker::PhantomData, sync::PoisonError};
+use std::{any::TypeId, marker::PhantomData, sync::PoisonError};
 
 use bevy::{
     ecs::{
         component::Mutable,
+        entity::EntityHashMap,
         query::{QueryFilter, QueryItem, ReadOnlyQueryData},
-        system::{ReadOnlySystemParam, StaticSystemParam, SystemParamItem},
+        system::{ReadOnlySystemParam, StaticSystemParam, SystemBuffer, SystemMeta, SystemParamItem, lifetimeless::Write},
     },
+    platform::collections::hash_map::Entry,
     prelude::*,
     render::{
         Extract,
+        primitives::{Aabb, Frustum},
         sync_world::RenderEntity,
-        view::{ExtractedView, RenderVisibleEntities},
+        view::{
+            ExtractedView, NoCpuCulling, NoFrustumCulling, RenderLayers, RenderVisibleEntities, VisibilityRange,
+            VisibleEntities, VisibleEntityRanges,
+        },
     },
+    utils::Parallel,
 };
 use fixedbitset::FixedBitSet;
 use vec_belt::Transfer;
@@ -112,6 +119,140 @@ impl<T: Drawer> HasDrawer<T> {
     }
 }
 
+#[derive(FromWorld)]
+pub(crate) struct UpdateVisibilities<T: Drawer> {
+    entities: EntityHashMap<Vec<Entity>>,
+    query: QueryState<Write<VisibleEntities>>,
+    _marker: PhantomData<fn() -> T>,
+}
+
+impl<T: Drawer> SystemBuffer for UpdateVisibilities<T> {
+    fn apply(&mut self, _: &SystemMeta, world: &mut World) {
+        //  There is no `iter_manual_mut`, unfortunately.
+        let mut query = unsafe { self.query.query_unchecked(world.as_unsafe_world_cell()) };
+        for (&view, entities) in &mut self.entities {
+            let Ok(mut visible) = query.get_mut(view) else {
+                entities.clear();
+                continue
+            };
+
+            match visible.entities.entry(TypeId::of::<With<T>>()) {
+                Entry::Occupied(e) => {
+                    let vec = e.into_mut();
+                    vec.clear();
+                    vec.append(entities);
+                }
+                Entry::Vacant(e) => {
+                    let mut vec = Vec::with_capacity(entities.len());
+                    vec.append(entities);
+                    e.insert(vec);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn check_visibilities<T: Drawer>(
+    view_query: Query<(Entity, &Frustum, Option<&RenderLayers>, &Camera, Has<NoCpuCulling>)>,
+    mut visible_aabb_query: Query<
+        (
+            Entity,
+            &InheritedVisibility,
+            &mut ViewVisibility,
+            Option<&RenderLayers>,
+            Option<&Aabb>,
+            Option<&GlobalTransform>,
+            Has<NoFrustumCulling>,
+            Has<VisibilityRange>,
+        ),
+        (T::ExtractFilter, With<HasDrawer<T>>),
+    >,
+    visible_entity_ranges: Option<Res<VisibleEntityRanges>>,
+    mut update_visibilities: Deferred<UpdateVisibilities<T>>,
+    mut thread_queues: Local<Parallel<Vec<Entity>>>,
+) {
+    for (view_entity, &frustum, maybe_view_mask, camera, no_cpu_culling) in &view_query {
+        if !camera.is_active {
+            continue
+        }
+
+        let view_mask = maybe_view_mask.unwrap_or_default();
+        visible_aabb_query.par_iter_mut().for_each_init(
+            || thread_queues.borrow_local_mut(),
+            |queue,
+             (
+                entity,
+                inherited_visibility,
+                mut view_visibility,
+                maybe_entity_mask,
+                maybe_model_aabb,
+                maybe_transform,
+                no_frustum_culling,
+                has_visibility_range,
+            )| {
+                if !inherited_visibility.get() {
+                    return;
+                }
+
+                let entity_mask = maybe_entity_mask.unwrap_or_default();
+                if !view_mask.intersects(entity_mask) {
+                    return;
+                }
+
+                // If outside of the visibility range, cull.
+                if has_visibility_range &&
+                    visible_entity_ranges.as_deref().is_some_and(|visible_entity_ranges| {
+                        !visible_entity_ranges.entity_is_in_range_of_view(entity, view_entity)
+                    })
+                {
+                    return;
+                }
+
+                // If there is no transform, just draw it anyway.
+                let Some(transform) = maybe_transform else {
+                    view_visibility.set();
+                    queue.push(entity);
+
+                    return
+                };
+
+                // If we have an AABB, do frustum culling.
+                if !no_frustum_culling && !no_cpu_culling {
+                    if let Some(model_aabb) = maybe_model_aabb {
+                        let world_from_local = transform.affine();
+                        let model_sphere = bevy::render::primitives::Sphere {
+                            center: world_from_local.transform_point3a(model_aabb.center),
+                            radius: transform.radius_vec3a(model_aabb.half_extents),
+                        };
+
+                        // Do quick sphere-based frustum culling.
+                        if !frustum.intersects_sphere(&model_sphere, false) {
+                            return
+                        }
+
+                        // Do AABB-based frustum culling.
+                        if !frustum.intersects_obb(model_aabb, &world_from_local, true, false) {
+                            return
+                        }
+                    }
+                }
+
+                view_visibility.set();
+                queue.push(entity)
+            },
+        );
+
+        thread_queues.drain_into(match update_visibilities.entities.entry(view_entity) {
+            Entry::Occupied(e) => {
+                let vec = e.into_mut();
+                vec.clear();
+                vec
+            }
+            Entry::Vacant(e) => e.insert(Vec::new()),
+        })
+    }
+}
+
 pub(crate) fn extract_drawers<T: Drawer>(
     mut commands: Commands,
     param: Extract<T::ExtractParam>,
@@ -145,7 +286,7 @@ pub(crate) fn queue_drawers<T: Drawer>(
 
     iterated.clear();
     for (visible_entities, visible_drawers) in &views {
-        let mut iter = query.iter_many_mut(visible_entities.iter::<With<HasDrawer<T>>>().map(|(e, ..)| e));
+        let mut iter = query.iter_many_mut(visible_entities.iter::<With<T>>().map(|(e, ..)| e));
         while let Some((e, mut drawer, items)) = iter.fetch_next() {
             let index = e.index() as usize;
             if iterated[index] {

@@ -2,34 +2,22 @@
 //!
 //! See the documentation of [Vertex] for more information.
 
-use std::{any::TypeId, hash::Hash, marker::PhantomData, ops::Range, sync::Mutex};
+use std::{hash::Hash, ops::Range, sync::Mutex};
 
 use bevy::{
     core_pipeline::core_2d::{CORE_2D_DEPTH_FORMAT, Transparent2d},
-    ecs::{
-        component::ComponentId,
-        entity::EntityHashMap,
-        storage::SparseSet,
-        system::{ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
-        world::FilteredEntityRef,
-    },
+    ecs::system::{ReadOnlySystemParam, SystemParam, SystemParamItem},
     math::FloatOrd,
     prelude::*,
     render::{
-        primitives::{Aabb, Frustum},
         render_phase::{CachedRenderPipelinePhaseItem, DrawFunctionId, PhaseItemExtraIndex, RenderCommand, SortedPhaseItem},
         render_resource::{CachedRenderPipelineId, RenderPipelineDescriptor, TextureFormat},
         sync_world::MainEntity,
-        view::{NoCpuCulling, NoFrustumCulling, RenderLayers, VisibilityRange, VisibleEntities, VisibleEntityRanges},
     },
-    utils::{Parallel, TypeIdMap},
 };
 use smallvec::SmallVec;
 
-use crate::{
-    attribute::VertexLayout,
-    drawer::{Drawer, HasDrawer},
-};
+use crate::attribute::VertexLayout;
 
 /// A [`PhaseItem`](bevy::render::render_phase::PhaseItem) that works with [`Vertex`].
 ///
@@ -51,6 +39,7 @@ pub trait DrawerPhaseItem: CachedRenderPipelinePhaseItem + SortedPhaseItem {
     fn command(&self) -> usize;
 }
 
+/// Implements [`DrawerPhaseItem`] for [`Transparent2d`] with its `extracted_index` field.
 impl DrawerPhaseItem for Transparent2d {
     #[inline]
     fn create(
@@ -137,178 +126,11 @@ pub trait Vertex: Send + Sync + VertexLayout {
     fn create_batch(param: &mut SystemParamItem<Self::BatchParam>, key: Self::PipelineKey) -> Self::BatchProp;
 }
 
-/// Stores the runtime-only type information of [`Drawer`] that is associated with a [`Vertex`] for
-/// use in [`check_visibilities`].
-#[derive(Resource)]
-pub struct VertexDrawers<T: Vertex>(pub(crate) SparseSet<ComponentId, TypeId>, PhantomData<fn() -> T>);
-impl<T: Vertex> Default for VertexDrawers<T> {
-    #[inline]
-    fn default() -> Self {
-        Self(SparseSet::new(), PhantomData)
-    }
-}
-
-impl<T: Vertex> VertexDrawers<T> {
-    /// Registers a [`Drawer`] to be checked in [`check_visibilities`].
-    #[inline]
-    pub fn add<D: Drawer<Vertex = T>>(&mut self, world: &mut World) {
-        self.0
-            .insert(world.register_component::<HasDrawer<D>>(), TypeId::of::<With<HasDrawer<D>>>());
-    }
-}
-
 #[derive(Component)]
 pub(crate) struct DrawItems<T: Vertex>(pub Mutex<SmallVec<[(Range<usize>, f32, T::PipelineKey); 8]>>);
 impl<T: Vertex> Default for DrawItems<T> {
     #[inline]
     fn default() -> Self {
         Self(Mutex::new(SmallVec::new()))
-    }
-}
-
-/// Calculates [`ViewVisibility`] of [drawable](Drawer) entities.
-///
-/// Similar to [`check_visibility`](bevy::render::view::check_visibility) that is generic over
-/// [`HasDrawer`], except the filters are configured dynamically by
-/// [`DrawerPlugin`](crate::DrawerPlugin). This makes it so that all drawers that share the
-/// same [`Vertex`] type also share the same visibility system.
-pub fn check_visibilities<T: Vertex>(
-    world: &mut World,
-    visibility: &mut QueryState<FilteredEntityRef>,
-    views: &mut SystemState<(
-        Query<(Entity, &Frustum, Option<&RenderLayers>, &Camera, Has<NoCpuCulling>)>,
-        Query<(
-            Entity,
-            &InheritedVisibility,
-            &mut ViewVisibility,
-            Option<&RenderLayers>,
-            Option<&Aabb>,
-            Option<&GlobalTransform>,
-            Has<NoFrustumCulling>,
-            Has<VisibilityRange>,
-        )>,
-        Option<Res<VisibleEntityRanges>>,
-    )>,
-    visible_entities: &mut SystemState<Query<(Entity, &mut VisibleEntities)>>,
-    mut thread_queues: Local<Parallel<Vec<Entity>>>,
-    mut view_queues: Local<EntityHashMap<Vec<Entity>>>,
-    mut view_maps: Local<EntityHashMap<TypeIdMap<Vec<Entity>>>>,
-) {
-    world.resource_scope(|world, drawers: Mut<VertexDrawers<T>>| {
-        if drawers.is_changed() {
-            let mut builder = QueryBuilder::<FilteredEntityRef>::new(world);
-            builder.or(|query| {
-                for id in drawers.0.indices() {
-                    query.with_id(id);
-                }
-            });
-
-            *visibility = builder.build();
-        }
-    });
-
-    let (view_query, mut visible_aabb_query, visible_entity_ranges) = views.get_mut(world);
-    let visible_entity_ranges = visible_entity_ranges.as_deref();
-    for (view, &frustum, maybe_view_mask, camera, no_cpu_culling) in &view_query {
-        if !camera.is_active {
-            continue;
-        }
-
-        let view_mask = maybe_view_mask.unwrap_or_default();
-        visible_aabb_query.par_iter_mut().for_each_init(
-            || thread_queues.borrow_local_mut(),
-            |queue,
-             (
-                entity,
-                inherited_visibility,
-                mut view_visibility,
-                maybe_entity_mask,
-                maybe_model_aabb,
-                maybe_transform,
-                no_frustum_culling,
-                has_visibility_range,
-            )| {
-                if !inherited_visibility.get() {
-                    return;
-                }
-
-                let entity_mask = maybe_entity_mask.unwrap_or_default();
-                if !view_mask.intersects(entity_mask) {
-                    return;
-                }
-
-                // If outside of the visibility range, cull.
-                if has_visibility_range &&
-                    visible_entity_ranges.is_some_and(|visible_entity_ranges| {
-                        !visible_entity_ranges.entity_is_in_range_of_view(entity, view)
-                    })
-                {
-                    return;
-                }
-
-                // If there is no transform, just draw it anyway.
-                let Some(transform) = maybe_transform else {
-                    view_visibility.set();
-                    queue.push(entity);
-                    return
-                };
-
-                // If we have an AABB, do frustum culling.
-                if !no_frustum_culling && !no_cpu_culling {
-                    if let Some(model_aabb) = maybe_model_aabb {
-                        let world_from_local = transform.affine();
-                        let model_sphere = bevy::render::primitives::Sphere {
-                            center: world_from_local.transform_point3a(model_aabb.center),
-                            radius: transform.radius_vec3a(model_aabb.half_extents),
-                        };
-
-                        // Do quick sphere-based frustum culling.
-                        if !frustum.intersects_sphere(&model_sphere, false) {
-                            return;
-                        }
-
-                        // Do AABB-based frustum culling.
-                        if !frustum.intersects_obb(model_aabb, &world_from_local, true, false) {
-                            return;
-                        }
-                    }
-                }
-
-                view_visibility.set();
-                queue.push(entity);
-            },
-        );
-
-        thread_queues.drain_into(view_queues.entry(view).or_default());
-    }
-
-    visibility.update_archetypes(world);
-
-    let drawers = world.resource::<VertexDrawers<T>>();
-    for (&view, queues) in &mut view_queues {
-        let map = view_maps.entry(view).or_default();
-        for e in queues.drain(..) {
-            let Ok(visible) = visibility.get_manual(world, e) else {
-                continue;
-            };
-
-            for (&id, &key) in drawers.0.iter() {
-                if visible.contains_id(id) {
-                    map.entry(key).or_default().push(e);
-                }
-            }
-        }
-    }
-
-    let mut visible_entities = visible_entities.get_mut(world);
-    for (view, mut visible_entities) in &mut visible_entities {
-        let Some(map) = view_maps.get_mut(&view) else {
-            continue;
-        };
-        for (&id, entities) in map {
-            let dst = visible_entities.entities.entry(id).or_default();
-            dst.clear();
-            dst.append(entities);
-        }
     }
 }
