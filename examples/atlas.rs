@@ -1,5 +1,8 @@
+use std::f32::consts::PI;
+
 use bevy::{
     core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::{
         query::{QueryItem, ROQueryItem},
         system::{
@@ -20,7 +23,9 @@ use bevy::{
         texture::GpuImage,
         view::ExtractedView,
     },
+    window::PrimaryWindow,
 };
+use fastrand::Rng;
 use hephae::prelude::*;
 
 #[derive(VertexLayout, Copy, Clone, Pod, Zeroable)]
@@ -161,7 +166,7 @@ impl Drawer for DrawSprite {
     }
 
     #[inline]
-    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(&self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         Shaper::new()
             .rect(self.pos, self.rect.size().as_vec2() * self.scl)
             .uv_rect(self.rect, self.page_size)
@@ -171,31 +176,83 @@ impl Drawer for DrawSprite {
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((DefaultPlugins.set(ImagePlugin::default_nearest()), hephae! {
-            atlas,
-            render: (Vert, DrawSprite),
-        }))
+        .add_plugins((
+            DefaultPlugins.set(ImagePlugin::default_nearest()),
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin::default(),
+            hephae! {
+                atlas,
+                render: (Vert, DrawSprite),
+            },
+        ))
         .add_systems(Startup, startup)
+        .add_systems(Update, move_sprites)
         .run()
 }
 
-fn startup(mut commands: Commands, server: Res<AssetServer>) {
-    commands.spawn((Camera2d, Camera { hdr: true, ..default() }, Bloom::NATURAL));
+#[derive(Component, Copy, Clone, Deref, DerefMut)]
+struct Velocity(Vec2);
 
-    for translation in [
-        Vec3::new(-200., -200., 0.),
-        Vec3::new(200., -200., 0.),
-        Vec3::new(200., 200., 0.),
-        Vec3::new(-200., 200., 0.),
-    ] {
+fn startup(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut rng: Local<Rng>,
+) {
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::NONE),
+            hdr: true,
+            ..default()
+        },
+        Bloom::NATURAL,
+    ));
+
+    let size = window.size();
+    for _ in 0..100_000 {
         commands.spawn((
             Transform {
-                translation,
-                scale: Vec3::splat(10.),
+                translation: (size * vec2(rng.f32() - 0.5, rng.f32() - 0.5)).extend(0.),
+                scale: Vec3::splat(0.2 + rng.f32() * 1.8),
                 ..default()
             },
+            Velocity(Vec2::from_angle((rng.f32() * 2. - 1.) * PI) * (1. + rng.f32() * 4.)),
             AtlasEntry::new(server.load("sprites/sprites.atlas.ron"), "cix"),
-            HasDrawer::<DrawSprite>::new(),
+            DrawBy::<DrawSprite>::new(),
         ));
     }
+}
+
+fn move_sprites(
+    window: Single<&Window, With<PrimaryWindow>>,
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &mut Velocity)>,
+) {
+    let bl = window.size() * -0.5;
+    let tr = window.size() * 0.5;
+
+    let delta = time.delta_secs() * 60.;
+    query.par_iter_mut().for_each(|(mut trns, mut vel)| {
+        let mut pos = trns.translation.truncate();
+        pos += **vel * delta;
+
+        if pos.x < bl.x {
+            pos.x = bl.x;
+            vel.x *= -1.;
+        } else if tr.x < pos.x {
+            pos.x = tr.x;
+            vel.x *= -1.;
+        }
+
+        if pos.y < bl.y {
+            pos.y = bl.y;
+            vel.y *= -1.;
+        } else if tr.y < pos.y {
+            pos.y = tr.y;
+            vel.y *= -1.;
+        }
+
+        trns.translation = pos.extend(trns.translation.z);
+    })
 }

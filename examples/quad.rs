@@ -55,7 +55,7 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn draw(&mut self, time: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(&self, time: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let (sin, cos) = (time.elapsed_secs() * 3.).sin_cos();
         Shaper::new()
             .pos2d(
@@ -96,5 +96,5 @@ fn startup(mut commands: Commands) {
         },
         Tonemapping::TonyMcMapface,
     ));
-    commands.spawn(HasDrawer::<Draw>::new());
+    commands.spawn(DrawBy::<Draw>::new());
 }

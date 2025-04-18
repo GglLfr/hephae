@@ -68,7 +68,7 @@ impl Drawer for Draw {
     }
 
     #[inline]
-    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(&self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self { color, trns, size } = *self;
         Shaper::new()
             .pos3d([
@@ -105,7 +105,7 @@ fn startup(mut commands: Commands) {
                 ..default()
             },
             Color(LinearRgba::WHITE),
-            HasDrawer::<Draw>::new(),
+            DrawBy::<Draw>::new(),
         )
     };
 
@@ -116,7 +116,7 @@ fn startup(mut commands: Commands) {
             ..default()
         },
         Color(LinearRgba::RED),
-        HasDrawer::<Draw>::new(),
+        DrawBy::<Draw>::new(),
         children![(
             Rotate,
             Ui {
@@ -126,7 +126,7 @@ fn startup(mut commands: Commands) {
                 ..default()
             },
             Color(LinearRgba::GREEN),
-            HasDrawer::<Draw>::new(),
+            DrawBy::<Draw>::new(),
             children![(
                 Rotate,
                 Ui {
@@ -134,7 +134,7 @@ fn startup(mut commands: Commands) {
                     ..default()
                 },
                 Color(LinearRgba::BLUE),
-                HasDrawer::<Draw>::new(),
+                DrawBy::<Draw>::new(),
                 children![leaf(), leaf(), leaf(), leaf()]
             )]
         )]

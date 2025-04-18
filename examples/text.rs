@@ -150,7 +150,7 @@ impl Drawer for DrawText {
     }
 
     #[inline]
-    fn draw(&mut self, atlases: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(&self, atlases: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         for &glyph in &self.glyphs {
             let Some(atlas) = atlases.get(glyph.atlas) else {
                 continue;
@@ -197,7 +197,7 @@ fn startup(mut commands: Commands, server: Res<AssetServer>) {
                 line_height: 1.,
                 antialias: true,
             },
-            HasDrawer::<DrawText>::new(),
+            DrawBy::<DrawText>::new(),
         ),
         "intro",
         server.load("locales/locales.ron"),

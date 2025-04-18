@@ -1,5 +1,5 @@
 #![allow(internal_features)]
-#![cfg_attr(any(docsrs, docsrs_dep), feature(rustdoc_internals))]
+#![cfg_attr(any(docsrs, docsrs_dep), feature(rustdoc_internals, doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(doc, deny(missing_docs))]
 
@@ -24,7 +24,7 @@ use bevy::{
 use hephae_utils::prelude::*;
 
 use crate::{
-    drawer::{Drawer, HasDrawer, check_visibilities, extract_drawers, queue_drawers},
+    drawer::{DrawBy, Drawer, check_visibilities, extract_drawers, queue_drawers},
     image_bind::{ImageAssetEvents, ImageBindGroups, extract_image_events, validate_image_bind_groups},
     pipeline::{
         DrawBuffers, DrawRequests, VertexPipeline, ViewBatches, ViewIndexBuffer, VisibleDrawers, extract_shader,
@@ -44,7 +44,7 @@ pub mod prelude {
             ByteColorAttrib, ColorAttrib, IsAttribData, LinearRgbaExt as _, Nor, Pos2dAttrib, Pos3dAttrib, Shaper, UvAttrib,
             VertexLayout,
         },
-        drawer::{Drawer, DrawerExtract, HasDrawer, VertexQueuer},
+        drawer::{DrawBy, Drawer, DrawerExtract, VertexQueuer},
         image_bind::ImageBindGroups,
         pipeline::{VertexPipeline, ViewBatches},
         vertex::Vertex,
@@ -113,8 +113,8 @@ plugin_def! {
     /// pipeline.
     pub struct DrawerPlugin<T: Drawer>;
     fn build(&self, app: &mut App) {
-        app.add_plugins(SyncComponentPlugin::<HasDrawer<T>>::default())
-            .register_type::<HasDrawer<T>>()
+        app.add_plugins(SyncComponentPlugin::<DrawBy<T>>::default())
+            .register_type::<DrawBy<T>>()
             .add_systems(PostUpdate, check_visibilities::<T>.in_set(VisibilitySystems::CheckVisibility));
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {

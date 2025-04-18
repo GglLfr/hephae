@@ -14,7 +14,7 @@ use bevy::{
     render::{
         Extract,
         primitives::{Aabb, Frustum},
-        sync_world::RenderEntity,
+        sync_world::{MainEntity, RenderEntity},
         view::{
             ExtractedView, NoCpuCulling, NoFrustumCulling, RenderLayers, RenderVisibleEntities, VisibilityRange,
             VisibleEntities, VisibleEntityRanges,
@@ -32,11 +32,17 @@ use crate::{
 
 /// A render world [`Component`] extracted from the main world that will be used to issue draw
 /// requests.
-pub trait Drawer: TypePath + Component<Mutability = Mutable> + Sized {
+pub trait Drawer: TypePath + Component<Mutability = Mutable> + Sized
+where
+    for<'w, 's> SystemParamItem<'w, 's, Self::DrawParam>: Send + Sync,
+    for<'w, 's> SystemParamItem<'w, 's, Self::ExtractParam>: Send + Sync,
+{
     /// The type of vertex this drawer works with.
     type Vertex: Vertex;
 
     /// System parameter to fetch when extracting data from the main world.
+    ///
+    /// Must be [`Send`] and [`Sync`], as extracting is done in parallel.
     type ExtractParam: ReadOnlySystemParam;
     /// Query item to fetch from entities when extracting from those entities to the render world.
     type ExtractData: ReadOnlyQueryData;
@@ -44,6 +50,8 @@ pub trait Drawer: TypePath + Component<Mutability = Mutable> + Sized {
     type ExtractFilter: QueryFilter;
 
     /// System parameter to fetch when issuing draw requests.
+    ///
+    /// Must be [`Send`] and [`Sync`], as drawing is done in parallel.
     type DrawParam: ReadOnlySystemParam;
 
     /// Extracts an instance of this drawer from matching entities, if available.
@@ -54,7 +62,7 @@ pub trait Drawer: TypePath + Component<Mutability = Mutable> + Sized {
     );
 
     /// Issues vertex data and draw requests for the data.
-    fn draw(&mut self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
+    fn draw(&self, param: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>);
 }
 
 /// Specifies the behavior of [`Drawer::extract`].
@@ -103,16 +111,16 @@ pub trait VertexQueuer {
 #[derive(Reflect, Component, Copy, Clone)]
 #[reflect(Component, Default)]
 #[require(Visibility)]
-pub struct HasDrawer<T: Drawer>(#[reflect(ignore)] pub PhantomData<fn() -> T>);
-impl<T: Drawer> Default for HasDrawer<T> {
+pub struct DrawBy<T: Drawer>(#[reflect(ignore)] pub PhantomData<fn() -> T>);
+impl<T: Drawer> Default for DrawBy<T> {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Drawer> HasDrawer<T> {
-    /// Shortcut for `HasDrawer(PhantomData)`.
+impl<T: Drawer> DrawBy<T> {
+    /// Shortcut for `DrawBy(PhantomData)`.
     #[inline]
     pub const fn new() -> Self {
         Self(PhantomData)
@@ -165,7 +173,7 @@ pub(crate) fn check_visibilities<T: Drawer>(
             Has<NoFrustumCulling>,
             Has<VisibilityRange>,
         ),
-        (T::ExtractFilter, With<HasDrawer<T>>),
+        (T::ExtractFilter, With<DrawBy<T>>),
     >,
     visible_entity_ranges: Option<Res<VisibleEntityRanges>>,
     mut update_visibilities: Deferred<UpdateVisibilities<T>>,
@@ -254,51 +262,88 @@ pub(crate) fn check_visibilities<T: Drawer>(
 }
 
 pub(crate) fn extract_drawers<T: Drawer>(
-    mut commands: Commands,
+    commands: ParallelCommands,
     param: Extract<T::ExtractParam>,
-    query: Extract<Query<(RenderEntity, &ViewVisibility, T::ExtractData), (T::ExtractFilter, With<HasDrawer<T>>)>>,
-    mut target_query: Query<&mut T>,
+    query: Extract<Query<(RenderEntity, &ViewVisibility, T::ExtractData), (T::ExtractFilter, With<DrawBy<T>>)>>,
+    mut target_query: Query<(MainEntity, &mut T)>,
+    mut par_iterated: Local<Parallel<FixedBitSet>>,
+    mut iterated: Local<FixedBitSet>,
 ) {
-    for (e, &view, data) in &query {
-        if view.get() {
-            if let Ok(mut dst) = target_query.get_mut(e) {
-                T::extract(DrawerExtract::Borrowed(&mut dst), &param, data)
-            } else {
-                let mut extract = None;
-                T::extract(DrawerExtract::Spawn(&mut extract), &param, data);
-
-                if let Some(extract) = extract {
-                    commands.entity(e).insert(extract);
-                }
+    iterated.clear();
+    target_query.par_iter_mut().for_each_init(
+        || par_iterated.borrow_local_mut(),
+        |iterated, (main_entity, mut dst)| {
+            let Ok((.., view, data)) = query.get(main_entity) else { return };
+            if !view.get() {
+                return
             }
+
+            iterated.grow_and_insert(main_entity.index() as usize);
+            T::extract(DrawerExtract::Borrowed(&mut dst), &param, data)
+        },
+    );
+
+    par_iterated.iter_mut().for_each(|it| {
+        iterated.union_with(it);
+        it.clear();
+    });
+
+    query.par_iter().for_each(|(render_entity, view, data)| {
+        if iterated[render_entity.index() as usize] || !view.get() {
+            return
         }
-    }
+
+        let mut extract = None;
+        T::extract(DrawerExtract::Spawn(&mut extract), &param, data);
+
+        if let Some(extract) = extract {
+            commands.command_scope(|mut commands| {
+                commands.entity(render_entity).insert(extract);
+            })
+        }
+    })
 }
 
 pub(crate) fn queue_drawers<T: Drawer>(
     param: StaticSystemParam<T::DrawParam>,
     buffers: Res<DrawBuffers<T::Vertex>>,
-    mut query: Query<(Entity, &mut T, &DrawItems<T::Vertex>)>,
+    query: Query<(&T, &DrawItems<T::Vertex>)>,
     views: Query<(&RenderVisibleEntities, &VisibleDrawers<T::Vertex>), With<ExtractedView>>,
+    mut filtered: Local<Vec<Entity>>,
     mut iterated: Local<FixedBitSet>,
 ) {
     let buffers = buffers.into_inner();
+    let param = &param.into_inner();
 
     iterated.clear();
-    for (visible_entities, visible_drawers) in &views {
-        let mut iter = query.iter_many_mut(visible_entities.iter::<With<T>>().map(|(e, ..)| e));
-        while let Some((e, mut drawer, items)) = iter.fetch_next() {
-            let index = e.index() as usize;
-            if iterated[index] {
-                continue;
+    for (i, (visible_entities, visible_drawers)) in views.iter().enumerate() {
+        let list = visible_entities.get::<With<T>>();
+
+        // OPT: If this is the first or only view, then there are no duplicated entities.
+        if i == 0 {
+            for &(e, ..) in list {
+                iterated.grow_and_insert(e.index() as usize);
+                filtered.push(e);
             }
 
-            iterated.grow_and_insert(index);
-            visible_drawers.0.append([e]);
+            visible_drawers.0.append(filtered.as_slice());
+        } else {
+            for &(e, ..) in list {
+                visible_drawers.0.append([e]);
+                let index = e.index() as usize;
+                if iterated[index] {
+                    continue
+                }
 
-            drawer.draw(&param, &Queuer { buffers, items });
+                iterated.grow_and_insert(index);
+                filtered.push(e);
+            }
         }
     }
+
+    query
+        .par_iter_many(filtered.drain(..))
+        .for_each(|(drawer, items)| drawer.draw(param, &Queuer { buffers, items }));
 
     struct Queuer<'a, T: Vertex> {
         buffers: &'a DrawBuffers<T>,

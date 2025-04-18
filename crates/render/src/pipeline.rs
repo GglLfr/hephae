@@ -302,13 +302,14 @@ pub(crate) fn queue_vertices<T: Vertex>(
             shader: shader.0.id(),
         };
 
-        iterated.clear();
         visible_drawers.0.clear(|entities| {
+            iterated.clear();
+
             let mut iter = items.iter_many_mut(entities);
             while let Some((e, &main_e, mut items)) = iter.fetch_next() {
                 let index = e.index() as usize;
                 if iterated[index] {
-                    continue;
+                    continue
                 }
 
                 iterated.grow_and_insert(index);

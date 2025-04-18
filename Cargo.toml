@@ -99,8 +99,20 @@ hephae-ui = { optional = true, workspace = true }
 hephae-utils.workspace = true
 hephae-plugins = { version = "0.8.0", default-features = false, path = "plugins" }
 
+[dev-dependencies.bevy]
+version = "0.16.0-rc.5"
+default-features = false
+features = [
+    "bevy_core_pipeline",
+    "bevy_winit",
+    "png",
+    "multi_threaded",
+    "async_executor",
+    "tonemapping_luts",
+]
+
 [dev-dependencies]
-bevy = { version = "0.16.0-rc.5", default-features = false, features = ["bevy_winit", "bevy_core_pipeline", "png", "multi_threaded", "async_executor", "tonemapping_luts"] }
+fastrand = "2"
 
 [features]
 default = ["atlas", "locale", "text", "ui"]

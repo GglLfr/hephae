@@ -4,7 +4,7 @@ Hephae's core rendering module. This library provides the following for you to b
 
 - `Vertex`: The heart of Hephae. Defines the vertex buffer layout, rendering pipeline specialization, batching
   parameters, and draw commands.
-- `Drawer`: A render-world `Component` extracted from entities with `HasDrawer<T>`, acting as the "commander" to push
+- `Drawer`: A render-world `Component` extracted from entities with `DrawBy<T>`, acting as the "commander" to push
   out vertices and indices according to their logic-world entity parameters.
 - `VertexCommand`: A "draw command" issued by `Drawer`, cached and sorted in the pipeline and modifies the GPU buffers
   directly when dispatched by camera views.

@@ -132,7 +132,7 @@ const TRAIL_LENGTH: usize = 128;
 struct PrimaryTrail;
 
 #[derive(Component, Clone)]
-#[require(HasDrawer<DrawTrail>)]
+#[require(DrawBy<DrawTrail>)]
 struct Trail {
     points: VecDeque<Vec2>,
     max_len: NonZeroUsize,
@@ -330,7 +330,7 @@ impl Drawer for DrawTrail {
         }
     }
 
-    fn draw(&mut self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
+    fn draw(&self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         let Self {
             ref points,
             max_len,
