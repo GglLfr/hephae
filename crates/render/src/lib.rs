@@ -144,7 +144,6 @@ plugin_def! {
                         Render,
                         (
                             (
-                                HephaeRenderSystems::ClearBatches,
                                 HephaeRenderSystems::QueueDrawers,
                                 HephaeRenderSystems::QueueVertices,
                             )
@@ -176,8 +175,6 @@ pub const HEPHAE_VIEW_BINDINGS_HANDLE: Handle<Shader> = weak_handle!("c52404ee-d
 /// Labels assigned to Hephae systems that are added to [`Render`].
 #[derive(SystemSet, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HephaeRenderSystems {
-    /// Label for clearing batches, in [`RenderSet::Queue`].
-    ClearBatches,
     /// Label for queueing drawers, in [`RenderSet::Queue`].
     QueueDrawers,
     /// Label for queueing vertices, in [`RenderSet::Queue`].
