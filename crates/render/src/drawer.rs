@@ -136,8 +136,7 @@ pub(crate) struct UpdateVisibilities<T: Drawer> {
 
 impl<T: Drawer> SystemBuffer for UpdateVisibilities<T> {
     fn apply(&mut self, _: &SystemMeta, world: &mut World) {
-        //  There is no `iter_manual_mut`, unfortunately.
-        let mut query = unsafe { self.query.query_unchecked(world.as_unsafe_world_cell()) };
+        let mut query = self.query.query_mut(world);
         for (&view, entities) in &mut self.entities {
             let Ok(mut visible) = query.get_mut(view) else {
                 entities.clear();

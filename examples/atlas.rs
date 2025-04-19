@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, iter::repeat_with};
 
 use bevy::{
     core_pipeline::{bloom::Bloom, core_2d::Transparent2d},
@@ -126,7 +126,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetSpriteBindGroup<I> {
 
 #[derive(TypePath, Component, Copy, Clone, Default)]
 struct DrawSprite {
-    pos: Vec2,
+    pos: Vec3,
     scl: Vec2,
     page: AssetId<Image>,
     page_size: UVec2,
@@ -157,7 +157,7 @@ impl Drawer for DrawSprite {
 
         let (scale, .., translation) = trns.to_scale_rotation_translation();
         *drawer.get_or_default() = DrawSprite {
-            pos: translation.truncate(),
+            pos: translation,
             scl: scale.truncate(),
             page,
             page_size,
@@ -168,9 +168,9 @@ impl Drawer for DrawSprite {
     #[inline]
     fn draw(&self, _: &SystemParamItem<Self::DrawParam>, queuer: &impl VertexQueuer<Vertex = Self::Vertex>) {
         Shaper::new()
-            .rect(self.pos, self.rect.size().as_vec2() * self.scl)
+            .rect(self.pos.truncate(), self.rect.size().as_vec2() * self.scl)
             .uv_rect(self.rect, self.page_size)
-            .queue_rect(queuer, 0., self.page)
+            .queue_rect(queuer, self.pos.z, self.page)
     }
 }
 
@@ -209,19 +209,28 @@ fn startup(
         Bloom::NATURAL,
     ));
 
+    let mut z = 0f32;
     let size = window.size();
-    for _ in 0..100_000 {
-        commands.spawn((
-            Transform {
-                translation: (size * vec2(rng.f32() - 0.5, rng.f32() - 0.5)).extend(0.),
-                scale: Vec3::splat(0.2 + rng.f32() * 1.8),
-                ..default()
-            },
-            Velocity(Vec2::from_angle((rng.f32() * 2. - 1.) * PI) * (1. + rng.f32() * 4.)),
-            AtlasEntry::new(server.load("sprites/sprites.atlas.ron"), "cix"),
-            DrawBy::<DrawSprite>::new(),
-        ));
-    }
+    commands.spawn_batch(
+        repeat_with(|| {
+            (
+                Transform {
+                    translation: (size * vec2(rng.f32() - 0.5, rng.f32() - 0.5)).extend({
+                        let nz = z.next_up();
+                        z = nz;
+                        nz
+                    }),
+                    scale: Vec3::splat(0.2 + rng.f32() * 1.8),
+                    ..default()
+                },
+                Velocity(Vec2::from_angle((rng.f32() * 2. - 1.) * PI) * (1. + rng.f32() * 4.)),
+                AtlasEntry::new(server.load("sprites/sprites.atlas.ron"), "cix"),
+                DrawBy::<DrawSprite>::new(),
+            )
+        })
+        .take(100_000)
+        .collect::<Box<_>>(),
+    );
 }
 
 fn move_sprites(

@@ -291,7 +291,7 @@ pub(crate) fn queue_vertices<T: Vertex>(
     let draw_function = draw_functions.read().id::<DrawRequests<T>>();
     for (mut visible_drawers, view, &msaa, tonemapping, dither) in &mut views {
         let Some(transparent_phase) = transparent_phases.get_mut(&view.retained_view_entity) else {
-            continue;
+            continue
         };
 
         let view_key = ViewKey {
